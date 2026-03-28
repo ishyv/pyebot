@@ -3,7 +3,7 @@ import { createLogger } from "./logger";
 
 describe("createLogger", () => {
   beforeEach(() => {
-    // Suppress console output during tests
+    // Restore any spies from previous tests
     mock.restore();
   });
 
@@ -51,5 +51,31 @@ describe("createLogger", () => {
     console.log = origLog;
     delete process.env.DEBUG;
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  test("warn calls console.warn with context prefix", () => {
+    const spy = mock(() => {});
+    const orig = console.warn;
+    console.warn = spy;
+    const logger = createLogger("MyCtx");
+    logger.warn("warning message");
+    console.warn = orig;
+    expect(spy).toHaveBeenCalledTimes(1);
+    const call = (spy.mock.calls[0] as string[])[0] as string;
+    expect(call).toContain("[MyCtx]");
+    expect(call).toContain("warning message");
+  });
+
+  test("error calls console.error with context prefix", () => {
+    const spy = mock(() => {});
+    const orig = console.error;
+    console.error = spy;
+    const logger = createLogger("MyCtx");
+    logger.error("error message");
+    console.error = orig;
+    expect(spy).toHaveBeenCalledTimes(1);
+    const call = (spy.mock.calls[0] as string[])[0] as string;
+    expect(call).toContain("[MyCtx]");
+    expect(call).toContain("error message");
   });
 });
