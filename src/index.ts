@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 async function bootstrap(): Promise<void> {
   console.log("[bootstrap] tx-v2 starting...");
 }

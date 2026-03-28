@@ -2,10 +2,13 @@
   "name": "tx-v2",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "bun": ">=1.1.0"
+  },
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "bun test",
     "fmt": "biome format --write .",
     "lint": "biome lint --write .",
@@ -13,7 +16,6 @@
   },
   "dependencies": {
     "discord.js": "^14.16.0",
-    "dotenv": "^16.0.0",
     "mongodb": "^6.8.0",
     "zod": "^4.1.0"
   },
