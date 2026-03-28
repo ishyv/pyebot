@@ -11,10 +11,11 @@ export class CooldownManager {
   }
 
   isOnCooldown(userId: string, command: string): boolean {
-    const expiresAt = this.map.get(this.key(userId, command));
+    const k = this.key(userId, command);
+    const expiresAt = this.map.get(k);
     if (expiresAt === undefined) return false;
     if (Date.now() >= expiresAt) {
-      this.map.delete(this.key(userId, command));
+      this.map.delete(k);
       return false;
     }
     return true;
@@ -32,7 +33,10 @@ export class CooldownManager {
 }
 
 // ─── SessionManager ───────────────────────────────────────────────────────────
-/** Generic typed session store. Features create their own instances: `new SessionManager<MyType>()`. */
+/**
+ * Generic typed session store. Features create their own instances: `new SessionManager<MyType>()`.
+ * NOTE: No TTL or size limit. Callers are responsible for deleting entries to avoid unbounded growth.
+ */
 export class SessionManager<T> {
   private readonly map = new Map<string, T>();
 
@@ -65,6 +69,7 @@ export class LockSet {
 
   tryAcquire(key: string): boolean {
     const acquiredAt = this.locks.get(key);
+    // Stale lock: treat as if it was never acquired and overwrite it.
     if (acquiredAt !== undefined && Date.now() - acquiredAt < this.staleMs) {
       return false;
     }
