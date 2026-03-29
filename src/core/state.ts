@@ -98,3 +98,6 @@ export const cooldowns = new CooldownManager();
 
 /** Global lock set for exclusive operations (quest claims, fight state, etc). */
 export const locks = new LockSet();
+
+/** Global session store for transient interaction state (trivia, confirmations, etc). */
+export const sessions = new SessionManager<unknown>();
