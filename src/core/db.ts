@@ -1,3 +1,8 @@
+/**
+ * MongoDB connection singleton.
+ * Provides lazy-connecting `getDb()` and `getMongoClient()`.
+ * Call `disconnectDb()` in tests and on graceful shutdown.
+ */
 import { MongoClient, type Db } from "mongodb";
 
 let client: MongoClient | null = null;
@@ -10,11 +15,13 @@ function getUri(): string {
 }
 
 function getDbName(): string {
-  return process.env.DB_NAME ?? "txbot";
+  return process.env.DB_NAME?.trim() || "txbot";
 }
 
 export async function getDb(): Promise<Db> {
   if (dbInstance) return dbInstance;
+  // MongoDB driver v6 tolerates redundant connect() calls on the same client.
+  // Concurrent callers both pass the guard and both call connect() — driver short-circuits.
   if (!client) client = new MongoClient(getUri());
   await client.connect();
   dbInstance = client.db(getDbName());

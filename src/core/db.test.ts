@@ -5,9 +5,11 @@ import { disconnectDb, getDb } from "./db";
 const MONGO_URI = process.env.MONGO_URI;
 
 describe("db module", () => {
-  test("getDb is a function", async () => {
-    const { getDb: fn } = await import("./db");
-    expect(typeof fn).toBe("function");
+  test("getDb throws when MONGO_URI is not set", async () => {
+    const orig = process.env.MONGO_URI;
+    delete process.env.MONGO_URI;
+    await expect(getDb()).rejects.toThrow("MONGO_URI");
+    process.env.MONGO_URI = orig;
   });
 
   test("disconnectDb resets internal state so getDb reconnects", async () => {
