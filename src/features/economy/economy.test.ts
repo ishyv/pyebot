@@ -94,9 +94,15 @@ describe("isAccountActive", () => {
 
 describe("getAccount", () => {
   beforeEach(() => {
-    mockGet.mockClear();
-    mockEnsure.mockClear();
-    mockPatch.mockClear();
+    mockGet.mockReset();
+    mockEnsure.mockReset();
+    mockPatch.mockReset();
+    mockUpdatePaths.mockReset();
+    // Safe defaults so tests that don't override still get a valid response
+    mockGet.mockResolvedValue(OkResult<User | null>(null));
+    mockEnsure.mockResolvedValue(OkResult(makeUser()));
+    mockPatch.mockResolvedValue(OkResult(makeUser()));
+    mockUpdatePaths.mockResolvedValue(OkResult(undefined as void));
   });
 
   test("returns null when user not found", async () => {
@@ -141,9 +147,15 @@ describe("getAccount", () => {
 
 describe("ensureAccount", () => {
   beforeEach(() => {
-    mockGet.mockClear();
-    mockEnsure.mockClear();
-    mockPatch.mockClear();
+    mockGet.mockReset();
+    mockEnsure.mockReset();
+    mockPatch.mockReset();
+    mockUpdatePaths.mockReset();
+    // Safe defaults so tests that don't override still get a valid response
+    mockGet.mockResolvedValue(OkResult<User | null>(null));
+    mockEnsure.mockResolvedValue(OkResult(makeUser()));
+    mockPatch.mockResolvedValue(OkResult(makeUser()));
+    mockUpdatePaths.mockResolvedValue(OkResult(undefined as void));
   });
 
   test("returns existing account (isNew: false) when already initialized", async () => {
@@ -164,12 +176,30 @@ describe("ensureAccount", () => {
     const user = makeUser({ _id: "user-3" });
     mockEnsure.mockImplementation(async () => OkResult(user));
 
-    // patch returns user WITH economyAccount set
-    const patchedUser = makeUser({
-      _id: "user-3",
-      economyAccount: makeEconomyAccount(),
+    // Capture the pipeline write so we can mirror the written createdAt back via get().
+    let capturedCreatedAt: Date | undefined;
+    mockUpdatePaths.mockImplementation(async (_id, _paths, opts) => {
+      // The pipeline is [{ $set: { economyAccount: { $ifNull: [..., next] } } }]
+      const pipeline = opts?.pipeline as any[] | undefined;
+      if (pipeline?.[0]?.$set?.economyAccount?.$ifNull) {
+        const next = pipeline[0].$set.economyAccount.$ifNull[1];
+        capturedCreatedAt = next?.createdAt;
+      }
+      return OkResult(undefined as void);
     });
-    mockPatch.mockImplementation(async () => OkResult(patchedUser));
+
+    // get() is called after the pipeline write; return the account with the same createdAt
+    // so that project() can detect ourWriteWon (createdAt timestamps match).
+    mockGet.mockImplementation(async () => {
+      const economyAccount = {
+        status: "ok" as const,
+        createdAt: capturedCreatedAt ?? NOW,
+        updatedAt: capturedCreatedAt ?? NOW,
+        lastActivityAt: capturedCreatedAt ?? NOW,
+        version: 0,
+      };
+      return OkResult<User | null>(makeUser({ _id: "user-3", economyAccount }));
+    });
 
     const result = await ensureAccount("user-3");
     expect(result.isOk()).toBe(true);

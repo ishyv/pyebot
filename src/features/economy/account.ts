@@ -128,22 +128,55 @@ export async function ensureAccount(
       return OkResult(newData);
     },
     commit: async (expected, next) => {
-      // Only write if not already set (expected is undefined)
+      // If account already existed when we read, no write needed — fetch current state.
       if (expected !== undefined) {
-        // Already exists — return the current user without writing
         const freshRes = await userStore.get(userId);
         if (freshRes.isErr()) return ErrResult(freshRes.error);
         const fresh = freshRes.unwrap();
         if (!fresh) return ErrResult(new Error("User not found after ensure"));
         return OkResult(fresh);
       }
-      return userStore.patch(userId, { economyAccount: next } as Partial<User>);
+      // Conditional write: set economyAccount only if it is not already present.
+      // Uses an aggregation pipeline update so MongoDB evaluates the condition atomically,
+      // preventing a concurrent writer from being silently overwritten.
+      // NOTE: A small race window remains (two writers both seeing absent, both writing
+      // a fresh account with version:0). Since both writes produce functionally equivalent
+      // data (status:ok, version:0), the overwrite is benign — no data is lost.
+      const patchRes = await userStore.updatePaths(
+        userId,
+        {},
+        {
+          upsert: false,
+          pipeline: [
+            {
+              $set: {
+                economyAccount: {
+                  $ifNull: ["$economyAccount", next],
+                },
+              },
+            },
+          ],
+        },
+      );
+      if (patchRes.isErr()) return ErrResult(patchRes.error);
+      // Re-fetch to get the committed state (updatePaths returns void).
+      const freshRes = await userStore.get(userId);
+      if (freshRes.isErr()) return ErrResult(freshRes.error);
+      const fresh = freshRes.unwrap();
+      if (!fresh) return ErrResult(new Error("User not found after patch"));
+      return OkResult(fresh);
     },
     project: (updatedUser, next, expected) => {
       const data = updatedUser.economyAccount ?? next;
       const account = toDomain(userId, data);
-      // isNew = true only if we actually wrote (expected was undefined)
-      return { account, isNew: expected === undefined };
+      // isNew: true only if we attempted a write (expected was undefined) and the stored
+      // account's createdAt matches what we wrote (meaning our write won the race).
+      const weWrote = expected === undefined;
+      const ourWriteWon =
+        weWrote &&
+        data.createdAt instanceof Date &&
+        data.createdAt.getTime() === next.createdAt.getTime();
+      return { account, isNew: ourWriteWon };
     },
     onExhausted: (_lastUser, lastSnapshot) => {
       if (lastSnapshot) {

@@ -38,11 +38,9 @@ export type EconomyAccountPatch = Partial<EconomyAccountData>;
 /**
  * Safely parse economy account data with full defaults.
  * Returns null if input is null/undefined.
+ * All fields have .catch() so EconomyAccountSchema.parse() never throws.
  */
 export function parseEconomyAccount(data: unknown): EconomyAccountData | null {
   if (!data) return null;
-  const parsed = EconomyAccountSchema.safeParse(data);
-  if (parsed.success) return parsed.data;
-  // If parsing fails entirely, return default structure
-  return EconomyAccountSchema.parse({});
+  return EconomyAccountSchema.parse(data);
 }
