@@ -1,6 +1,40 @@
 import { MongoStore } from "@/db/store";
 import { MarketListingSchema, type MarketListingDoc } from "@/db/schemas/market";
+import {
+  AchievementProgressSchema,
+  UnlockedAchievementSchema,
+  type AchievementProgressDoc,
+  type UnlockedAchievementDoc,
+} from "@/db/schemas/achievement";
 import { ErrResult, OkResult, type Result } from "@/core/result";
+
+// ---------------------------------------------------------------------------
+// Achievement stores
+// ---------------------------------------------------------------------------
+
+export const achievementProgressStore = new MongoStore(
+  "achievementProgress",
+  AchievementProgressSchema,
+);
+
+export const achievementUnlocksStore = new MongoStore(
+  "achievementUnlocks",
+  UnlockedAchievementSchema,
+);
+
+/** Returns all unlock records for a user. */
+export async function getUnlocksForUser(userId: string): Promise<Result<UnlockedAchievementDoc[]>> {
+  return achievementUnlocksStore.find({ userId } as any);
+}
+
+/** Returns all progress records for a user. */
+export async function getProgressForUser(userId: string): Promise<Result<AchievementProgressDoc[]>> {
+  return achievementProgressStore.find({ userId } as any);
+}
+
+// ---------------------------------------------------------------------------
+// Market store
+// ---------------------------------------------------------------------------
 
 export const marketStore = new MongoStore("marketListings", MarketListingSchema);
 
