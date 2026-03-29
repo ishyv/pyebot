@@ -22,14 +22,17 @@ export function isCooldownExpired(expiresAt: number): boolean {
   return Date.now() >= expiresAt;
 }
 
+/** Converts minutes to milliseconds. */
 export function minutesToMs(minutes: number): number {
   return minutes * 60 * 1000;
 }
 
+/** Converts hours to milliseconds. */
 export function hoursToMs(hours: number): number {
   return hours * 60 * 60 * 1000;
 }
 
+/** Converts days to milliseconds. */
 export function daysToMs(days: number): number {
   return days * 24 * 60 * 60 * 1000;
 }

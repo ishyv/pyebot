@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { buildCorrelationId, buildCompositeId, buildProgressId, buildAchievementId } from "./ids";
-import { msToHuman, getCooldownExpiry, isCooldownExpired, minutesToMs, hoursToMs } from "./time";
-import { formatAmount, applyTaxRate, clamp, formatCurrencyAmount } from "./currency";
+import { buildCorrelationId, buildCompositeId, buildProgressId, buildAchievementId, buildListingId } from "./ids";
+import { msToHuman, getCooldownExpiry, isCooldownExpired, minutesToMs, hoursToMs, daysToMs } from "./time";
+import { formatAmount, applyTaxRate, clamp, formatCurrencyAmount, isValidAmount } from "./currency";
 
 describe("ids", () => {
   test("buildCorrelationId returns a non-empty string", () => {
@@ -23,6 +23,10 @@ describe("ids", () => {
 
   test("buildAchievementId returns userId:achievementId", () => {
     expect(buildAchievementId("u1", "ach1")).toBe("u1:ach1");
+  });
+
+  test("buildListingId starts with 'listing:'", () => {
+    expect(buildListingId()).toMatch(/^listing:/);
   });
 });
 
@@ -69,6 +73,11 @@ describe("time", () => {
     expect(hoursToMs(1)).toBe(3_600_000);
     expect(hoursToMs(24)).toBe(86_400_000);
   });
+
+  test("daysToMs converts correctly", () => {
+    expect(daysToMs(1)).toBe(86_400_000);
+    expect(daysToMs(7)).toBe(604_800_000);
+  });
 });
 
 describe("currency", () => {
@@ -108,5 +117,16 @@ describe("currency", () => {
     const result = formatCurrencyAmount(500, "coins", { coins: "🪙" });
     expect(result).toContain("🪙");
     expect(result).toContain("500");
+  });
+
+  test("isValidAmount returns true for positive integers", () => {
+    expect(isValidAmount(1)).toBe(true);
+    expect(isValidAmount(100)).toBe(true);
+  });
+
+  test("isValidAmount returns false for zero, negatives, and floats", () => {
+    expect(isValidAmount(0)).toBe(false);
+    expect(isValidAmount(-1)).toBe(false);
+    expect(isValidAmount(1.5)).toBe(false);
   });
 });

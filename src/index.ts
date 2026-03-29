@@ -18,12 +18,15 @@ async function bootstrap(): Promise<void> {
     log.info(`Logged in as ${c.user.tag}`);
   });
 
-  process.on("SIGINT", async () => {
+  const shutdown = async () => {
     log.info("Shutting down...");
     await client.destroy();
     await disconnectDb();
     process.exit(0);
-  });
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 
   const token = process.env.TOKEN;
   if (!token) throw new Error("TOKEN environment variable is not set.");
@@ -31,6 +34,6 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((err) => {
-  console.error("[bootstrap] Fatal:", err);
+  log.error("Fatal startup error", err);
   process.exit(1);
 });
