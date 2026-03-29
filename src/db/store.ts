@@ -1,0 +1,143 @@
+import type { Collection, Document, Filter, FindOptions, UpdateFilter } from "mongodb";
+import type { ZodSchema } from "zod";
+import { ErrResult, OkResult, type Result } from "@/core/result";
+import { buildSafeUpsertUpdate, unwrapFindOneAndUpdateResult } from "./helpers";
+import { getDb } from "@/core/db";
+
+export class MongoStore<T extends Document & { _id: string }> {
+  constructor(
+    private readonly collectionName: string,
+    private readonly schema: ZodSchema<T>,
+  ) {}
+
+  public async collection(): Promise<Collection<T>> {
+    return (await getDb()).collection<T>(this.collectionName);
+  }
+
+  private mapError(error: unknown): Error {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+
+  private getDefault(id: string): T {
+    const raw: Record<string, unknown> = { _id: id };
+    try {
+      const schemaAny = this.schema as any;
+      const shape = schemaAny.shape ?? schemaAny._def?.shape;
+      if (shape && typeof shape === "object" && "guildId" in shape) {
+        raw.guildId = id;
+      }
+    } catch { /* continue */ }
+    const parsed = this.schema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    console.error(`[MongoStore:${this.collectionName}] failed to build default`, { id, error: parsed.error });
+    return raw as unknown as T;
+  }
+
+  private parse(doc: unknown): T {
+    const parsed = this.schema.safeParse(doc);
+    if (parsed.success) return parsed.data;
+    const id = (doc as any)?._id ?? "unknown";
+    console.error(`[MongoStore:${this.collectionName}] invalid document; using defaults`, { id, error: parsed.error });
+    return this.getDefault(id);
+  }
+
+  async get(id: string): Promise<Result<T | null>> {
+    try {
+      const col = await this.collection();
+      const doc = await col.findOne({ _id: id } as Filter<T>);
+      return OkResult(doc ? this.parse(doc) : null);
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+
+  async ensure(id: string, initial?: Partial<T>): Promise<Result<T>> {
+    try {
+      const col = await this.collection();
+      const defaults = { ...this.getDefault(id), ...initial };
+      const update = buildSafeUpsertUpdate<T>(
+        { $setOnInsert: defaults as any },
+        defaults as any,
+        new Date(),
+        { setUpdatedAt: false },
+      );
+      const res = await col.findOneAndUpdate(
+        { _id: id } as Filter<T>,
+        update as UpdateFilter<T>,
+        { upsert: true, returnDocument: "after" },
+      );
+      const doc = unwrapFindOneAndUpdateResult<T>(res as any);
+      return OkResult(this.parse(doc));
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+
+  async patch(id: string, patch: Partial<T>): Promise<Result<T>> {
+    try {
+      const col = await this.collection();
+      const defaults = this.getDefault(id);
+      const update = buildSafeUpsertUpdate<T>({ $set: patch as any }, defaults, new Date());
+      const res = await col.findOneAndUpdate(
+        { _id: id } as Filter<T>,
+        update as UpdateFilter<T>,
+        { upsert: true, returnDocument: "after" },
+      );
+      const doc = unwrapFindOneAndUpdateResult<T>(res as any);
+      return OkResult(this.parse(doc));
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+
+  async set(id: string, data: T): Promise<Result<T>> {
+    try {
+      const col = await this.collection();
+      await col.replaceOne({ _id: id } as Filter<T>, data, { upsert: true });
+      return OkResult(this.parse(data));
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+
+  async replaceIfMatch(id: string, expected: Partial<T>, next: Partial<T>): Promise<Result<T | null>> {
+    try {
+      const col = await this.collection();
+      const res = await col.findOneAndUpdate(
+        { _id: id, ...expected } as Filter<T>,
+        { $set: { ...next, updatedAt: new Date() } as any },
+        { returnDocument: "after" },
+      );
+      const doc = unwrapFindOneAndUpdateResult<T>(res as any);
+      return OkResult(doc ? this.parse(doc) : null);
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+
+  async delete(id: string): Promise<Result<boolean>> {
+    try {
+      const col = await this.collection();
+      const res = await col.deleteOne({ _id: id } as Filter<T>);
+      return OkResult((res.deletedCount ?? 0) > 0);
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+
+  async updatePaths(
+    id: string,
+    paths: Record<string, unknown>,
+    options: { upsert?: boolean; pipeline?: Document[] } = {},
+  ): Promise<Result<void>> {
+    try {
+      const col = await this.collection();
+      if (options.pipeline) {
+        await col.updateOne({ _id: id } as Filter<T>, options.pipeline as any, { upsert: options.upsert });
+      } else {
+        await col.updateOne(
+          { _id: id } as Filter<T>,
+          { $set: { ...paths, updatedAt: new Date() } as any },
+          { upsert: options.upsert },
+        );
+      }
+      return OkResult(undefined);
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+
+  async find(filter: Filter<T>, options?: FindOptions<T>): Promise<Result<T[]>> {
+    try {
+      const col = await this.collection();
+      const docs = await col.find(filter, options).toArray();
+      return OkResult(docs.map((doc) => this.parse(doc as any)));
+    } catch (error) { return ErrResult(this.mapError(error)); }
+  }
+}
