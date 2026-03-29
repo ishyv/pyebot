@@ -46,8 +46,11 @@ import type { GatherAction, Profession } from "@/content/schemas";
 export { ContentValidationError };
 
 export interface DropQueryOptions {
+  /** Only include drop tables matching this profession. Tables with no profession (global) are always included. */
   readonly profession?: Profession;
+  /** Only include drop tables matching this location. Tables with no locationId (global) are always included. */
   readonly locationId?: string;
+  /** Exclude entries with minToolTier greater than this value. */
   readonly toolTier?: number;
 }
 
@@ -74,6 +77,11 @@ export interface ContentRegistry {
   listRecipes(): readonly SourcedRecipeDef[];
   listRecipesByType(type: "crafting" | "processing"): readonly SourcedRecipeDef[];
   findProcessingRecipeByInput(itemId: string): SourcedRecipeDef | null;
+  /**
+   * Return drop entries for the given action and tier, filtered by options.
+   * Drop tables with no locationId are "global" — they match any location query.
+   * Drop tables with no profession are similarly global.
+   */
   getDrops(
     action: GatherAction,
     tier: number,

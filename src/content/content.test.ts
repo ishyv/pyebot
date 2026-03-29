@@ -543,3 +543,115 @@ describe("buildRegistryFromPacks", () => {
     expect(registry.loadedFrom).toBe("/custom/content/dir");
   });
 });
+
+// ---------------------------------------------------------------------------
+// ContentRegistry - getDrops filtering
+// ---------------------------------------------------------------------------
+
+describe("ContentRegistry - getDrops filtering", () => {
+  function makeDropTableFull(
+    id: string,
+    itemId: string,
+    overrides: Partial<SourcedDropTableDef> = {},
+  ): SourcedDropTableDef {
+    return {
+      id,
+      action: "mine" as const,
+      tier: 1,
+      entries: [{ itemId, chance: 1, weight: 1, minQty: 1 }],
+      ...makeSrc("drop_tables.json", `$.dropTables[0]`),
+      ...overrides,
+    } as SourcedDropTableDef;
+  }
+
+  test("profession filter excludes non-matching profession tables", () => {
+    const minerTable = makeDropTableFull("dt_miner", "iron_ore", { profession: "miner" as const });
+    const lumberTable = makeDropTableFull("dt_lumber", "oak_log", {
+      action: "mine" as const,
+      profession: "lumber" as const,
+    });
+    const packs = makePacks({
+      items: [makeItem("iron_ore"), makeItem("oak_log")],
+      dropTables: [minerTable, lumberTable],
+    });
+    const registry = buildRegistryFromPacks(packs);
+    const drops = registry.getDrops("mine", 1, { profession: "miner" });
+    expect(drops.every((d) => d.itemId !== "oak_log")).toBe(true);
+    expect(drops.some((d) => d.itemId === "iron_ore")).toBe(true);
+  });
+
+  test("profession filter includes global (no-profession) tables", () => {
+    const globalTable = makeDropTableFull("dt_global", "stone");
+    const minerTable = makeDropTableFull("dt_miner", "iron_ore", { profession: "miner" as const });
+    const packs = makePacks({
+      items: [makeItem("stone"), makeItem("iron_ore")],
+      dropTables: [globalTable, minerTable],
+    });
+    const registry = buildRegistryFromPacks(packs);
+    const drops = registry.getDrops("mine", 1, { profession: "miner" });
+    // Both the profession-matching table and the global table should be included
+    expect(drops.some((d) => d.itemId === "stone")).toBe(true);
+    expect(drops.some((d) => d.itemId === "iron_ore")).toBe(true);
+  });
+
+  test("locationId filter excludes non-matching location tables", () => {
+    const locATable = makeDropTableFull("dt_loc_a", "iron_ore", { locationId: "loc_a" });
+    const locBTable = makeDropTableFull("dt_loc_b", "copper_ore", { locationId: "loc_b" });
+    const packs = makePacks({
+      items: [makeItem("iron_ore"), makeItem("copper_ore")],
+      dropTables: [locATable, locBTable],
+      locations: [makeLocation("loc_a"), makeLocation("loc_b")],
+    });
+    const registry = buildRegistryFromPacks(packs);
+    const drops = registry.getDrops("mine", 1, { locationId: "loc_a" });
+    expect(drops.every((d) => d.itemId !== "copper_ore")).toBe(true);
+    expect(drops.some((d) => d.itemId === "iron_ore")).toBe(true);
+  });
+
+  test("locationId filter includes global (no-locationId) tables", () => {
+    const globalTable = makeDropTableFull("dt_global", "stone");
+    const locATable = makeDropTableFull("dt_loc_a", "iron_ore", { locationId: "loc_a" });
+    const packs = makePacks({
+      items: [makeItem("stone"), makeItem("iron_ore")],
+      dropTables: [globalTable, locATable],
+      locations: [makeLocation("loc_a")],
+    });
+    const registry = buildRegistryFromPacks(packs);
+    const drops = registry.getDrops("mine", 1, { locationId: "loc_a" });
+    // Both the locationId-matching table and the global table should be included
+    expect(drops.some((d) => d.itemId === "stone")).toBe(true);
+    expect(drops.some((d) => d.itemId === "iron_ore")).toBe(true);
+  });
+
+  test("toolTier filter excludes entries with minToolTier above toolTier", () => {
+    const table = makeDropTableFull("dt_tiered", "iron_ore", {
+      entries: [
+        { itemId: "iron_ore", chance: 1, weight: 1, minQty: 1, minToolTier: 3 },
+      ],
+    });
+    const packs = makePacks({
+      items: [makeItem("iron_ore")],
+      dropTables: [table],
+    });
+    const registry = buildRegistryFromPacks(packs);
+    // toolTier 2 should not include entries requiring tier 3
+    expect(registry.getDrops("mine", 1, { toolTier: 2 })).toHaveLength(0);
+    // toolTier 3 should include the entry
+    expect(registry.getDrops("mine", 1, { toolTier: 3 })).toHaveLength(1);
+  });
+
+  test("toolTier filter includes entries without minToolTier", () => {
+    const table = makeDropTableFull("dt_no_tier", "stone", {
+      entries: [
+        { itemId: "stone", chance: 1, weight: 1, minQty: 1 },
+      ],
+    });
+    const packs = makePacks({
+      items: [makeItem("stone")],
+      dropTables: [table],
+    });
+    const registry = buildRegistryFromPacks(packs);
+    // Entries with no minToolTier are always included regardless of toolTier filter
+    expect(registry.getDrops("mine", 1, { toolTier: 1 })).toHaveLength(1);
+  });
+});

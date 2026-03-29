@@ -1,8 +1,5 @@
 import type { LoadedContentPacks } from "@/content/loader";
 
-const SUPPORTED_TIER_MIN = 1;
-const SUPPORTED_TIER_MAX = 4;
-
 const DEFAULT_CURRENCY_IDS = new Set(["coins", "rep"]);
 
 export interface ValidationContext {
@@ -103,15 +100,6 @@ export function validateLoadedContent(content: LoadedContentPacks, ctx: Validati
   }
 
   for (const dropTable of content.dropTables) {
-    if (
-      dropTable.tier < SUPPORTED_TIER_MIN ||
-      dropTable.tier > SUPPORTED_TIER_MAX
-    ) {
-      issues.push(
-        `${sourceLabel(dropTable)} $.tier=${dropTable.tier} is out of supported range [${SUPPORTED_TIER_MIN}, ${SUPPORTED_TIER_MAX}]`,
-      );
-    }
-
     if (dropTable.locationId && !knownLocationIds.has(dropTable.locationId)) {
       issues.push(
         `${sourceLabel(dropTable)} $.locationId references unknown location '${dropTable.locationId}'`,
@@ -128,15 +116,6 @@ export function validateLoadedContent(content: LoadedContentPacks, ctx: Validati
   }
 
   for (const location of content.locations) {
-    if (
-      location.requiredTier < SUPPORTED_TIER_MIN ||
-      location.requiredTier > SUPPORTED_TIER_MAX
-    ) {
-      issues.push(
-        `${sourceLabel(location)} $.requiredTier=${location.requiredTier} is out of supported range [${SUPPORTED_TIER_MIN}, ${SUPPORTED_TIER_MAX}]`,
-      );
-    }
-
     if (location.dropTableId && !knownDropTableIds.has(location.dropTableId)) {
       issues.push(
         `${sourceLabel(location)} $.dropTableId references unknown drop table '${location.dropTableId}'`,

@@ -92,7 +92,7 @@ function formatZodIssues(issues: readonly z.ZodIssue[], file: string): string[] 
             typeof part === "number" ? `[${part}]` : String(part),
           )
           .join(".")
-          .replace(".[", "[")}`
+          .replace(/\.\[/g, "[")}`
       : "$";
     return `${file} ${jsonPath}: ${issue.message}`;
   });
@@ -115,7 +115,11 @@ function parseContentFile(rawContent: string, filePath: string): unknown {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const json5 = require("json5") as { parse: (raw: string) => unknown };
       return json5.parse(rawContent);
-    } catch {
+    } catch (error: unknown) {
+      // Only fall back to loose parser when json5 package is missing
+      if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") {
+        throw error; // Real parse error — rethrow
+      }
       return parseJson5Loose(rawContent);
     }
   }
@@ -156,25 +160,25 @@ export async function loadContentPacks(
     locations: resolvePackFilePath(packDir, "locations"),
   } as const;
 
-  const [
-    materialsRaw,
-    craftablesRaw,
-    recipesRaw,
-    dropTablesRaw,
-    locationsRaw,
-  ] = await Promise.all(
-    Object.values(files).map(async (filePath) => {
-      const rawContent = await readFile(filePath, "utf8");
-      try {
-        return parseContentFile(rawContent, filePath);
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        throw new ContentLoadError(`Failed to parse content file ${filePath}`, [
-          `${filePath}: ${reason}`,
-        ]);
-      }
-    }),
-  );
+  async function readAndParse(filePath: string): Promise<unknown> {
+    const rawContent = await readFile(filePath, "utf8");
+    try {
+      return parseContentFile(rawContent, filePath);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new ContentLoadError(`Failed to parse content file ${filePath}`, [
+        `${filePath}: ${reason}`,
+      ]);
+    }
+  }
+
+  const [materialsRaw, craftablesRaw, recipesRaw, dropTablesRaw, locationsRaw] = await Promise.all([
+    readAndParse(files.materials),
+    readAndParse(files.craftables),
+    readAndParse(files.recipes),
+    readAndParse(files.dropTables),
+    readAndParse(files.locations),
+  ]);
 
   const materialsParsed = ItemPackSchema.safeParse(materialsRaw);
   if (!materialsParsed.success) {
