@@ -16,6 +16,7 @@ describe("repositories (unit — exports)", () => {
     expect(typeof repo.getGuild).toBe("function");
     expect(typeof repo.ensureGuild).toBe("function");
     expect(typeof repo.patchGuild).toBe("function");
+    expect(typeof repo.updateGuildPaths).toBe("function");
     expect(typeof repo.guildStore).toBe("object");
   });
 

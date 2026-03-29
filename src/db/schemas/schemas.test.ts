@@ -30,6 +30,14 @@ describe("GuildSchema", () => {
       expect(result.data.features).toBeDefined();
     }
   });
+
+  test("applies catch defaults for invalid automod", () => {
+    const result = GuildSchema.safeParse({ _id: "g1", automod: "bad" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.automod.linkSpam.enabled).toBe(false);
+    }
+  });
 });
 
 describe("RpgProfileSchema", () => {

@@ -39,7 +39,7 @@ export const UserSchema = z.object({
     showVotes: z.boolean().optional(),
     updatedAt: z.date().optional(),
   }).optional().catch(() => ({})),
-  createdAt: z.date().optional(),
-  updatedAt: z.date().optional(),
+  createdAt: z.coerce.date().optional().catch(() => undefined),
+  updatedAt: z.coerce.date().optional().catch(() => undefined),
 });
 export type User = z.infer<typeof UserSchema>;

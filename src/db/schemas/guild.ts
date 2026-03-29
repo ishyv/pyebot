@@ -98,7 +98,7 @@ export const AutomodSchema = z.object({
 
 export const GuildSchema = z.object({
   _id: z.string(),
-  roles: z.record(z.string(), z.any()).catch(() => ({})),
+  roles: z.record(z.string(), z.unknown()).catch(() => ({})),
   channels: GuildChannelsSchema.catch(() => ({
     core: { welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null },
     managed: {},
@@ -120,8 +120,8 @@ export const GuildSchema = z.object({
     daily: { dailyReward: 250, dailyCooldownHours: 24, dailyCurrencyId: "coins", dailyFeeRate: 0, dailyFeeSector: "tax" as const, dailyStreakBonus: 5, dailyStreakCap: 10 },
     work: { workRewardBase: 120, workBaseMintReward: 100, workBonusFromWorksMax: 100, workBonusScaleMode: "flat" as const, workCooldownMinutes: 30, workDailyCap: 5, workCurrencyId: "coins", workPaysFromSector: "works" as const, workFailureChance: 0.1 },
   })),
-  createdAt: z.date().optional(),
-  updatedAt: z.date().optional(),
+  createdAt: z.coerce.date().optional().catch(() => undefined),
+  updatedAt: z.coerce.date().optional().catch(() => undefined),
 });
 
 export type Guild = z.infer<typeof GuildSchema>;

@@ -2,6 +2,9 @@ import { ErrResult, OkResult, type Result } from "@/core/result";
 import { RpgProfileSchema, type RpgProfileData } from "@/db/schemas/rpg-profile";
 import { userStore } from "./users";
 
+// NOTE: rpgStore is userStore (users collection) re-exported for convenience.
+// Use the typed functions in this file (getRpgProfile, patchRpgProfile) rather than
+// calling rpgStore directly — they handle the embedded subdocument correctly.
 export { userStore as rpgStore };
 
 export async function getRpgProfile(userId: string): Promise<Result<RpgProfileData | null>> {
@@ -30,9 +33,11 @@ export async function patchRpgProfile(
   for (const [key, value] of Object.entries(patch)) {
     paths[`rpgProfile.${key}`] = value;
   }
-  const res = await userStore.patch(userId, paths as any);
+  const updateRes = await userStore.updatePaths(userId, paths, { upsert: false });
+  if (updateRes.isErr()) return ErrResult(updateRes.error);
+  const res = await userStore.get(userId);
   if (res.isErr()) return ErrResult(res.error);
   const user = res.unwrap();
-  if (!user.rpgProfile) return ErrResult(new Error("rpgProfile not found after patch"));
+  if (!user?.rpgProfile) return ErrResult(new Error("rpgProfile not found after patch"));
   return OkResult(user.rpgProfile);
 }
