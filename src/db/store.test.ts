@@ -41,13 +41,10 @@ describe("MongoStore (unit — schema behavior)", () => {
 });
 
 // Integration tests (skipped without DB)
-describe("MongoStore (integration)", () => {
-  if (!process.env.MONGO_URI) {
-    test.skip("requires MONGO_URI", () => {});
-    return;
-  }
+const hasDb = !!process.env.MONGO_URI;
 
-  test("get returns null for nonexistent document", async () => {
+describe("MongoStore (integration)", () => {
+  test.skipIf(!hasDb)("get returns null for nonexistent document", async () => {
     const { MongoStore } = await import("./store");
     const store = new MongoStore("__test_store", TestSchema);
     const result = await store.get("nonexistent_id_xyz");
@@ -55,7 +52,7 @@ describe("MongoStore (integration)", () => {
     expect(result.unwrap()).toBeNull();
   });
 
-  test("ensure creates document with defaults", async () => {
+  test.skipIf(!hasDb)("ensure creates document with defaults", async () => {
     const { MongoStore } = await import("./store");
     const { disconnectDb } = await import("../core/db");
     const store = new MongoStore("__test_store", TestSchema);

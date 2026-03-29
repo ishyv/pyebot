@@ -9,7 +9,9 @@ describe("db module", () => {
     const orig = process.env.MONGO_URI;
     delete process.env.MONGO_URI;
     await expect(getDb()).rejects.toThrow("MONGO_URI");
-    process.env.MONGO_URI = orig;
+    if (orig !== undefined) {
+      process.env.MONGO_URI = orig;
+    }
   });
 
   test("disconnectDb resets internal state so getDb reconnects", async () => {
