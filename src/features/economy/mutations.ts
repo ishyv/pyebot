@@ -109,7 +109,8 @@ export async function adjustBalance(
     );
   }
 
-  const finalBalance = Math.max(newBalance, 0);
+  // allowDebt permits negative balances (e.g. mod-applied deductions)
+  const finalBalance = options?.allowDebt ? newBalance : Math.max(newBalance, 0);
   const updateRes = await userStore.updatePaths(userId, {
     [`currency.${currencyId}`]: finalBalance,
   });

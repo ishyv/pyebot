@@ -10,9 +10,9 @@ export type CurrencyBalance = z.infer<typeof CurrencyBalanceSchema>;
 /**
  * Currency inventory — the full wallet on a user document.
  * Keys are currency IDs (e.g. "coins", "rep").
- * Values are balances; unknown keys allowed for extensibility.
+ * Values are balances; negative values are allowed (debt, mod-applied deductions).
  */
-export const CurrencyInventorySchema = z.record(z.string(), z.number().int().min(0).catch(0));
+export const CurrencyInventorySchema = z.record(z.string(), z.number().int().catch(0));
 export type CurrencyInventory = z.infer<typeof CurrencyInventorySchema>;
 
 /** Well-known currency IDs. */

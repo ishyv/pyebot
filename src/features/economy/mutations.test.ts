@@ -176,14 +176,12 @@ describe("adjustBalance", () => {
       OkResult(makeUser({ _id: "user-1", currency: { coins: 30 } })),
     );
 
-    // With allowDebt: true, the balance can go negative, but finalBalance = Math.max(newBalance, 0)
-    // The code sets finalBalance = Math.max(newBalance, options?.allowDebt ? newBalance : 0)
-    // Looking at our implementation: finalBalance = Math.max(newBalance, 0) — even with allowDebt.
-    // The key behavior: allowDebt skips the INSUFFICIENT_FUNDS check. The stored value is clamped at 0.
+    // With allowDebt: true, the INSUFFICIENT_FUNDS check is skipped and the balance
+    // is stored as-is (negative). This allows mod-applied deductions beyond current balance.
     const result = await adjustBalance("user-1", "coins", -50, { allowDebt: true });
     expect(result.isOk()).toBe(true);
-    // Balance clamped to 0 (Math.max(-20, 0))
-    expect(result.unwrap().newBalance).toBe(0);
+    // 30 - 50 = -20 (stored as debt)
+    expect(result.unwrap().newBalance).toBe(-20);
   });
 
   test("rejects invalid currency ID", async () => {
