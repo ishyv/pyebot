@@ -1,14 +1,34 @@
+/**
+ * Pure utility functions for constructing and normalising MongoDB update documents.
+ * Does not open connections or perform queries — all functions are synchronous and side-effect free.
+ *
+ * Used by MongoStore (store.ts) and the atomic transition pattern (transition.ts).
+ */
+
 import type { UpdateFilter } from "mongodb";
 
+/** Deep-clones `value` using structuredClone. Returns null/undefined as-is. */
 export function deepClone<T>(value: T): T {
   if (value === null || value === undefined) return value;
   return structuredClone(value);
 }
 
 const UPDATE_OPERATORS = new Set([
-  "$set", "$unset", "$inc", "$mul", "$push", "$addToSet",
-  "$pull", "$pullAll", "$pop", "$min", "$max", "$currentDate",
-  "$bit", "$rename", "$setOnInsert",
+  "$set",
+  "$unset",
+  "$inc",
+  "$mul",
+  "$push",
+  "$addToSet",
+  "$pull",
+  "$pullAll",
+  "$pop",
+  "$min",
+  "$max",
+  "$currentDate",
+  "$bit",
+  "$rename",
+  "$setOnInsert",
 ]);
 
 const UPDATE_OPERATORS_EXCLUDED_FROM_TOUCH = new Set(["$setOnInsert"]);
@@ -19,13 +39,19 @@ const isOperatorUpdate = (update: Record<string, unknown>): boolean =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
+/**
+ * Collects the top-level field paths touched by a MongoDB update document.
+ * Paths inside `$setOnInsert` are excluded — those are defaults, not mutations.
+ */
 export function collectTouchedPaths(update: UpdateFilter<unknown>): Set<string> {
   const touched = new Set<string>();
   if (!update || typeof update !== "object") return touched;
 
   const updateDoc = update as Record<string, unknown>;
   if (!isOperatorUpdate(updateDoc)) {
-    for (const key of Object.keys(updateDoc)) { if (key) touched.add(key); }
+    for (const key of Object.keys(updateDoc)) {
+      if (key) touched.add(key);
+    }
     return touched;
   }
 
@@ -41,11 +67,18 @@ export function collectTouchedPaths(update: UpdateFilter<unknown>): Set<string> 
       }
       continue;
     }
-    for (const key of Object.keys(payload)) { if (key) touched.add(key); }
+    for (const key of Object.keys(payload)) {
+      if (key) touched.add(key);
+    }
   }
   return touched;
 }
 
+/**
+ * Removes fields from `$setOnInsert` that would conflict with paths already present
+ * in the rest of the update (via `$set`, `$inc`, etc.). Also always drops `updatedAt`
+ * from `$setOnInsert` because `buildSafeUpsertUpdate` stamps it into `$set`.
+ */
 export function pruneConflictsFromSetOnInsert(
   setOnInsert: Record<string, unknown> | undefined,
   touchedPaths: Iterable<string>,
@@ -66,6 +99,12 @@ export function pruneConflictsFromSetOnInsert(
   return pruned;
 }
 
+/**
+ * Builds a safe MongoDB upsert update by:
+ * - Injecting `updatedAt: now` into `$set` (unless `setUpdatedAt: false` or `$currentDate.updatedAt` is present)
+ * - Merging `defaults` into `$setOnInsert`
+ * - Pruning `$setOnInsert` fields that conflict with explicit update paths
+ */
 export function buildSafeUpsertUpdate<TSchema>(
   update: UpdateFilter<TSchema>,
   defaults: Record<string, unknown>,
@@ -108,6 +147,11 @@ export function buildSafeUpsertUpdate<TSchema>(
   return nextUpdate;
 }
 
+/**
+ * Normalises a MongoDB findOneAndUpdate result.
+ * The native driver (v5+) returns the document directly; legacy wrappers return `{ value: doc }`.
+ * Returns `null` if the document was not found.
+ */
 export function unwrapFindOneAndUpdateResult<T>(
   result: T | { value?: T | null } | null | undefined,
 ): T | null {

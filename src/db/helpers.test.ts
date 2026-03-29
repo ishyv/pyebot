@@ -39,6 +39,12 @@ describe("collectTouchedPaths", () => {
   test("returns empty set for empty update", () => {
     expect(collectTouchedPaths({}).size).toBe(0);
   });
+
+  test("collects both source and destination paths from $rename", () => {
+    const paths = collectTouchedPaths({ $rename: { oldField: "newField" } });
+    expect(paths.has("oldField")).toBe(true);
+    expect(paths.has("newField")).toBe(true);
+  });
 });
 
 describe("buildSafeUpsertUpdate", () => {
@@ -68,6 +74,15 @@ describe("buildSafeUpsertUpdate", () => {
       new Date(),
     );
     expect((result as any).$setOnInsert?.defaultField).toBe("value");
+  });
+
+  test("does not add updatedAt when $currentDate.updatedAt is present", () => {
+    const result = buildSafeUpsertUpdate(
+      { $set: { name: "test" }, $currentDate: { updatedAt: true } },
+      {},
+      new Date("2025-01-01"),
+    );
+    expect((result as any).$set?.updatedAt).toBeUndefined();
   });
 });
 
