@@ -83,9 +83,12 @@ mock.module("@/db/repositories/economy", () => ({
     OkResult(Array.from(progressStore.values()).filter((p) => p.userId === _userId)),
   ),
   // market store stubs (not used in achievements tests)
-  marketStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  marketStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)), replaceIfMatch: mock(async () => OkResult(null)) },
   findActiveListings: mock(async () => OkResult([])),
   countActiveListings: mock(async () => OkResult(0)),
+  // quest store stubs (not used in achievements tests)
+  questProgressStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  getActiveQuestsForUser: mock(async () => OkResult([])),
 }));
 
 // ---------------------------------------------------------------------------

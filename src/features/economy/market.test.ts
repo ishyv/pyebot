@@ -132,6 +132,14 @@ mock.module("@/db/repositories/economy", () => ({
   },
   findActiveListings: mockFindActiveListings,
   countActiveListings: mockCountActiveListings,
+  // achievement store stubs (not used in market tests)
+  achievementProgressStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  achievementUnlocksStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  getUnlocksForUser: mock(async () => OkResult([])),
+  getProgressForUser: mock(async () => OkResult([])),
+  // quest store stubs (not used in market tests)
+  questProgressStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  getActiveQuestsForUser: mock(async () => OkResult([])),
 }));
 
 // ---------------------------------------------------------------------------

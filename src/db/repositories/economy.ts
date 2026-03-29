@@ -6,6 +6,7 @@ import {
   type AchievementProgressDoc,
   type UnlockedAchievementDoc,
 } from "@/db/schemas/achievement";
+import { QuestProgressSchema, type QuestProgressDoc } from "@/db/schemas/quest";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,17 @@ export async function getUnlocksForUser(userId: string): Promise<Result<Unlocked
 /** Returns all progress records for a user. */
 export async function getProgressForUser(userId: string): Promise<Result<AchievementProgressDoc[]>> {
   return achievementProgressStore.find({ userId } as any);
+}
+
+// ---------------------------------------------------------------------------
+// Quest store
+// ---------------------------------------------------------------------------
+
+export const questProgressStore = new MongoStore("questProgress", QuestProgressSchema);
+
+/** Returns all active (not-yet-claimed) quests for a user. */
+export async function getActiveQuestsForUser(userId: string): Promise<Result<QuestProgressDoc[]>> {
+  return questProgressStore.find({ userId, rewardsClaimed: false } as any);
 }
 
 // ---------------------------------------------------------------------------
