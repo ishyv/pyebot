@@ -1,3 +1,12 @@
+/**
+ * Generic MongoDB data layer with Zod schema validation.
+ * Every document read is validated against the schema — invalid documents fall back to schema defaults.
+ * All methods return Result<T> rather than throwing.
+ *
+ * Used by all feature repositories. Construct one instance per collection:
+ *   `const users = new MongoStore("users", UserSchema);`
+ */
+
 import type { Collection, Document, Filter, FindOptions, UpdateFilter } from "mongodb";
 import type { ZodSchema } from "zod";
 import { ErrResult, OkResult, type Result } from "@/core/result";
@@ -20,6 +29,8 @@ export class MongoStore<T extends Document & { _id: string }> {
 
   private getDefault(id: string): T {
     const raw: Record<string, unknown> = { _id: id };
+    // Detect guildId-keyed schemas (guild config) and pre-populate it so the parsed default
+    // uses the correct key. Works for ZodObject; silently skips for wrapped schemas.
     try {
       const schemaAny = this.schema as any;
       const shape = schemaAny.shape ?? schemaAny._def?.shape;
@@ -88,6 +99,9 @@ export class MongoStore<T extends Document & { _id: string }> {
     try {
       const col = await this.collection();
       await col.replaceOne({ _id: id } as Filter<T>, data, { upsert: true });
+      // Returns the parsed in-memory data rather than re-fetching from DB.
+      // Unlike ensure/patch/replaceIfMatch, this does not provide a read-your-own-write guarantee.
+      // Callers that need the committed state should call get() after set().
       return OkResult(this.parse(data));
     } catch (error) { return ErrResult(this.mapError(error)); }
   }

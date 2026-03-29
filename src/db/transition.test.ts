@@ -87,4 +87,34 @@ describe("atomicTransition", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) expect(result.error.message).toBe("compute failed");
   });
+
+  test("propagates error from commit", async () => {
+    const result = await atomicTransition({
+      attempts: 3,
+      getInitial: async () => OkResult({ value: 0 }),
+      getFresh: async (u) => OkResult(u),
+      getSnapshot: (u) => u.value,
+      computeNext: (s) => OkResult(s),
+      commit: async () => ErrResult(new Error("commit error")),
+      project: (_u, next) => next,
+      onExhausted: () => ErrResult(new Error("exhausted")),
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) expect(result.error.message).toBe("commit error");
+  });
+
+  test("propagates error from getFresh during retry", async () => {
+    const result = await atomicTransition({
+      attempts: 3,
+      getInitial: async () => OkResult({ value: 0 }),
+      getFresh: async () => ErrResult(new Error("fresh error")),
+      getSnapshot: (u) => u.value,
+      computeNext: (s) => OkResult(s),
+      commit: async () => OkResult(null), // always triggers retry
+      project: (_u, next) => next,
+      onExhausted: () => ErrResult(new Error("exhausted")),
+    });
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) expect(result.error.message).toBe("fresh error");
+  });
 });

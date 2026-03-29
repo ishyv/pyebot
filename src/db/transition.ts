@@ -1,3 +1,11 @@
+/**
+ * Optimistic compare-and-swap (CAS) for concurrent document mutations.
+ * Reads a document, computes a new value, and commits using a conditional update.
+ * If the document changed concurrently (commit returns null), retries with fresh data.
+ *
+ * Replaces the old codebase's `runUserTransition` pattern.
+ */
+
 import { ErrResult, OkResult, type Result } from "@/core/result";
 
 export type AtomicTransitionParams<TUser, TSnapshot, TNext, TOut> = {
