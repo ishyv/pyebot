@@ -72,37 +72,22 @@ export const REGISTRY = {
   "balance": {
     category: "economy",
     description: "Check your wallet balance (hand + bank)",
-    hints: ["/work", "/daily", "/transfer"],
+    hints: ["/work", "/transfer"],
   },
   "work": {
     category: "economy",
     description: "Work a shift to earn coins (cooldown between shifts)",
-    hints: ["/daily", "/coinflip", "/balance"],
-  },
-  "daily": {
-    category: "economy",
-    description: "Claim your daily login reward and build a streak",
-    hints: ["/work", "/balance", "/bank deposit"],
-  },
-  "bank": {
-    category: "economy",
-    description: "Deposit, withdraw, or check your bank balance (safe from /rob)",
-    hints: ["/balance", "/transfer", "/rob"],
+    hints: ["/coinflip", "/balance"],
   },
   "transfer": {
     category: "economy",
     description: "Send coins to another user",
-    hints: ["/balance", "/bank"],
-  },
-  "inventory": {
-    category: "economy",
-    description: "View your collected materials and items",
-    hints: ["/gather-mine", "/process", "/market-list"],
+    hints: ["/balance"],
   },
   "market-list": {
     category: "economy",
     description: "Create a sell listing on the market",
-    hints: ["/market-browse", "/inventory", "/balance"],
+    hints: ["/market-browse", "/balance"],
   },
   "market-browse": {
     category: "economy",
@@ -112,7 +97,7 @@ export const REGISTRY = {
   "market-buy": {
     category: "economy",
     description: "Buy an item from the market",
-    hints: ["/market-browse", "/inventory", "/balance"],
+    hints: ["/market-browse", "/balance"],
   },
   "market-cancel": {
     category: "economy",
@@ -147,12 +132,7 @@ export const REGISTRY = {
   "rob": {
     category: "economy",
     description: "Attempt to steal coins from another user's hand",
-    hints: ["/bank deposit", "/balance"],
-  },
-  "eco-profile": {
-    category: "economy",
-    description: "View your economy profile — balances, status, and streak",
-    hints: ["/balance", "/bank", "/work"],
+    hints: ["/balance"],
   },
   // ── Moderation ────────────────────────────────────────────────────────────
   "ban": { category: "moderation", description: "Ban a user from the server", hints: ["/cases"] },

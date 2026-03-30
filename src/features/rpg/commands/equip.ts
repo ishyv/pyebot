@@ -7,6 +7,7 @@ import {
 import { getUser } from "@/db/repositories/users";
 import { patchRpgProfile } from "@/db/repositories/rpg";
 import { getHints } from "@/utils/command-registry";
+import { RECIPES } from "@/features/rpg/crafting";
 
 export const data = new SlashCommandBuilder()
   .setName("equip")
@@ -18,18 +19,15 @@ export const data = new SlashCommandBuilder()
       .setRequired(true),
   );
 
-/**
- * Check if an item ID is a valid tool that can be equipped.
- * Covers pickaxes, axes, and known starter tools.
- */
+/** Valid equipable tools: all craftable items plus the two starter tools. */
+const EQUIPABLE_TOOLS = new Set([
+  ...Object.keys(RECIPES),
+  "starter_pickaxe",
+  "starter_axe",
+]);
+
 function isValidTool(itemId: string): boolean {
-  const id = itemId.toLowerCase();
-  return (
-    id.endsWith("_pickaxe") ||
-    id.endsWith("_axe") ||
-    id === "starter_pickaxe" ||
-    id === "starter_axe"
-  );
+  return EQUIPABLE_TOOLS.has(itemId);
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
