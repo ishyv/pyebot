@@ -177,4 +177,16 @@ describe("craft()", () => {
     const err = (result as Err<CraftingResult, CraftingErrorType>).error;
     expect(err.code).toBe("INSUFFICIENT_MATERIALS");
   });
+
+  // UPDATE_FAILED: updateUserPaths returns an error
+  it("returns UPDATE_FAILED when updateUserPaths fails", async () => {
+    mockGetUser.mockImplementation(async () =>
+      OkResult<User | null>(makeUser({ stone: 3 })),
+    );
+    mockUpdateUserPaths.mockImplementation(async () => ErrResult(new Error("db write failed")));
+    const result = await craft("user-1", "stone_pickaxe");
+    expect(result.isErr()).toBe(true);
+    const err = (result as Err<CraftingResult, CraftingErrorType>).error;
+    expect(err.code).toBe("UPDATE_FAILED");
+  });
 });

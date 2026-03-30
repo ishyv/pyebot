@@ -26,7 +26,8 @@ import { getUser, updateUserPaths } from "@/db/repositories/users";
 export type CraftingErrorCode =
   | "RECIPE_NOT_FOUND"
   | "INSUFFICIENT_MATERIALS"
-  | "USER_NOT_FOUND";
+  | "USER_NOT_FOUND"
+  | "UPDATE_FAILED";
 
 export class CraftingError extends Error {
   readonly code: CraftingErrorCode;
@@ -70,6 +71,10 @@ export async function craft(
   itemId: string,
   quantity: number = 1,
 ): Promise<Result<CraftingResult, CraftingError>> {
+  if (quantity < 1) {
+    return ErrResult(new CraftingError("RECIPE_NOT_FOUND", "Quantity must be >= 1"));
+  }
+
   // 1. Look up recipe
   const recipe = RECIPES[itemId];
   if (!recipe) {
@@ -119,7 +124,10 @@ export async function craft(
 
   paths[`inventory.${itemId}`] = (inventory[itemId] ?? 0) + quantity;
 
-  await updateUserPaths(userId, paths);
+  const updateRes = await updateUserPaths(userId, paths);
+  if (updateRes.isErr()) {
+    return ErrResult(new CraftingError("UPDATE_FAILED", "Failed to update inventory"));
+  }
 
   // 6. Return success
   return OkResult({ itemId, quantity, materialsConsumed });
