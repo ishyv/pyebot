@@ -5,3 +5,12 @@ dist/
 *.tsbuildinfo
 coverage/
 .DS_Store
+
+# Git worktrees
+.worktrees/
+
+# Superpowers brainstorm session files
+.superpowers/
+
+# Superpowers specs, plans, and design docs
+docs/superpowers/
