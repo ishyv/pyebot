@@ -5,6 +5,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { listRpgQuests, acceptRpgQuest, claimRewards } from "@/features/rpg/quests";
+import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("rpg-quest")
@@ -43,7 +44,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (subcommand === "list") {
     const quests = listRpgQuests().slice(0, 10);
 
-    const embed = new EmbedBuilder().setColor(Colors.Blurple).setTitle("RPG Quests");
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Blurple)
+      .setTitle("RPG Quests")
+      .setFooter({ text: getHints("rpg-quest") });
 
     if (quests.length === 0) {
       embed.setDescription("No RPG quests are currently available.");
@@ -86,7 +90,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
     const { rewards } = result.unwrap();
 
-    const embed = new EmbedBuilder().setColor(Colors.Gold).setTitle("Quest Rewards Claimed!");
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Gold)
+      .setTitle("Quest Rewards Claimed!")
+      .setFooter({ text: getHints("rpg-quest") });
 
     if (rewards.length === 0) {
       embed.setDescription("No rewards were granted.");

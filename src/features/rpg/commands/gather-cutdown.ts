@@ -5,6 +5,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { cutdown } from "@/features/rpg/gathering";
+import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("gather-cutdown")
@@ -27,7 +28,24 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const result = await cutdown(userId, location);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    const err = result.error;
+    let description: string;
+    if (err.code === "NO_TOOL_EQUIPPED") {
+      description =
+        "You need an axe equipped. Start at Oak Forest with your starter axe: `/gather-cutdown oak_forest`.";
+    } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
+      description =
+        "🔒 You need a higher-tier axe to cut here. Craft one with `/craft <axe>` (see `/gather-locations` for what's unlocked).";
+    } else if (err.code === "LOCATION_NOT_FOUND") {
+      description = "Unknown location. Use `/gather-locations` to browse available spots.";
+    } else {
+      description = err.message;
+    }
+    const errorEmbed = new EmbedBuilder()
+      .setColor(Colors.Red)
+      .setDescription(description)
+      .setFooter({ text: getHints("gather-cutdown") });
+    await interaction.editReply({ embeds: [errorEmbed] });
     return;
   }
 
@@ -46,7 +64,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .addFields(
       { name: "Materials Gained", value: materialsText, inline: true },
       { name: "Tool Durability", value: durabilityText, inline: true },
-    );
+    )
+    .setFooter({ text: getHints("gather-cutdown") });
 
   await interaction.editReply({ embeds: [embed] });
 }

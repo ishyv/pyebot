@@ -8,6 +8,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { initiateFight } from "@/features/rpg/combat/fight";
+import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("fight")
@@ -47,7 +48,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setTitle("Fight Invitation Sent!")
     .setDescription(
       `Fight invitation sent to <@${target.id}>!\n\nExpires <t:${expiryTimestamp}:R>`,
-    );
+    )
+    .setFooter({ text: getHints("fight") });
 
   const acceptButton = new ButtonBuilder()
     .setCustomId(`fight_accept:${sessionId}`)

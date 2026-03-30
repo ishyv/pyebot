@@ -4,7 +4,9 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { process } from "@/features/rpg/processing";
+import { process, ProcessingError } from "@/features/rpg/processing";
+import { getUser } from "@/db/repositories/users";
+import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("process")
@@ -35,7 +37,23 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const result = await process(userId, material, quantity);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    const err = result.error;
+    let description = err.message;
+    if (err instanceof ProcessingError && err.code === "RECIPE_NOT_FOUND") {
+      const userRes = await getUser(userId);
+      const inventory = userRes.isOk() ? (userRes.unwrap()?.inventory ?? {}) : {};
+      const materialKeys = Object.keys(inventory).filter((k) => (inventory[k] as number) > 0);
+      if (materialKeys.length > 0) {
+        description = `No processing recipe for \`${material}\`. Your current materials: ${materialKeys.map((k) => `${k} ×${inventory[k]}`).join(", ")}`;
+      } else {
+        description = `No processing recipe for \`${material}\`. Use \`/gather-mine\` or \`/gather-cutdown\` to collect raw materials first.`;
+      }
+    }
+    const errorEmbed = new EmbedBuilder()
+      .setColor(Colors.Red)
+      .setDescription(description)
+      .setFooter({ text: getHints("process") });
+    await interaction.editReply({ embeds: [errorEmbed] });
     return;
   }
 
@@ -64,7 +82,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         value: `${batchesSucceeded}/${batchesAttempted} succeeded`,
         inline: true,
       },
-    );
+    )
+    .setFooter({ text: getHints("process") });
 
   if (feePaid > 0) {
     embed.addFields({ name: "Fee Paid", value: `${feePaid} coins`, inline: true });

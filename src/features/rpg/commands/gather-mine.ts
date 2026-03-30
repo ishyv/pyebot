@@ -5,6 +5,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { mine } from "@/features/rpg/gathering";
+import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("gather-mine")
@@ -27,7 +28,24 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const result = await mine(userId, location);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    const err = result.error;
+    let description: string;
+    if (err.code === "NO_TOOL_EQUIPPED") {
+      description =
+        "You need a pickaxe equipped. Start at Stone Mine with your starter pick: `/gather-mine stone_mine`.";
+    } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
+      description =
+        "🔒 You need a higher-tier pickaxe to mine here. Craft one with `/craft <pickaxe>` (see `/gather-locations` for what's unlocked).";
+    } else if (err.code === "LOCATION_NOT_FOUND") {
+      description = "Unknown location. Use `/gather-locations` to browse available spots.";
+    } else {
+      description = err.message;
+    }
+    const errorEmbed = new EmbedBuilder()
+      .setColor(Colors.Red)
+      .setDescription(description)
+      .setFooter({ text: getHints("gather-mine") });
+    await interaction.editReply({ embeds: [errorEmbed] });
     return;
   }
 
@@ -46,7 +64,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .addFields(
       { name: "Materials Gained", value: materialsText, inline: true },
       { name: "Tool Durability", value: durabilityText, inline: true },
-    );
+    )
+    .setFooter({ text: getHints("gather-mine") });
 
   await interaction.editReply({ embeds: [embed] });
 }
