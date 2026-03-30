@@ -261,6 +261,52 @@ async function gather(
 }
 
 // ---------------------------------------------------------------------------
+// Tool tier
+// ---------------------------------------------------------------------------
+
+/** Default tier returned when no tool is equipped or the item has no tier info. */
+export const TOOL_TIER_FALLBACK = 1;
+
+/**
+ * Fallback item-tier map used when no content registry is loaded.
+ * Not exported — this is an implementation detail of getEquippedToolTier.
+ */
+const TOOL_TIER_MAP: Record<string, number> = {
+  starter_pickaxe: 1,
+  starter_axe: 1,
+  stone_pickaxe: 2,
+  stone_axe: 2,
+  copper_pickaxe: 3,
+  copper_axe: 3,
+  iron_pickaxe: 4,
+  iron_axe: 4,
+};
+
+/**
+ * Returns the tier of the user's currently equipped weapon.
+ * Falls back to TOOL_TIER_FALLBACK if no tool is equipped, the item is
+ * unknown, or the user profile cannot be fetched.
+ */
+export async function getEquippedToolTier(userId: string): Promise<number> {
+  const userRes = await getUser(userId);
+  if (userRes.isErr()) return TOOL_TIER_FALLBACK;
+
+  const user = userRes.unwrap();
+  const weapon = user?.rpgProfile?.loadout?.weapon;
+  if (!weapon) return TOOL_TIER_FALLBACK;
+
+  const itemId = typeof weapon === "string" ? weapon : weapon.itemId;
+
+  const reg = getContentRegistry();
+  if (reg) {
+    const itemDef = reg.getItem(itemId);
+    return itemDef?.tool?.tier ?? TOOL_TIER_FALLBACK;
+  }
+
+  return TOOL_TIER_MAP[itemId] ?? TOOL_TIER_FALLBACK;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
