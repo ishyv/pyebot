@@ -15,7 +15,13 @@
 
 import "dotenv/config";
 
-import { REST, Routes, type ChatInputCommandInteraction, type ButtonInteraction } from "discord.js";
+import {
+  REST,
+  Routes,
+  type ChatInputCommandInteraction,
+  type AutocompleteInteraction,
+  type ButtonInteraction,
+} from "discord.js";
 import { createClient } from "@/core/client";
 import { getDb, disconnectDb } from "@/core/db";
 import { createLogger } from "@/core/logger";
@@ -44,9 +50,17 @@ import * as questClaimCmd from "@/features/economy/commands/quest-claim";
 import * as fightCmd from "@/features/rpg/commands/fight";
 import * as gatherMineCmd from "@/features/rpg/commands/gather-mine";
 import * as gatherCutdownCmd from "@/features/rpg/commands/gather-cutdown";
+import * as gatherLocationsCmd from "@/features/rpg/commands/gather-locations";
 import * as processCmd from "@/features/rpg/commands/process";
+import * as craftCmd from "@/features/rpg/commands/craft";
+import * as equipCmd from "@/features/rpg/commands/equip";
 import * as rpgProfileCmd from "@/features/rpg/commands/profile";
 import * as rpgQuestCmd from "@/features/rpg/commands/quest";
+
+// ---------------------------------------------------------------------------
+// Command imports (utility)
+// ---------------------------------------------------------------------------
+import * as helpCmd from "@/features/utility/commands/help";
 
 // ---------------------------------------------------------------------------
 // Command imports (moderation)
@@ -110,6 +124,10 @@ import {
   isOfferReviewButton,
   handleOfferReview,
 } from "@/features/offers/handlers/review";
+import {
+  isOnboardButton,
+  handleOnboard,
+} from "@/features/rpg/handlers/onboard";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -120,6 +138,7 @@ const log = createLogger("bootstrap");
 type CommandModule = {
   data: { name: string; toJSON(): unknown };
   execute(interaction: ChatInputCommandInteraction): Promise<void>;
+  autocomplete?(interaction: AutocompleteInteraction): Promise<void>;
 };
 
 const ALL_COMMANDS: CommandModule[] = [
@@ -128,7 +147,8 @@ const ALL_COMMANDS: CommandModule[] = [
   marketListCmd, marketBuyCmd, marketBrowseCmd, marketCancelCmd,
   questListCmd, questAcceptCmd, questClaimCmd,
   // rpg
-  fightCmd, gatherMineCmd, gatherCutdownCmd, processCmd, rpgProfileCmd, rpgQuestCmd,
+  fightCmd, gatherMineCmd, gatherCutdownCmd, gatherLocationsCmd,
+  processCmd, craftCmd, equipCmd, rpgProfileCmd, rpgQuestCmd,
   // moderation
   banCmd, kickCmd, muteCmd, warnCmd, casesCmd,
   // tickets
@@ -141,6 +161,8 @@ const ALL_COMMANDS: CommandModule[] = [
   offerCmd,
   // automod
   automodCmd,
+  // utility
+  helpCmd,
 ];
 
 const commandMap = new Map<string, CommandModule>(
@@ -184,6 +206,14 @@ async function bootstrap(): Promise<void> {
         return;
       }
 
+      if (interaction.isAutocomplete()) {
+        const cmd = commandMap.get(interaction.commandName);
+        if (cmd?.autocomplete) {
+          await cmd.autocomplete(interaction as AutocompleteInteraction);
+        }
+        return;
+      }
+
       if (interaction.isButton()) {
         const btn = interaction as ButtonInteraction;
         const cid = btn.customId;
@@ -198,6 +228,8 @@ async function bootstrap(): Promise<void> {
           await handleTicketClose(btn);
         } else if (isOfferReviewButton(cid)) {
           await handleOfferReview(btn);
+        } else if (isOnboardButton(cid)) {
+          await handleOnboard(btn);
         }
         // unknown buttons are silently ignored
       }
