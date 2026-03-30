@@ -35,8 +35,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   // Fetch user and RPG profile
   const userRes = await getUser(userId);
-  const user = userRes.isOk() ? userRes.unwrap() : null;
-  const rpgProfile = user?.rpgProfile;
+  if (userRes.isErr()) {
+    await interaction.editReply({ content: "Something went wrong. Please try again." });
+    return;
+  }
+  const rpgProfile = userRes.unwrap()?.rpgProfile;
 
   if (!rpgProfile) {
     await interaction.editReply({
@@ -55,7 +58,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   // Determine location type from argument or profession
-  const typeArg = interaction.options.getString("type") as GatherAction | null;
+  const rawTypeArg = interaction.options.getString("type");
+  const typeArg: GatherAction | null =
+    rawTypeArg === "mine" || rawTypeArg === "forest" ? rawTypeArg : null;
   let locationType: GatherAction;
   if (typeArg) {
     locationType = typeArg;
