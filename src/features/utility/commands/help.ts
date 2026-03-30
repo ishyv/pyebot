@@ -32,7 +32,7 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   const commandNames = Object.keys(REGISTRY);
 
   const choices = [...categoryKeys, ...commandNames]
-    .filter((entry) => entry.toLowerCase().includes(focused))
+    .filter((entry) => entry.toLowerCase().startsWith(focused))
     .map((entry) => ({ name: entry, value: entry }))
     .slice(0, 25);
 
