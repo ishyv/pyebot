@@ -6,7 +6,7 @@ export type CommandMeta = {
   args?: Array<{ name: string; description: string; tip?: string }>;
 };
 
-export const REGISTRY: Record<string, CommandMeta> = {
+export const REGISTRY = {
   // ── RPG ──────────────────────────────────────────────────────────────────
   "rpg-profile": {
     category: "rpg",
@@ -167,29 +167,31 @@ export const REGISTRY: Record<string, CommandMeta> = {
     hints: [],
     args: [{ name: "topic", description: "A category (rpg, economy, moderation) or command name" }],
   },
-};
+} as const satisfies Record<string, CommandMeta>;
 
-export const CATEGORIES: Record<string, { label: string; emoji: string; description: string }> = {
+export const CATEGORIES = {
   rpg:         { label: "RPG",         emoji: "⚔️",  description: "Gathering, crafting, combat, and progression" },
   economy:     { label: "Economy",     emoji: "💰",  description: "Coins, banking, quests, and the market" },
   moderation:  { label: "Moderation",  emoji: "🛡️",  description: "Bans, kicks, mutes, warns, and case history" },
   utility:     { label: "Utility",     emoji: "📖",  description: "Help and information commands" },
-};
+} as const;
+
+export type CategoryKey = keyof typeof CATEGORIES;
 
 /** Returns a formatted footer hint string, e.g. "💡 /inventory • /process • /craft" */
 export function getHints(commandName: string): string {
-  const meta = REGISTRY[commandName];
+  const meta = REGISTRY[commandName as keyof typeof REGISTRY];
   if (!meta || meta.hints.length === 0) return "";
   return "💡 " + meta.hints.join(" • ");
 }
 
 /** Returns the full metadata for a command, or null if not registered. */
 export function getCommandMeta(commandName: string): CommandMeta | null {
-  return REGISTRY[commandName] ?? null;
+  return (REGISTRY[commandName as keyof typeof REGISTRY] as CommandMeta) ?? null;
 }
 
 /** Returns all command names for a given category. */
-export function getCommandsForCategory(category: string): Array<{ name: string; meta: CommandMeta }> {
+export function getCommandsForCategory(category: CategoryKey): Array<{ name: string; meta: CommandMeta }> {
   return Object.entries(REGISTRY)
     .filter(([, meta]) => meta.category === category)
     .map(([name, meta]) => ({ name, meta }));
