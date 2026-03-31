@@ -67,11 +67,47 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const result = await acceptRpgQuest(userId, questId);
 
     if (result.isErr()) {
-      await interaction.editReply({ content: `Error: ${result.error.message}` });
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(Colors.Red)
+            .setTitle("❌ Quest Not Accepted")
+            .setDescription(result.error.message),
+        ],
+      });
       return;
     }
 
-    await interaction.editReply({ content: `Quest **${questId}** accepted!` });
+    // Find quest def to show details
+    const { RPG_QUEST_DEFINITIONS } = await import("@/features/rpg/quests");
+    const def = RPG_QUEST_DEFINITIONS.find((q) => q.id === questId);
+
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Blue)
+      .setTitle("📋 Quest Accepted!")
+      .setDescription(def?.description ?? `Quest **${questId}** accepted.`);
+
+    if (def) {
+      const stepLines = def.steps.map((s, i) => {
+        if (s.kind === "gather_item") return `${i + 1}. Gather ${s.qty}x **${s.itemId}**`;
+        if (s.kind === "fight_win") return `${i + 1}. Win **${s.qty}** fights`;
+        return `${i + 1}. ${s.kind}`;
+      });
+      embed.addFields({ name: "📝 Objectives", value: stepLines.join("\n") });
+
+      const rewardLines: string[] = [];
+      for (const r of def.rewards.currency ?? []) {
+        rewardLines.push(`💰 ${r.amount.toLocaleString()} ${r.currencyId}`);
+      }
+      if (def.rewards.xp) rewardLines.push(`✨ ${def.rewards.xp} XP`);
+      if (rewardLines.length > 0) {
+        embed.addFields({ name: "🎁 Rewards", value: rewardLines.join("\n") });
+      }
+    }
+
+    embed.setFooter({ text: "💡 Use /rpg-quest claim when complete" });
+
+    await interaction.editReply({ embeds: [embed] });
     return;
   }
 

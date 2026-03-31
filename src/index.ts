@@ -37,6 +37,10 @@ import * as marketCancelCmd from "@/features/economy/commands/market-cancel";
 import * as questListCmd from "@/features/economy/commands/quest-list";
 import * as questAcceptCmd from "@/features/economy/commands/quest-accept";
 import * as questClaimCmd from "@/features/economy/commands/quest-claim";
+import * as dailyCmd from "@/features/economy/commands/daily";
+import * as bankCmd from "@/features/economy/commands/bank";
+import * as ecoProfileCmd from "@/features/economy/commands/profile";
+import * as inventoryCmd from "@/features/economy/commands/inventory";
 
 // ---------------------------------------------------------------------------
 // Command imports (RPG)
@@ -97,6 +101,10 @@ import {
   isFightMoveButton,
   handleCombatMove,
 } from "@/features/rpg/handlers/combatMove";
+import {
+  isOnboardButton,
+  handleOnboard,
+} from "@/features/rpg/handlers/onboard";
 import { register as registerFightExpiry } from "@/features/rpg/handlers/fightExpiry";
 import {
   isTicketCloseButton,
@@ -127,6 +135,7 @@ const ALL_COMMANDS: CommandModule[] = [
   balanceCmd, transferCmd, workCmd, coinflipCmd, triviaCmd, robCmd,
   marketListCmd, marketBuyCmd, marketBrowseCmd, marketCancelCmd,
   questListCmd, questAcceptCmd, questClaimCmd,
+  dailyCmd, bankCmd, ecoProfileCmd, inventoryCmd,
   // rpg
   fightCmd, gatherMineCmd, gatherCutdownCmd, processCmd, rpgProfileCmd, rpgQuestCmd,
   // moderation
@@ -194,6 +203,8 @@ async function bootstrap(): Promise<void> {
           await handleFightAccept(btn);
         } else if (isFightMoveButton(cid)) {
           await handleCombatMove(btn);
+        } else if (isOnboardButton(cid)) {
+          await handleOnboard(btn);
         } else if (isTicketCloseButton(cid)) {
           await handleTicketClose(btn);
         } else if (isOfferReviewButton(cid)) {

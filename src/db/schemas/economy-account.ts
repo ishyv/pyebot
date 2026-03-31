@@ -27,6 +27,8 @@ export const EconomyAccountSchema = z.object({
   updatedAt: DateSchema,
   lastActivityAt: DateSchema,
   version: z.number().int().nonnegative().catch(0),
+  dailyStreak: z.number().int().min(0).catch(0),
+  lastDailyAt: z.coerce.date().nullable().catch(null),
 });
 
 /** Type for economy account data as stored in DB. */

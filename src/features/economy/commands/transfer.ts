@@ -4,7 +4,8 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { transfer } from "@/features/economy/mutations";
+import { transfer, getBalance } from "@/features/economy/mutations";
+import { coins } from "@/utils/fmt";
 
 export const data = new SlashCommandBuilder()
   .setName("transfer")
@@ -35,17 +36,44 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const currencyId = interaction.options.getString("currency") ?? "coins";
   const senderId = interaction.user.id;
 
+  // Record sender balance before
+  const beforeRes = await getBalance(senderId, currencyId);
+  const beforeBalance = beforeRes.isOk() ? beforeRes.unwrap() : 0;
+
   const result = await transfer(senderId, recipient.id, currencyId, amount);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    const errEmbed = new EmbedBuilder()
+      .setColor(Colors.Red)
+      .setTitle("❌ Transfer Failed")
+      .setDescription(result.error.message);
+    await interaction.editReply({ embeds: [errEmbed] });
     return;
   }
 
+  const { senderBalance, recipientBalance } = result.unwrap();
+
   const embed = new EmbedBuilder()
     .setColor(Colors.Blue)
-    .setTitle("Transfer Successful")
-    .setDescription(`Transferred **${amount} ${currencyId}** to <@${recipient.id}>`);
+    .setTitle("💸 Transfer Sent")
+    .addFields(
+      {
+        name: "💰 Your Balance",
+        value: `${coins(beforeBalance, currencyId)} → ${coins(senderBalance, currencyId)}`,
+        inline: true,
+      },
+      {
+        name: "📤 Sent",
+        value: coins(amount, currencyId),
+        inline: true,
+      },
+      {
+        name: "📥 Recipient",
+        value: `<@${recipient.id}> now has ${coins(recipientBalance, currencyId)}`,
+        inline: false,
+      },
+    )
+    .setFooter({ text: "💡 /balance • /bank" });
 
   await interaction.editReply({ embeds: [embed] });
 }

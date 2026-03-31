@@ -103,14 +103,20 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise
   const result = await withdrawOffer(guildId, interaction.user.id);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Failed to withdraw: ${result.error.message}` });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(`Could not withdraw offer: ${result.error.message}`)],
+    });
     return;
   }
 
   if (!result.unwrap()) {
-    await interaction.editReply({ content: "You don't have an active offer to withdraw." });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Yellow).setTitle("Nothing to Withdraw").setDescription("You don't have an active offer to withdraw.")],
+    });
     return;
   }
 
-  await interaction.editReply({ content: "Your offer has been withdrawn." });
+  await interaction.editReply({
+    embeds: [new EmbedBuilder().setColor(Colors.Green).setTitle("✅ Offer Withdrawn").setDescription("Your offer has been removed from review.")],
+  });
 }

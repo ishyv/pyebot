@@ -140,12 +140,23 @@ async function handleCreate(interaction: ChatInputCommandInteraction): Promise<v
   const result = await createRule({ guildId, name, trigger, roleId: role.id });
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Failed to create rule: ${result.error.message}` });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(`Could not create rule: ${result.error.message}`)],
+    });
     return;
   }
 
   await interaction.editReply({
-    content: `Rule **${name}** created — trigger: \`${triggerType}\`, role: <@&${role.id}>.`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(Colors.Green)
+        .setTitle("✅ Autorole Rule Created")
+        .addFields(
+          { name: "Name", value: name, inline: true },
+          { name: "Trigger", value: triggerType, inline: true },
+          { name: "Role", value: `<@&${role.id}>`, inline: true },
+        ),
+    ],
   });
 }
 
@@ -158,16 +169,22 @@ async function handleDelete(interaction: ChatInputCommandInteraction): Promise<v
   const result = await deleteRule(guildId, name);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Failed to delete rule: ${result.error.message}` });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(result.error.message)],
+    });
     return;
   }
 
   if (!result.unwrap()) {
-    await interaction.editReply({ content: `No rule named **${name}** found.` });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Yellow).setTitle("Not Found").setDescription(`No rule named **${name}** found.`)],
+    });
     return;
   }
 
-  await interaction.editReply({ content: `Rule **${name}** deleted.` });
+  await interaction.editReply({
+    embeds: [new EmbedBuilder().setColor(Colors.Green).setTitle("✅ Rule Deleted").setDescription(`Rule **${name}** has been removed.`)],
+  });
 }
 
 async function handleList(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -184,7 +201,9 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
   const rules = result.unwrap();
 
   if (rules.length === 0) {
-    await interaction.editReply({ content: "No autorole rules configured." });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Blue).setTitle("Autorole Rules").setDescription("No rules configured yet. Use `/autorole create` to add one.")],
+    });
     return;
   }
 
@@ -220,16 +239,25 @@ async function handleToggle(
   const result = await setEnabled(guildId, name, enabled);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Failed to update rule: ${result.error.message}` });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(result.error.message)],
+    });
     return;
   }
 
   if (!result.unwrap()) {
-    await interaction.editReply({ content: `No rule named **${name}** found.` });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Yellow).setTitle("Not Found").setDescription(`No rule named **${name}** found.`)],
+    });
     return;
   }
 
   await interaction.editReply({
-    content: `Rule **${name}** ${enabled ? "enabled" : "disabled"}.`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(enabled ? Colors.Green : Colors.Grey)
+        .setTitle(enabled ? "✅ Rule Enabled" : "⏸️ Rule Disabled")
+        .setDescription(`Rule **${name}** is now ${enabled ? "active" : "paused"}.`),
+    ],
   });
 }

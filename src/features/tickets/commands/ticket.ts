@@ -171,7 +171,13 @@ async function handleClose(interaction: ChatInputCommandInteraction): Promise<vo
     return;
   }
 
-  await interaction.editReply({ content: "Closing ticket..." });
+  const closingEmbed = new EmbedBuilder()
+    .setColor(Colors.Orange)
+    .setTitle("🔒 Closing Ticket")
+    .setDescription("This ticket is being closed. The channel will be deleted shortly.")
+    .setTimestamp();
+
+  await interaction.editReply({ embeds: [closingEmbed] });
 
   await closeTicket(guild, channel.id);
 }

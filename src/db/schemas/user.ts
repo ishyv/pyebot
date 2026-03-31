@@ -28,6 +28,7 @@ export const UserSchema = z.object({
   openTickets: z.array(z.string()).catch(() => []),
   currency: CurrencyInventorySchema.catch(() => ({})),
   inventory: z.record(z.string(), z.unknown()).catch(() => ({})),
+  bank: z.record(z.string(), z.number()).optional().catch(() => ({})),
   // Economy account data
   economyAccount: EconomyAccountSchema.optional().catch(() => undefined) as z.ZodType<EconomyAccountData | undefined>,
   // RPG profile — embedded subdocument

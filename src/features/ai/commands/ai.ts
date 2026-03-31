@@ -6,6 +6,8 @@
 
 import {
   SlashCommandBuilder,
+  EmbedBuilder,
+  Colors,
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
@@ -76,7 +78,10 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
     member.permissions.has(PermissionFlagsBits.ManageGuild);
 
   if (!isAdmin) {
-    await interaction.reply({ content: "Only admins can change the AI provider.", ephemeral: true });
+    await interaction.reply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Permission Denied").setDescription("Only admins can change the AI provider.")],
+      ephemeral: true,
+    });
     return;
   }
 
@@ -91,12 +96,22 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
   });
 
   if (result.isErr()) {
-    await interaction.editReply({ content: "Failed to update AI provider." });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update AI provider.")],
+    });
     return;
   }
 
   await interaction.editReply({
-    content: `AI provider set to **${provider}** (default model: \`${defaultModel}\`).`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(Colors.Blue)
+        .setTitle("⚙️ AI Provider Updated")
+        .addFields(
+          { name: "Provider", value: provider, inline: true },
+          { name: "Default Model", value: `\`${defaultModel}\``, inline: true },
+        ),
+    ],
   });
 }
 
@@ -108,7 +123,10 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
     member.permissions.has(PermissionFlagsBits.ManageGuild);
 
   if (!isAdmin) {
-    await interaction.reply({ content: "Only admins can change the AI model.", ephemeral: true });
+    await interaction.reply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Permission Denied").setDescription("Only admins can change the AI model.")],
+      ephemeral: true,
+    });
     return;
   }
 
@@ -119,14 +137,31 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
   const result = await updateGuildPaths(interaction.guildId!, { "ai.model": model });
 
   if (result.isErr()) {
-    await interaction.editReply({ content: "Failed to update AI model." });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update AI model.")],
+    });
     return;
   }
 
-  await interaction.editReply({ content: `AI model set to \`${model}\`.` });
+  await interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(Colors.Blue)
+        .setTitle("⚙️ AI Model Updated")
+        .addFields({ name: "Model", value: `\`${model}\``, inline: true }),
+    ],
+  });
 }
 
 async function handleClearMemory(interaction: ChatInputCommandInteraction): Promise<void> {
   clearMemory(interaction.user.id);
-  await interaction.reply({ content: "Your AI conversation memory has been cleared.", ephemeral: true });
+  await interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(Colors.Green)
+        .setTitle("🧹 Memory Cleared")
+        .setDescription("Your AI conversation history has been cleared. Fresh start!"),
+    ],
+    ephemeral: true,
+  });
 }

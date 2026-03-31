@@ -125,6 +125,111 @@ export async function adjustBalance(
 }
 
 // ---------------------------------------------------------------------------
+// getBank / deposit / withdraw
+// ---------------------------------------------------------------------------
+
+/**
+ * Get a user's bank balance for a currency. Returns 0 if not set.
+ */
+export async function getBankBalance(
+  userId: string,
+  currencyId: string,
+): Promise<Result<number, Error>> {
+  const userRes = await userStore.get(userId);
+  if (userRes.isErr()) return ErrResult(userRes.error);
+  const user = userRes.unwrap();
+  if (!user) return OkResult(0);
+  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> }).bank ?? {};
+  return OkResult(bank[currencyId] ?? 0);
+}
+
+/**
+ * Move coins from hand (currency) to bank.
+ */
+export async function deposit(
+  userId: string,
+  currencyId: string,
+  amount: number,
+): Promise<Result<{ handBalance: number; bankBalance: number }, Error>> {
+  if (amount <= 0) {
+    return ErrResult(new MutationError("INVALID_AMOUNT", "Deposit amount must be greater than 0"));
+  }
+  if (!isValidCurrencyId(currencyId)) {
+    return ErrResult(new MutationError("INVALID_CURRENCY", `Invalid currency: "${currencyId}"`));
+  }
+
+  const ensureRes = await userStore.ensure(userId);
+  if (ensureRes.isErr()) return ErrResult(ensureRes.error);
+  const user = ensureRes.unwrap();
+
+  const handBalance = user.currency[currencyId] ?? 0;
+  if (handBalance < amount) {
+    return ErrResult(
+      new MutationError("INSUFFICIENT_FUNDS", `Insufficient hand balance: ${handBalance}`),
+    );
+  }
+
+  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> }).bank ?? {};
+  const currentBank = bank[currencyId] ?? 0;
+  const newHand = handBalance - amount;
+  const newBank = currentBank + amount;
+
+  const updateRes = await userStore.updatePaths(userId, {
+    [`currency.${currencyId}`]: newHand,
+    [`bank.${currencyId}`]: newBank,
+  });
+
+  if (updateRes.isErr()) {
+    return ErrResult(new MutationError("UPDATE_FAILED", updateRes.error.message));
+  }
+
+  return OkResult({ handBalance: newHand, bankBalance: newBank });
+}
+
+/**
+ * Move coins from bank to hand (currency).
+ */
+export async function withdraw(
+  userId: string,
+  currencyId: string,
+  amount: number,
+): Promise<Result<{ handBalance: number; bankBalance: number }, Error>> {
+  if (amount <= 0) {
+    return ErrResult(new MutationError("INVALID_AMOUNT", "Withdrawal amount must be greater than 0"));
+  }
+  if (!isValidCurrencyId(currencyId)) {
+    return ErrResult(new MutationError("INVALID_CURRENCY", `Invalid currency: "${currencyId}"`));
+  }
+
+  const ensureRes = await userStore.ensure(userId);
+  if (ensureRes.isErr()) return ErrResult(ensureRes.error);
+  const user = ensureRes.unwrap();
+
+  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> }).bank ?? {};
+  const bankBalance = bank[currencyId] ?? 0;
+  if (bankBalance < amount) {
+    return ErrResult(
+      new MutationError("INSUFFICIENT_FUNDS", `Insufficient bank balance: ${bankBalance}`),
+    );
+  }
+
+  const currentHand = user.currency[currencyId] ?? 0;
+  const newHand = currentHand + amount;
+  const newBank = bankBalance - amount;
+
+  const updateRes = await userStore.updatePaths(userId, {
+    [`currency.${currencyId}`]: newHand,
+    [`bank.${currencyId}`]: newBank,
+  });
+
+  if (updateRes.isErr()) {
+    return ErrResult(new MutationError("UPDATE_FAILED", updateRes.error.message));
+  }
+
+  return OkResult({ handBalance: newHand, bankBalance: newBank });
+}
+
+// ---------------------------------------------------------------------------
 // transfer
 // ---------------------------------------------------------------------------
 

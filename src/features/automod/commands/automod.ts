@@ -6,6 +6,8 @@
 
 import {
   SlashCommandBuilder,
+  EmbedBuilder,
+  Colors,
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
@@ -108,13 +110,23 @@ async function handleLinkspam(interaction: ChatInputCommandInteraction): Promise
   const result = await updateGuildPaths(guildId, paths);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: "Failed to update configuration." });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
+    });
     return;
   }
 
-  await interaction.editReply({
-    content: `Link spam detection **${enabled ? "enabled" : "disabled"}**.`,
-  });
+  const embed = new EmbedBuilder()
+    .setColor(enabled ? Colors.Green : Colors.Grey)
+    .setTitle("⚙️ Link Spam Detection Updated")
+    .setDescription(`Link spam detection is now **${enabled ? "enabled" : "disabled"}**.`)
+    .setFooter({ text: "💡 Use /automod status to see full config" });
+
+  if (maxLinks !== null) embed.addFields({ name: "Max Links", value: `${maxLinks}`, inline: true });
+  if (windowSeconds !== null) embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
+  if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
+
+  await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleWhitelist(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -153,7 +165,13 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction): Promis
   });
 
   await interaction.editReply({
-    content: `Domain \`${domain}\` ${action === "add" ? "added to" : "removed from"} whitelist. (${updated.length} entries)`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(action === "add" ? Colors.Green : Colors.Orange)
+        .setTitle(`${action === "add" ? "✅ Domain Added" : "🗑️ Domain Removed"}`)
+        .setDescription(`\`${domain}\` has been ${action === "add" ? "added to" : "removed from"} the whitelist.`)
+        .addFields({ name: "Total Entries", value: `${updated.length}`, inline: true }),
+    ],
   });
 }
 
@@ -169,12 +187,19 @@ async function handleReportChannel(interaction: ChatInputCommandInteraction): Pr
   });
 
   if (result.isErr()) {
-    await interaction.editReply({ content: "Failed to update report channel." });
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update report channel.")],
+    });
     return;
   }
 
   await interaction.editReply({
-    content: channelId ? `Report channel set to <#${channelId}>.` : "Report channel cleared.",
+    embeds: [
+      new EmbedBuilder()
+        .setColor(Colors.Blue)
+        .setTitle("⚙️ Report Channel Updated")
+        .setDescription(channelId ? `Automod reports will be sent to <#${channelId}>.` : "Report channel cleared — reports are disabled."),
+    ],
   });
 }
 

@@ -32,6 +32,8 @@ export interface EconomyAccount {
   updatedAt: Date;
   lastActivityAt: Date;
   version: number;
+  dailyStreak: number;
+  lastDailyAt: Date | null;
 }
 
 const logger = createLogger("economy:account");
@@ -45,6 +47,8 @@ function toDomain(userId: string, data: EconomyAccountData): EconomyAccount {
     updatedAt: data.updatedAt,
     lastActivityAt: data.lastActivityAt,
     version: data.version,
+    dailyStreak: data.dailyStreak,
+    lastDailyAt: data.lastDailyAt,
   };
 }
 
@@ -56,6 +60,8 @@ function toData(account: EconomyAccount): EconomyAccountData {
     updatedAt: account.updatedAt,
     lastActivityAt: account.lastActivityAt,
     version: account.version,
+    dailyStreak: account.dailyStreak,
+    lastDailyAt: account.lastDailyAt,
   };
 }
 
@@ -110,6 +116,8 @@ export async function ensureAccount(
     updatedAt: now,
     lastActivityAt: now,
     version: 0,
+    dailyStreak: 0,
+    lastDailyAt: null,
   };
 
   const result = await atomicTransition<
