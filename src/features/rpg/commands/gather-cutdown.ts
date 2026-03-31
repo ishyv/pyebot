@@ -1,18 +1,19 @@
 import {
   SlashCommandBuilder,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { cutdown } from "@/features/rpg/gathering";
+import { listLocations, getEquippedToolTier } from "@/features/rpg/gathering";
+import { getUser } from "@/db/repositories/users";
 import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("gather-cutdown")
-  .setDescription("Cut down trees at a forest location")
-  .addStringOption((opt) =>
-    opt.setName("location").setDescription("The location ID to cut down trees at").setRequired(true),
-  );
+  .setDescription("Choose a forest location and cut down trees");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -22,50 +23,50 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const location = interaction.options.getString("location", true);
   const userId = interaction.user.id;
 
-  const result = await cutdown(userId, location);
-
-  if (result.isErr()) {
-    const err = result.error;
-    let description: string;
-    if (err.code === "NO_TOOL_EQUIPPED") {
-      description =
-        "You need an axe equipped. Start at Oak Forest with your starter axe: `/gather-cutdown oak_forest`.";
-    } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
-      description =
-        "🔒 You need a higher-tier axe to cut here. Craft one with `/craft <axe>` (see `/gather-locations` for what's unlocked).";
-    } else if (err.code === "LOCATION_NOT_FOUND") {
-      description = "Unknown location. Use `/gather-locations` to browse available spots.";
-    } else {
-      description = err.message;
-    }
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription(description)
-      .setFooter({ text: getHints("gather-cutdown") });
-    await interaction.editReply({ embeds: [errorEmbed] });
+  // Verify user has an RPG profile
+  const userRes = await getUser(userId);
+  if (userRes.isErr()) {
+    await interaction.editReply({ content: "Something went wrong. Please try again." });
+    return;
+  }
+  if (!userRes.unwrap()?.rpgProfile) {
+    await interaction.editReply({
+      content: "You need to set up your RPG profile first. Use `/rpg-profile` to get started.",
+    });
     return;
   }
 
-  const { locationName, tier, materialsGained, remainingDurability, toolBroken } = result.unwrap();
-
-  const materialsText =
-    materialsGained.length > 0
-      ? materialsGained.map((m) => `${m.quantity}x ${m.id}`).join(", ")
-      : "Nothing";
-
-  const durabilityText = toolBroken ? "Tool broke!" : `${remainingDurability}`;
+  const userTier = await getEquippedToolTier(userId);
+  const locations = listLocations("forest");
 
   const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle(`You cut down trees at **${locationName}** (Tier ${tier})`)
-    .addFields(
-      { name: "Materials Gained", value: materialsText, inline: true },
-      { name: "Tool Durability", value: durabilityText, inline: true },
+    .setColor(Colors.DarkGreen)
+    .setTitle("🪓 Where do you want to cut down trees?")
+    .setDescription(
+      locations
+        .map((loc) => {
+          const unlocked = loc.requiredTier <= userTier;
+          const status = unlocked ? "✅" : "🔒";
+          const yields = loc.materials.join(", ");
+          return `${status} **${loc.name}** (T${loc.requiredTier}) — ${yields}`;
+        })
+        .join("\n"),
     )
     .setFooter({ text: getHints("gather-cutdown") });
 
-  await interaction.editReply({ embeds: [embed] });
+  // Build one row of buttons (max 5 per row; we have 4 forest locations)
+  const buttons = locations.map((loc) => {
+    const unlocked = loc.requiredTier <= userTier;
+    return new ButtonBuilder()
+      .setCustomId(`gather:forest:${loc.id}`)
+      .setLabel(loc.name)
+      .setStyle(unlocked ? ButtonStyle.Success : ButtonStyle.Secondary)
+      .setDisabled(!unlocked);
+  });
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
+
+  await interaction.editReply({ embeds: [embed], components: [row] });
 }

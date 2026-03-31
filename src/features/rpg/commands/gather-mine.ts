@@ -1,18 +1,19 @@
 import {
   SlashCommandBuilder,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { mine } from "@/features/rpg/gathering";
+import { listLocations, getEquippedToolTier } from "@/features/rpg/gathering";
+import { getUser } from "@/db/repositories/users";
 import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("gather-mine")
-  .setDescription("Mine resources at a location")
-  .addStringOption((opt) =>
-    opt.setName("location").setDescription("The location ID to mine at").setRequired(true),
-  );
+  .setDescription("Choose a mine location and gather resources");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -22,50 +23,50 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const location = interaction.options.getString("location", true);
   const userId = interaction.user.id;
 
-  const result = await mine(userId, location);
-
-  if (result.isErr()) {
-    const err = result.error;
-    let description: string;
-    if (err.code === "NO_TOOL_EQUIPPED") {
-      description =
-        "You need a pickaxe equipped. Start at Stone Mine with your starter pick: `/gather-mine stone_mine`.";
-    } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
-      description =
-        "🔒 You need a higher-tier pickaxe to mine here. Craft one with `/craft <pickaxe>` (see `/gather-locations` for what's unlocked).";
-    } else if (err.code === "LOCATION_NOT_FOUND") {
-      description = "Unknown location. Use `/gather-locations` to browse available spots.";
-    } else {
-      description = err.message;
-    }
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription(description)
-      .setFooter({ text: getHints("gather-mine") });
-    await interaction.editReply({ embeds: [errorEmbed] });
+  // Verify user has an RPG profile
+  const userRes = await getUser(userId);
+  if (userRes.isErr()) {
+    await interaction.editReply({ content: "Something went wrong. Please try again." });
+    return;
+  }
+  if (!userRes.unwrap()?.rpgProfile) {
+    await interaction.editReply({
+      content: "You need to set up your RPG profile first. Use `/rpg-profile` to get started.",
+    });
     return;
   }
 
-  const { locationName, tier, materialsGained, remainingDurability, toolBroken } = result.unwrap();
-
-  const materialsText =
-    materialsGained.length > 0
-      ? materialsGained.map((m) => `${m.quantity}x ${m.id}`).join(", ")
-      : "Nothing";
-
-  const durabilityText = toolBroken ? "Tool broke!" : `${remainingDurability}`;
+  const userTier = await getEquippedToolTier(userId);
+  const locations = listLocations("mine");
 
   const embed = new EmbedBuilder()
-    .setColor(Colors.Grey)
-    .setTitle(`You mined at **${locationName}** (Tier ${tier})`)
-    .addFields(
-      { name: "Materials Gained", value: materialsText, inline: true },
-      { name: "Tool Durability", value: durabilityText, inline: true },
+    .setColor(Colors.DarkGrey)
+    .setTitle("⛏️ Where do you want to mine?")
+    .setDescription(
+      locations
+        .map((loc) => {
+          const unlocked = loc.requiredTier <= userTier;
+          const status = unlocked ? "✅" : "🔒";
+          const yields = loc.materials.join(", ");
+          return `${status} **${loc.name}** (T${loc.requiredTier}) — ${yields}`;
+        })
+        .join("\n"),
     )
     .setFooter({ text: getHints("gather-mine") });
 
-  await interaction.editReply({ embeds: [embed] });
+  // Build one row of buttons (max 5 per row; we have 4 mine locations)
+  const buttons = locations.map((loc) => {
+    const unlocked = loc.requiredTier <= userTier;
+    return new ButtonBuilder()
+      .setCustomId(`gather:mine:${loc.id}`)
+      .setLabel(loc.name)
+      .setStyle(unlocked ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setDisabled(!unlocked);
+  });
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
+
+  await interaction.editReply({ embeds: [embed], components: [row] });
 }

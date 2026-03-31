@@ -128,6 +128,10 @@ import {
   isOnboardButton,
   handleOnboard,
 } from "@/features/rpg/handlers/onboard";
+import {
+  isGatherButton,
+  handleGatherButton,
+} from "@/features/rpg/handlers/gather";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -230,6 +234,8 @@ async function bootstrap(): Promise<void> {
           await handleOfferReview(btn);
         } else if (isOnboardButton(cid)) {
           await handleOnboard(btn);
+        } else if (isGatherButton(cid)) {
+          await handleGatherButton(btn);
         }
         // unknown buttons are silently ignored
       }

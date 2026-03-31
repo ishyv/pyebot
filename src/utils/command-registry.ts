@@ -21,17 +21,15 @@ export const REGISTRY = {
   },
   "gather-mine": {
     category: "rpg",
-    description: "Mine resources at a location (requires equipped pickaxe)",
+    description: "Pick a mine location and gather resources (requires equipped pickaxe)",
     hints: ["/inventory", "/process", "/gather-locations"],
     requires: "pickaxe in weapon slot",
-    args: [{ name: "location", description: "Location ID — use /gather-locations to browse", tip: "Run /gather-locations to see valid IDs for your tier" }],
   },
   "gather-cutdown": {
     category: "rpg",
-    description: "Cut down trees at a location (requires equipped axe)",
+    description: "Pick a forest location and cut down trees (requires equipped axe)",
     hints: ["/inventory", "/process", "/gather-locations"],
     requires: "axe in weapon slot",
-    args: [{ name: "location", description: "Location ID — use /gather-locations to browse", tip: "Run /gather-locations to see valid IDs for your tier" }],
   },
   "process": {
     category: "rpg",
