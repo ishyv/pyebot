@@ -50,8 +50,8 @@ export async function handleOnboard(interaction: ButtonInteraction): Promise<voi
 
   const gatherHint =
     profession === "miner"
-      ? "You start with a **starter pickaxe** — use `/gather-mine stone_mine` to begin."
-      : "You start with a **starter axe** — use `/gather-cutdown oak_forest` to begin.";
+      ? "You start with a **starter pickaxe** — use `/gather-mine` to pick a location and begin."
+      : "You start with a **starter axe** — use `/gather-cutdown` to pick a location and begin.";
 
   const embed = new EmbedBuilder()
     .setColor(Colors.Green)

@@ -44,6 +44,7 @@ import * as marketCancelCmd from "@/features/economy/commands/market-cancel";
 import * as questListCmd from "@/features/economy/commands/quest-list";
 import * as questAcceptCmd from "@/features/economy/commands/quest-accept";
 import * as questClaimCmd from "@/features/economy/commands/quest-claim";
+import * as inventoryCmd from "@/features/economy/commands/inventory";
 
 // ---------------------------------------------------------------------------
 // Command imports (RPG)
@@ -154,7 +155,7 @@ const ALL_COMMANDS: CommandModule[] = [
   // economy
   balanceCmd, transferCmd, workCmd, coinflipCmd, triviaCmd, robCmd,
   marketListCmd, marketBuyCmd, marketBrowseCmd, marketCancelCmd,
-  questListCmd, questAcceptCmd, questClaimCmd,
+  questListCmd, questAcceptCmd, questClaimCmd, inventoryCmd,
   // rpg
   fightCmd, gatherMineCmd, gatherCutdownCmd, gatherLocationsCmd,
   processCmd, craftCmd, equipCmd, rpgProfileCmd, rpgQuestCmd,

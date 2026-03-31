@@ -1,10 +1,14 @@
 import {
   SlashCommandBuilder,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { getRpgProfile } from "@/db/repositories/rpg";
+import { ONBOARD_PREFIX } from "@/features/rpg/handlers/onboard";
 
 export const data = new SlashCommandBuilder()
   .setName("rpg-profile")
@@ -32,7 +36,33 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const profile = result.unwrap();
 
   if (!profile) {
-    await interaction.editReply({ content: "No RPG profile found for this user." });
+    // Only show onboarding for the user's own profile
+    if (target.id !== interaction.user.id) {
+      await interaction.editReply({ content: "That user hasn't started their RPG journey yet." });
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Blurple)
+      .setTitle("⚔️ Choose Your Path")
+      .setDescription(
+        "Welcome to the RPG! Pick a profession to get started.\n\n" +
+        "**⛏️ Miner** — Mine ore, smelt ingots, craft pickaxes.\n" +
+        "**🪓 Lumberjack** — Chop wood, process planks, craft axes.",
+      );
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${ONBOARD_PREFIX}miner`)
+        .setLabel("⛏️ Miner")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`${ONBOARD_PREFIX}lumber`)
+        .setLabel("🪓 Lumberjack")
+        .setStyle(ButtonStyle.Success),
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
     return;
   }
 

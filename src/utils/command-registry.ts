@@ -22,13 +22,13 @@ export const REGISTRY = {
   "gather-mine": {
     category: "rpg",
     description: "Pick a mine location and gather resources (requires equipped pickaxe)",
-    hints: ["/inventory", "/process", "/gather-locations"],
+    hints: ["/process", "/inventory", "/gather-locations"],
     requires: "pickaxe in weapon slot",
   },
   "gather-cutdown": {
     category: "rpg",
     description: "Pick a forest location and cut down trees (requires equipped axe)",
-    hints: ["/inventory", "/process", "/gather-locations"],
+    hints: ["/process", "/inventory", "/gather-locations"],
     requires: "axe in weapon slot",
   },
   "process": {
@@ -100,6 +100,11 @@ export const REGISTRY = {
     category: "economy",
     description: "Cancel one of your market listings",
     hints: ["/market-browse", "/market-list"],
+  },
+  "inventory": {
+    category: "economy",
+    description: "View your item inventory — materials, processed goods, and tools",
+    hints: ["/craft", "/process", "/market-list"],
   },
   "quest-list": {
     category: "economy",
