@@ -21,6 +21,7 @@ import {
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type ButtonInteraction,
+  type StringSelectMenuInteraction,
 } from "discord.js";
 import { createClient } from "@/core/client";
 import { getDb, disconnectDb } from "@/core/db";
@@ -132,6 +133,10 @@ import {
   isGatherButton,
   handleGatherButton,
 } from "@/features/rpg/handlers/gather";
+import {
+  isEquipSelect,
+  handleEquipSelect,
+} from "@/features/rpg/handlers/equip";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -206,6 +211,14 @@ async function bootstrap(): Promise<void> {
             content: "Unknown command.",
             ephemeral: true,
           });
+        }
+        return;
+      }
+
+      if (interaction.isStringSelectMenu()) {
+        const menu = interaction as StringSelectMenuInteraction;
+        if (isEquipSelect(menu.customId)) {
+          await handleEquipSelect(menu);
         }
         return;
       }

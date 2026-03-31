@@ -1,34 +1,19 @@
 import {
   SlashCommandBuilder,
   EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { getUser } from "@/db/repositories/users";
-import { patchRpgProfile } from "@/db/repositories/rpg";
 import { getHints } from "@/utils/command-registry";
-import { RECIPES } from "@/features/rpg/crafting";
+import { EQUIPABLE_TOOLS } from "@/features/rpg/handlers/equip";
 
 export const data = new SlashCommandBuilder()
   .setName("equip")
-  .setDescription("Equip a tool from your inventory")
-  .addStringOption((opt) =>
-    opt
-      .setName("item")
-      .setDescription("The item ID to equip (e.g. stone_pickaxe)")
-      .setRequired(true),
-  );
-
-/** Valid equipable tools: all craftable items plus the two starter tools. */
-const EQUIPABLE_TOOLS = new Set([
-  ...Object.keys(RECIPES),
-  "starter_pickaxe",
-  "starter_axe",
-]);
-
-function isValidTool(itemId: string): boolean {
-  return EQUIPABLE_TOOLS.has(itemId);
-}
+  .setDescription("Equip a tool from your inventory");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -38,89 +23,71 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const itemId = interaction.options.getString("item", true);
   const userId = interaction.user.id;
-  const footer = { text: getHints("equip") };
 
-  // 1. Fetch user
   const userRes = await getUser(userId);
   if (userRes.isErr()) {
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription("Something went wrong fetching your profile. Please try again.")
-      .setFooter(footer);
-    await interaction.editReply({ embeds: [errorEmbed] });
+    await interaction.editReply({ content: "Something went wrong. Please try again." });
     return;
   }
 
   const user = userRes.unwrap();
   if (!user) {
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription("User profile not found. Please try again.")
-      .setFooter(footer);
-    await interaction.editReply({ embeds: [errorEmbed] });
+    await interaction.editReply({ content: "User profile not found. Please try again." });
     return;
   }
 
-  // 2. Check inventory ownership
   const inventory = user.inventory ?? {};
-  const qty = (inventory[itemId] as number | undefined) ?? 0;
-  if (qty < 1) {
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription(`You don't have \`${itemId}\` in your inventory.`)
+
+  // Filter inventory to items that are valid tools and present with qty >= 1
+  const availableTools = Object.entries(inventory)
+    .filter(([itemId, qty]) => EQUIPABLE_TOOLS.has(itemId) && typeof qty === "number" && qty >= 1)
+    .map(([itemId, qty]) => ({ itemId, qty: qty as number }));
+
+  const footer = { text: getHints("equip") };
+
+  if (availableTools.length === 0) {
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Orange)
+      .setDescription("You don't have any tools in your inventory. Craft one with `/craft`.")
       .setFooter(footer);
-    await interaction.editReply({ embeds: [errorEmbed] });
+    await interaction.editReply({ embeds: [embed] });
     return;
   }
 
-  // 3. Validate that it's a known tool
-  if (!isValidTool(itemId)) {
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription(`\`${itemId}\` is not a valid tool. Only pickaxes and axes can be equipped.`)
-      .setFooter(footer);
-    await interaction.editReply({ embeds: [errorEmbed] });
-    return;
-  }
+  const currentWeapon = user.rpgProfile?.loadout?.weapon;
+  const currentItemId =
+    currentWeapon && typeof currentWeapon === "object" && "itemId" in currentWeapon
+      ? currentWeapon.itemId
+      : typeof currentWeapon === "string"
+        ? currentWeapon
+        : null;
 
-  // 4. Set loadout.weapon
-  const currentLoadout = user.rpgProfile?.loadout ?? {
-    weapon: null,
-    shield: null,
-    helmet: null,
-    chest: null,
-    pants: null,
-    boots: null,
-    ring: null,
-    necklace: null,
-  };
+  const options = availableTools.map(({ itemId, qty }) => {
+    const isEquipped = itemId === currentItemId;
+    return new StringSelectMenuOptionBuilder()
+      .setValue(itemId)
+      .setLabel(itemId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
+      .setDescription(isEquipped ? `×${qty} in inventory (currently equipped)` : `×${qty} in inventory`)
+      .setDefault(isEquipped);
+  });
 
-  const newLoadout = {
-    ...currentLoadout,
-    weapon: {
-      instanceId: crypto.randomUUID(),
-      itemId,
-      durability: 100,
-    },
-  };
+  const select = new StringSelectMenuBuilder()
+    .setCustomId("equip:select")
+    .setPlaceholder("Choose a tool to equip…")
+    .addOptions(options);
 
-  const patchRes = await patchRpgProfile(userId, { loadout: newLoadout });
-  if (patchRes.isErr()) {
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription("Something went wrong equipping your item. Please try again.")
-      .setFooter(footer);
-    await interaction.editReply({ embeds: [errorEmbed] });
-    return;
-  }
+  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
-  // 5. Success
   const embed = new EmbedBuilder()
     .setColor(Colors.Blue)
-    .setDescription(`Equipped \`${itemId}\`!`)
+    .setTitle("🗡️ Equip a Tool")
+    .setDescription(
+      currentItemId
+        ? `Currently equipped: \`${currentItemId}\`\n\nSelect a tool from the dropdown to equip it.`
+        : "Select a tool from the dropdown to equip it.",
+    )
     .setFooter(footer);
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply({ embeds: [embed], components: [row] });
 }

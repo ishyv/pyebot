@@ -52,8 +52,7 @@ export const REGISTRY = {
   "equip": {
     category: "rpg",
     description: "Equip a tool from your inventory into your weapon slot",
-    hints: ["/gather-locations", "/rpg-profile", "/inventory"],
-    args: [{ name: "item", description: "Item ID to equip (must be in inventory)" }],
+    hints: ["/gather-locations", "/rpg-profile"],
   },
   "fight": {
     category: "rpg",
