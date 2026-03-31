@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { RpgProfileSchema, type RpgProfileData } from "./rpg-profile";
+import { EconomyAccountSchema, type EconomyAccountData } from "./economy-account";
+import { CurrencyInventorySchema } from "./currency";
 
 export const WarnSchema = z.object({
   reason: z.string().catch(""),
@@ -24,11 +26,10 @@ export const UserSchema = z.object({
   warns: z.array(WarnSchema).catch(() => []),
   sanction_history: z.record(z.string(), z.array(SanctionHistoryEntrySchema)).catch(() => ({})),
   openTickets: z.array(z.string()).catch(() => []),
-  // Loose-typed until Economy plan defines the currency schema
-  currency: z.record(z.string(), z.unknown()).catch(() => ({})),
+  currency: CurrencyInventorySchema.catch(() => ({})),
   inventory: z.record(z.string(), z.unknown()).catch(() => ({})),
-  // Economy account data — typed as loose record until Economy plan
-  economyAccount: z.record(z.string(), z.unknown()).optional().catch(() => undefined),
+  // Economy account data
+  economyAccount: EconomyAccountSchema.optional().catch(() => undefined) as z.ZodType<EconomyAccountData | undefined>,
   // RPG profile — embedded subdocument
   rpgProfile: RpgProfileSchema.optional().catch(() => undefined) as z.ZodType<RpgProfileData | undefined>,
   minigames: z.record(z.string(), z.unknown()).optional().catch(() => ({})),
