@@ -17,6 +17,38 @@
  * - Negative deltas allowed (debt permitted for mods).
  */
 
+/**
+ * Currency Mutation Service.
+ *
+ * Purpose: Mod-only currency adjustments and user-to-user transfers with
+ * audit logging and atomic operations.
+ *
+ * Context: Administrative interface for economy management. All operations
+ * are privileged (mod-only) and fully audited.
+ *
+ * Dependencies:
+ * - UserStore for atomic $inc operations
+ * - EconomyAccountRepo for account lifecycle and gating
+ * - EconomyAuditRepo for audit logging
+ * - CurrencyRegistry for complex currency operations
+ * - currencyTransaction for complex currency types
+ *
+ * Invariants:
+ * - All adjustments are atomic (Mongo $inc for simple, currencyTransaction for complex).
+ * - Actor must have ManageGuild permission (mod-only).
+ * - Target account must exist and not be blocked/banned.
+ * - All operations are audited even on partial failure.
+ * - Negative deltas allowed (debt permitted for mods).
+ *
+ * Gotchas:
+ * - Reputation has specialized helper (incrementReputation) for side effects.
+ * - Complex currencies (coins with hand/bank) use transaction system, not $inc.
+ * - Transfer rollback on recipient failure is best-effort (may need manual cleanup).
+ *
+ * RISK: Transfer rollback failure leaves sender debited but recipient not credited.
+ * RISK: Concurrent transfers could cause race conditions (mitigated by atomic ops).
+ * ALT: Use two-phase commit for guaranteed transfer atomicity.
+ */
 import { UserStore, incrementReputation } from "@/db/repositories/users";
 import { ErrResult, OkResult, type Result } from "@/utils/result";
 import type { UserId } from "@/db/types";
@@ -145,6 +177,39 @@ function validateTransferInput(
   });
 }
 
+/**
+ * Execute a currency transfer between two users.
+ *
+ * Purpose: Atomic transfer with rollback capability on failure.
+ *
+ * Params:
+ * - input: validated transfer parameters (sender, recipient, amount, currency)
+ *
+ * Returns: TransferExecution with before/after balances on success;
+ * CurrencyMutationError on failure.
+ *
+ * Invariants:
+ * - Both accounts are checked for existence and status before transfer.
+ * - Simple currencies use direct Mongo $inc (atomic).
+ * - Complex currencies use currencyTransaction system.
+ * - Sender must have sufficient funds (checked before debit).
+ *
+ * Side effects:
+ * - Debits sender account
+ * - Credits recipient account
+ * - May rollback sender debit if recipient credit fails
+ *
+ * Errors:
+ * - ACTOR_BLOCKED/ACTOR_BANNED: sender account restricted
+ * - TARGET_BLOCKED/TARGET_BANNED: recipient account restricted
+ * - TARGET_NOT_FOUND: recipient doesn't exist
+ * - INSUFFICIENT_FUNDS: sender lacks required amount
+ * - UPDATE_FAILED: database error during operation
+ *
+ * RISK: Rollback failure on recipient error leaves sender debited without credit.
+ * RISK: Concurrent transfers from same sender could overdraft (mitigated by atomic ops).
+ * TODO(verify): Test rollback behavior under load to ensure consistency.
+ */
 async function executeTransferTransaction(
   input: TransferValidation,
 ): Promise<Result<TransferExecution, CurrencyMutationError>> {
@@ -293,6 +358,8 @@ async function executeTransferTransaction(
       );
 
       if (!recipientResult) {
+        // WHY: Best-effort rollback on recipient failure.
+        // RISK: Rollback could also fail, leaving inconsistent state.
         await col.updateOne({ _id: senderId } as any, {
           $inc: { [`currency.${currencyId}`]: netAmount } as any,
         });
@@ -321,6 +388,8 @@ async function executeTransferTransaction(
       );
     }
   } else {
+    // Complex currency (like coins with hand/bank object)
+    // Fall back to the existing currencyTransaction system
     const { currencyTransaction } = await import("../transactions");
 
     const senderTx = await currencyTransaction(senderId, {
@@ -352,6 +421,8 @@ async function executeTransferTransaction(
     });
 
     if (recipientTx.isErr()) {
+      // WHY: Rollback sender transaction on recipient failure.
+      // RISK: Rollback could fail, leaving sender debited.
       await currencyTransaction(senderId, {
         rewards: [
           {

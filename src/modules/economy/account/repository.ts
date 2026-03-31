@@ -65,8 +65,22 @@ function toData(account: EconomyAccount): EconomyAccountData {
 
 /**
  * Extract economy account from user document with repair capability.
- * Returns null if field is missing (not yet initialized).
- * Repairs corrupted data automatically and logs the issue.
+ *
+ * Purpose: Safely parse account data with automatic corruption detection.
+ *
+ * Params:
+ * - user: raw user document from DB
+ * - userId: for logging
+ * - shouldRepair: whether to attempt auto-repair
+ *
+ * Returns: Account domain object (or null) and repair flag.
+ *
+ * Invariants:
+ * - Missing account returns null (not error) - lazy initialization expected.
+ * - Corruption detection runs before parsing.
+ * - Repair applies schema defaults while preserving valid fields.
+ *
+ * Side effects: Logs warnings on corruption detection.
  */
 function extractAccount(
   user: User,
@@ -173,6 +187,28 @@ class EconomyAccountRepoImpl implements EconomyAccountRepo {
     return OkResult(account);
   }
 
+  /**
+   * Ensure account exists, creating lazily if needed.
+   *
+   * Purpose: Idempotent account initialization with race condition handling.
+   *
+   * Invariants:
+   * - Returns existing account if present and valid.
+   * - Auto-repairs corrupted data on read.
+   * - Creates new account with "ok" status if missing.
+   * - Uses optimistic concurrency (runUserTransition) for creation.
+   *
+   * Race Condition Handling:
+   * - If transition fails with CONFLICT, re-reads and returns existing.
+   * - If re-read fails, propagates original error.
+   *
+   * Returns: AccountEnsureResult with account and isNew flag.
+   *
+   * Side effects: May write to DB if account missing or corrupted.
+   *
+   * RISK: Concurrent ensure() calls could create duplicate accounts (mitigated by unique _id).
+   * RISK: Transition conflict handling masks underlying issues if re-read also fails.
+   */
   async ensure(userId: UserId): Promise<Result<AccountEnsureResult, Error>> {
     // First ensure user exists
     const userResult = await UserStore.ensure(userId);

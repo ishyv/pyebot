@@ -1,3 +1,38 @@
+/**
+ * RPG Quest Service.
+ *
+ * Purpose: Orchestrate quest lifecycle (accept, progress, complete, claim) with
+ * event-driven progress tracking and atomic reward distribution.
+ *
+ * Context: Core RPG progression system. Quests advance based on audit events
+ * (work, fights, etc.) and grant rewards on completion.
+ *
+ * Dependencies:
+ * - QuestRegistry for quest definitions (loaded at startup)
+ * - QuestProgressRepo for active quest persistence
+ * - UserTransition for atomic reward application
+ * - EconomyAuditRepo for audit logging
+ * - ProgressionService for XP rewards
+ * - PerkService for inventory capacity checks
+ *
+ * Invariants:
+ * - Quest progress updates are atomic ($inc/$min operations).
+ * - Rewards are applied via runUserTransition (optimistic concurrency).
+ * - Claim uses distributed locking (claimInFlight) with 5-min stale timeout.
+ * - Duplicate claims are idempotent via correlationId tracking.
+ * - Prerequisites are checked before quest acceptance (profession, level, prior quests).
+ *
+ * Gotchas:
+ * - Event processing is best-effort; failures are logged but don't block.
+ * - Claim lock can become stale if process crashes mid-claim.
+ * - Repeatable quests track cooldown in history, not active.
+ * - Inventory capacity is checked before applying item rewards.
+ *
+ * RISK: Concurrent claims could double-reward without claimInFlight lock.
+ * RISK: Event storm could cause many simultaneous quest updates.
+ * RISK: Large reward sets may exceed document size limits.
+ * ALT: Consider queue-based claim processing for high-contention scenarios.
+ */
 import type { GuildId, UserId } from "@/db/types";
 import { UserStore } from "@/db/repositories/users";
 import { runUserTransition } from "@/db/user-transition";
@@ -245,6 +280,35 @@ function canAcceptQuest(
   return OkResult(undefined);
 }
 
+/**
+ * Apply quest rewards atomically via user transition.
+ *
+ * Purpose: Ensure all rewards (items, currency, XP, tokens) are applied
+ * transactionally - either all succeed or none do.
+ *
+ * Params:
+ * - guildId: context for progression and capacity lookups
+ * - userId: target user
+ * - quest: quest definition with rewards
+ *
+ * Returns: List of applied rewards on success; QuestClaimError on failure.
+ *
+ * Invariants:
+ * - Inventory capacity is validated before adding items.
+ * - Currency uses registry operations for complex types (coins), direct math for simple.
+ * - XP updates level via curve calculation.
+ * - All operations occur in a single optimistic transaction.
+ *
+ * Side effects: None at transaction layer; commit happens via runUserTransition.
+ *
+ * Errors:
+ * - CAPACITY_EXCEEDED: inventory full
+ * - UPDATE_FAILED: currency validation failed or transition conflict
+ *
+ * RISK: Large reward sets increase collision probability (more fields touched).
+ * RISK: Currency registry failures can leave partial rewards unapplied.
+ * ALT: Split large rewards into multiple transactions (eventually consistent).
+ */
 async function applyRewardsAtomically(
   guildId: GuildId,
   userId: UserId,
@@ -419,12 +483,92 @@ async function applyRewardsAtomically(
 }
 
 export interface RpgQuestService {
+  /**
+   * Initialize quest registry and ensure indexes.
+   * Must be called before other methods.
+   *
+   * Side effects: Loads quest definitions from disk.
+   * Errors: Returns Err if registry loading fails (fatal at startup).
+   */
   ensureReady(): Promise<Result<void, Error>>;
+
+  /**
+   * Get available and active quests for a user.
+   *
+   * Params:
+   * - guildId: guild context for progression lookup
+   * - userId: target user
+   *
+   * Returns: QuestBrowseView with available (can accept) and active (in-progress) quests.
+   *
+   * Side effects: None (read-only).
+   */
   getBoard(guildId: GuildId, userId: UserId): Promise<Result<QuestBrowseView, QuestClaimError>>;
+
+  /**
+   * Accept a quest for a user.
+   *
+   * Preconditions:
+   * - Quest exists and is enabled
+   * - User meets prerequisites (profession, level, prior quests)
+   * - Quest not already active
+   * - Cooldown expired (for repeatable quests)
+   *
+   * Side effects: Creates active quest entry; writes audit log.
+   */
   acceptQuest(guildId: GuildId, userId: UserId, questId: string): Promise<Result<void, QuestClaimError>>;
+
+  /**
+   * Abandon an active quest.
+   *
+   * Side effects: Removes quest from active; progress is lost.
+   */
   abandonQuest(guildId: GuildId, userId: UserId, questId: string): Promise<Result<void, QuestClaimError>>;
+
+  /**
+   * Process a quest event (work, fight, gather, etc.).
+   *
+   * Purpose: Advance quest progress based on user actions.
+   *
+   * Invariants:
+   * - Events are idempotent (replay safe via $inc/$min).
+   * - Completion is detected after update and recorded separately.
+   *
+   * Side effects: Updates step progress; may mark quests complete; writes audit logs.
+   * Errors: Returns Err but does not throw (best-effort processing).
+   */
   onEvent(event: QuestEvent): Promise<Result<void, Error>>;
+
+  /**
+   * Convert audit entry to quest events and process.
+   *
+   * Purpose: Bridge economy audit log to quest system.
+   *
+   * Side effects: Calls onEvent for each mapped event.
+   * Errors: Logged but not propagated (fire-and-forget).
+   */
   processAuditEntry(entry: import("@/modules/economy/audit").EconomyAuditEntry): Promise<void>;
+
+  /**
+   * Claim rewards for a completed quest.
+   *
+   * Purpose: Atomic reward distribution with duplicate protection.
+   *
+   * Invariants:
+   * - Uses claimInFlight lock to prevent concurrent claims.
+   * - Idempotent via correlationId (safe to retry).
+   * - Rewards applied via UserTransition (atomic).
+   * - On success, quest moved to history; on failure, lock released.
+   *
+   * Side effects:
+   * - Updates currency, inventory, progression
+   * - Removes quest from active
+   * - Updates history with completion count and timestamps
+   * - Writes audit entry
+   *
+   * RISK: If reward application fails after lock acquisition, lock must be manually cleared.
+   * RISK: Concurrent claims without lock could double-reward.
+   */
   claimRewards(
     guildId: GuildId,
     userId: UserId,

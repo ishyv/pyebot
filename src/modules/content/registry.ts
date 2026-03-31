@@ -1,3 +1,31 @@
+/**
+ * Content Registry.
+ *
+ * Purpose: Provide runtime access to loaded RPG content (items, recipes, drop tables,
+ * locations) with efficient indexing and lookup operations.
+ *
+ * Context: Initialized at startup via loadContentRegistry(); cached for the process lifetime.
+ *
+ * Dependencies:
+ * - Content loader for file I/O and validation
+ * - Content schemas for type definitions
+ * - Inventory definitions for adapter functions
+ *
+ * Invariants:
+ * - Registry is immutable after creation; no hot-reload in production.
+ * - All lookups return null on miss (no exceptions for missing content).
+ * - Drop table queries are pre-indexed by action:tier for O(1) access.
+ * - Processing recipes enforce unique input items (throws on duplicate).
+ *
+ * Gotchas:
+ * - Cached globally; test utilities must call resetContentRegistryForTests().
+ * - getDrops() filters are AND-combined (profession AND location AND toolTier).
+ * - Item definitions require adapter conversion for inventory system.
+ *
+ * RISK: Duplicate processing recipe inputs throw at load time (startup failure).
+ * RISK: Registry singleton prevents multi-tenant content packs.
+ * ALT: Consider read-through caching for large content sets.
+ */
 import type { ItemDefinitionWithUse } from "@/modules/inventory/definitions";
 import {
   DEFAULT_CONTENT_PACKS_DIR,

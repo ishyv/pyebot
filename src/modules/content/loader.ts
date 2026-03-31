@@ -1,3 +1,29 @@
+/**
+ * Content Pack Loader.
+ *
+ * Purpose: Load and validate RPG content packs (items, recipes, drop tables, locations)
+ * from JSON/JSON5 files at startup. Provides source metadata for debugging.
+ *
+ * Context: Called during bootstrap before bot starts; failures are fatal.
+ *
+ * Dependencies:
+ * - Node fs/promises for file I/O
+ * - Zod schemas for validation
+ * - JSON5 parser (optional, falls back to loose parser)
+ *
+ * Invariants:
+ * - All content files must exist at the expected paths.
+ * - Validation failures throw ContentLoadError with detailed path info.
+ * - Source metadata (__source) is attached to every loaded entity for traceability.
+ *
+ * Gotchas:
+ * - JSON5 support requires the json5 package; falls back to loose parser on failure.
+ * - Trailing commas and comments are stripped for loose parsing (may fail on edge cases).
+ * - File basenames are hardcoded in PACK_FILE_BASENAMES.
+ *
+ * RISK: Changing schema validation rules without updating content files breaks startup.
+ * ALT: Consider hot-reload for development; currently requires restart.
+ */
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

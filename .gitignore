@@ -173,3 +173,6 @@ AGENTS.md
 !agentrc.example
 !agentrc.template
 .opencode/
+
+docs
+.claude/
