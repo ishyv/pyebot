@@ -165,7 +165,62 @@ export async function checkMessage(message: Message): Promise<CheckResult> {
     }
   }
 
+  // 4. Custom guild patterns
+  const customPatterns = config.customPatterns ?? [];
+  if (customPatterns.length > 0) {
+    const compiled = getCompiledPatterns(message.guild.id, customPatterns);
+    for (const { regex, patternConfig } of compiled) {
+      if (regex.test(content)) {
+        const reason = `Custom pattern match: ${patternConfig.name}`;
+        await safeDelete(message);
+        if (patternConfig.action === "timeout") {
+          await applyTimeout(message.member, patternConfig.timeoutSeconds * 1000, reason);
+        }
+        await reportToChannel(message, reason, config.linkSpam.reportChannelId);
+        return { action: patternConfig.action === "timeout" ? "timeout" : "delete", reason };
+      }
+    }
+  }
+
   return { action: "none" };
+}
+
+// ─── Custom pattern regex cache ──────────────────────────────────────────────
+
+interface PatternConfig {
+  name: string;
+  pattern: string;
+  flags: string;
+  action: "delete" | "timeout" | "report";
+  timeoutSeconds: number;
+}
+
+interface CompiledPattern {
+  regex: RegExp;
+  patternConfig: PatternConfig;
+}
+
+const patternCache = new Map<string, CompiledPattern[]>();
+
+function getCompiledPatterns(guildId: string, configs: PatternConfig[]): CompiledPattern[] {
+  const cached = patternCache.get(guildId);
+  if (cached) return cached;
+
+  const compiled: CompiledPattern[] = [];
+  for (const cfg of configs) {
+    try {
+      compiled.push({ regex: new RegExp(cfg.pattern, cfg.flags), patternConfig: cfg });
+    } catch {
+      // Invalid regex — skip silently
+    }
+  }
+  patternCache.set(guildId, compiled);
+  return compiled;
+}
+
+/** Call this when a guild updates its custom patterns so the cache is refreshed. */
+export function invalidatePatternCache(guildId: string): void {
+  patternCache.delete(guildId);
 }
 
 // ─── Action helpers ───────────────────────────────────────────────────────────

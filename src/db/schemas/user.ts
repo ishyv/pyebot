@@ -18,8 +18,17 @@ export const SanctionHistoryEntrySchema = z.object({
   type: SanctionType,
   description: z.string(),
   date: z.string().optional().catch(() => new Date().toISOString()),
+  caseId: z.number().int().optional().catch(() => undefined),
+  moderatorId: z.string().optional().catch(() => undefined),
 });
 export type SanctionHistoryEntry = z.infer<typeof SanctionHistoryEntrySchema>;
+
+export const ModNoteSchema = z.object({
+  note: z.string(),
+  moderatorId: z.string(),
+  createdAt: z.string(),
+});
+export type ModNote = z.infer<typeof ModNoteSchema>;
 
 export const UserSchema = z.object({
   _id: z.string(),
@@ -29,6 +38,8 @@ export const UserSchema = z.object({
   currency: CurrencyInventorySchema.catch(() => ({})),
   inventory: z.record(z.string(), z.unknown()).catch(() => ({})),
   bank: z.record(z.string(), z.number()).optional().catch(() => ({})),
+  mod_notes: z.record(z.string(), z.array(ModNoteSchema).catch(() => [])).catch(() => ({})),
+  quarantine_roles: z.record(z.string(), z.array(z.string()).catch(() => [])).catch(() => ({})),
   // Economy account data
   economyAccount: EconomyAccountSchema.optional().catch(() => undefined) as z.ZodType<EconomyAccountData | undefined>,
   // RPG profile — embedded subdocument

@@ -72,6 +72,8 @@ export const AiConfigSchema = z.object({
   model: z.string().catch(DEFAULT_GEMINI_MODEL),
 });
 
+// ─── Automod ─────────────────────────────────────────────────────────────────
+
 export const AutomodSchema = z.object({
   linkSpam: z.object({
     enabled: z.boolean().catch(false),
@@ -90,11 +92,103 @@ export const AutomodSchema = z.object({
     resolveFinalUrl: z.boolean().catch(false),
     allowedShorteners: z.array(z.string()).catch(() => ["bit.ly", "t.co", "tinyurl.com", "cutt.ly", "is.gd", "rebrand.ly", "goo.gl"]),
   }).catch(() => ({ enabled: false, resolveFinalUrl: false, allowedShorteners: ["bit.ly", "t.co", "tinyurl.com", "cutt.ly", "is.gd", "rebrand.ly", "goo.gl"] })),
+  crossChannelSpam: z.object({
+    enabled: z.boolean().catch(false),
+    minChannels: z.number().int().catch(3),
+    windowSeconds: z.number().int().catch(30),
+    reportChannelId: z.string().nullable().catch(null),
+    autoTimeout: z.boolean().catch(true),
+    timeoutSeconds: z.number().int().catch(3600),
+  }).catch(() => ({ enabled: false, minChannels: 3, windowSeconds: 30, reportChannelId: null, autoTimeout: true, timeoutSeconds: 3600 })),
+  mentionSpam: z.object({
+    enabled: z.boolean().catch(false),
+    maxMentions: z.number().int().catch(5),
+    windowSeconds: z.number().int().catch(10),
+    action: z.enum(["timeout", "delete", "report"]).catch("timeout"),
+    timeoutSeconds: z.number().int().catch(600),
+    reportChannelId: z.string().nullable().catch(null),
+  }).catch(() => ({ enabled: false, maxMentions: 5, windowSeconds: 10, action: "timeout" as const, timeoutSeconds: 600, reportChannelId: null })),
+  slowmode: z.object({
+    enabled: z.boolean().catch(false),
+    messagesPerWindow: z.number().int().catch(20),
+    windowSeconds: z.number().int().catch(60),
+    slowmodeSeconds: z.number().int().catch(5),
+    releaseAfterSeconds: z.number().int().catch(60),
+  }).catch(() => ({ enabled: false, messagesPerWindow: 20, windowSeconds: 60, slowmodeSeconds: 5, releaseAfterSeconds: 60 })),
+  raidDetection: z.object({
+    enabled: z.boolean().catch(false),
+    joinsPerMinute: z.number().int().catch(10),
+    minAccountAgeDays: z.number().int().catch(7),
+    action: z.enum(["alert", "lockdown", "quarantine"]).catch("alert"),
+    reportChannelId: z.string().nullable().catch(null),
+  }).catch(() => ({ enabled: false, joinsPerMinute: 10, minAccountAgeDays: 7, action: "alert" as const, reportChannelId: null })),
+  customPatterns: z.array(z.object({
+    name: z.string(),
+    pattern: z.string(),
+    flags: z.string().catch("i"),
+    action: z.enum(["delete", "timeout", "report"]).catch("delete"),
+    timeoutSeconds: z.number().int().catch(300),
+  })).catch(() => []),
 }).catch(() => ({
   linkSpam: { enabled: false, maxLinks: 4, windowSeconds: 10, timeoutSeconds: 300, action: "timeout" as const, reportChannelId: null },
   domainWhitelist: { enabled: false, domains: [] },
   shorteners: { enabled: false, resolveFinalUrl: false, allowedShorteners: ["bit.ly", "t.co", "tinyurl.com"] },
+  crossChannelSpam: { enabled: false, minChannels: 3, windowSeconds: 30, reportChannelId: null, autoTimeout: true, timeoutSeconds: 3600 },
+  mentionSpam: { enabled: false, maxMentions: 5, windowSeconds: 10, action: "timeout" as const, timeoutSeconds: 600, reportChannelId: null },
+  slowmode: { enabled: false, messagesPerWindow: 20, windowSeconds: 60, slowmodeSeconds: 5, releaseAfterSeconds: 60 },
+  raidDetection: { enabled: false, joinsPerMinute: 10, minAccountAgeDays: 7, action: "alert" as const, reportChannelId: null },
+  customPatterns: [],
 }));
+
+// ─── Moderation config ────────────────────────────────────────────────────────
+
+export const EscalationThresholdSchema = z.object({
+  warnCount: z.number().int(),
+  action: z.enum(["timeout", "kick", "ban"]),
+  durationKey: z.string().optional(), // e.g. "1h", "1d" — used when action is "timeout"
+});
+export type EscalationThreshold = z.infer<typeof EscalationThresholdSchema>;
+
+export const ModerationConfigSchema = z.object({
+  modLogChannelId: z.string().nullable().catch(null),
+  appealsChannelId: z.string().nullable().catch(null),
+  altDetectionEnabled: z.boolean().catch(false),
+  escalation: z.object({
+    enabled: z.boolean().catch(false),
+    thresholds: z.array(EscalationThresholdSchema).catch(() => []),
+  }).catch(() => ({ enabled: false, thresholds: [] })),
+  tempBanCheckIntervalMs: z.number().int().catch(60_000),
+  quarantine: z.object({
+    enabled: z.boolean().catch(false),
+    roleId: z.string().nullable().catch(null),
+    channelId: z.string().nullable().catch(null),
+  }).catch(() => ({ enabled: false, roleId: null, channelId: null })),
+  verification: z.object({
+    enabled: z.boolean().catch(false),
+    mode: z.enum(["button", "account_age"]).catch("button"),
+    minAccountAgeDays: z.number().int().catch(0),
+    channelId: z.string().nullable().catch(null),
+    roleId: z.string().nullable().catch(null),
+    kickOnFail: z.boolean().catch(false),
+  }).catch(() => ({
+    enabled: false,
+    mode: "button" as const,
+    minAccountAgeDays: 0,
+    channelId: null,
+    roleId: null,
+    kickOnFail: false,
+  })),
+}).catch(() => ({
+  modLogChannelId: null,
+  appealsChannelId: null,
+  altDetectionEnabled: false,
+  escalation: { enabled: false, thresholds: [] },
+  tempBanCheckIntervalMs: 60_000,
+  quarantine: { enabled: false, roleId: null, channelId: null },
+  verification: { enabled: false, mode: "button" as const, minAccountAgeDays: 0, channelId: null, roleId: null, kickOnFail: false },
+}));
+
+// ─── Guild document ───────────────────────────────────────────────────────────
 
 export const GuildSchema = z.object({
   _id: z.string(),
@@ -112,6 +206,8 @@ export const GuildSchema = z.object({
   ai: AiConfigSchema.catch(() => ({ provider: DEFAULT_PROVIDER_ID, model: DEFAULT_GEMINI_MODEL })),
   reputation: z.object({ keywords: z.array(z.string()).catch(() => []) }).catch(() => ({ keywords: [] })),
   automod: AutomodSchema,
+  moderation: ModerationConfigSchema,
+  nextCaseId: z.number().int().catch(1),
   economy: z.object({
     daily: DailyConfigSchema.catch(() => ({ dailyReward: 250, dailyCooldownHours: 24, dailyCurrencyId: "coins", dailyFeeRate: 0, dailyFeeSector: "tax" as const, dailyStreakBonus: 5, dailyStreakCap: 10 })),
     work: WorkConfigSchema.catch(() => ({ workRewardBase: 120, workBaseMintReward: 100, workBonusFromWorksMax: 100, workBonusScaleMode: "flat" as const, workCooldownMinutes: 30, workDailyCap: 5, workCurrencyId: "coins", workPaysFromSector: "works" as const, workFailureChance: 0.1 })),
@@ -128,3 +224,5 @@ export type Guild = z.infer<typeof GuildSchema>;
 export type GuildChannelsRecord = z.infer<typeof GuildChannelsSchema>;
 export type GuildFeaturesRecord = z.infer<typeof GuildFeaturesSchema>;
 export type AiConfigRecord = z.infer<typeof AiConfigSchema>;
+export type ModerationConfig = z.infer<typeof ModerationConfigSchema>;
+export type AutomodConfig = z.infer<typeof AutomodSchema>;
