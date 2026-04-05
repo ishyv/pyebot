@@ -252,3 +252,50 @@ export async function getCases(
   const history = (user?.sanction_history?.[guildId] as SanctionHistoryEntry[] | undefined) ?? [];
   return OkResult(history);
 }
+
+// ---------------------------------------------------------------------------
+// removeWarn
+// ---------------------------------------------------------------------------
+
+export async function removeWarn(
+  userId: string,
+  guildId: string,
+  warnId: string,
+): Promise<Result<boolean, ModerationError>> {
+  try {
+    const db = await getDb();
+    const result = await db.collection("users").updateOne(
+      { _id: userId } as never,
+      { $pull: { [`sanction_history.${guildId}`]: { id: warnId, type: "WARN" } } } as never,
+    );
+    return OkResult(result.modifiedCount > 0);
+  } catch (err) {
+    return ErrResult(new ModerationError("DB_FAILED", `removeWarn failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// clearWarns
+// ---------------------------------------------------------------------------
+
+export async function clearWarns(
+  userId: string,
+  guildId: string,
+): Promise<Result<number, ModerationError>> {
+  try {
+    const res = await userStore.get(userId);
+    if (res.isErr()) return ErrResult(new ModerationError("DB_FAILED", res.error.message));
+    const user = res.unwrap();
+    const history = (user?.sanction_history?.[guildId] as SanctionHistoryEntry[] | undefined) ?? [];
+    const count = history.filter((e) => e.type === "WARN").length;
+
+    const db = await getDb();
+    await db.collection("users").updateOne(
+      { _id: userId } as never,
+      { $pull: { [`sanction_history.${guildId}`]: { type: "WARN" } } } as never,
+    );
+    return OkResult(count);
+  } catch (err) {
+    return ErrResult(new ModerationError("DB_FAILED", `clearWarns failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
+}
