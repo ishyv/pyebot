@@ -94,7 +94,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   // Fetch moderator member
-  const moderator = await guild.members.fetch(interaction.user.id);
+  const moderator = await guild.members.fetch(interaction.user.id).catch(() => null);
+  if (!moderator) {
+    await interaction.editReply({ content: "Unable to verify your server membership." });
+    return;
+  }
 
   // Execute restriction
   const result = await restrict(guild, moderator, targetMember, type, roleId, reason);
