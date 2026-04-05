@@ -19,9 +19,13 @@
  */
 
 import type { Guild, GuildMember, User } from "discord.js";
+import { PermissionFlagsBits, type PermissionResolvable } from "discord.js";
 import { OkResult, ErrResult, type Result } from "@/core/result";
 import { getDb } from "@/core/db";
 import { userStore } from "@/db/repositories/users";
+import { generateCaseId } from "@/utils/ids";
+import { missingPermission } from "@/middleware/permissions";
+import type { SanctionHistoryEntry } from "@/db/schemas/user";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -47,13 +51,7 @@ export class ModerationError extends Error {
 // Types
 // ---------------------------------------------------------------------------
 
-export type SanctionType = "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT";
-
-export interface SanctionEntry {
-  readonly type: SanctionType;
-  readonly description: string;
-  readonly date: string;
-}
+export type SanctionType = "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON";
 
 export interface ModerationResult {
   readonly type: SanctionType;
@@ -61,6 +59,8 @@ export interface ModerationResult {
   readonly targetTag: string;
   readonly reason: string;
   readonly moderatorId: string;
+  readonly caseId: string;
+  readonly escalated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,16 +72,19 @@ async function pushSanction(
   guildId: string,
   type: SanctionType,
   description: string,
-): Promise<void> {
+  moderatorId: string,
+): Promise<string> {
+  const caseId = generateCaseId();
   await userStore.ensure(userId);
   const db = await getDb();
   await db.collection("users").updateOne(
     { _id: userId } as never,
     {
-      $push: { [`sanction_history.${guildId}`]: { type, description, date: new Date().toISOString() } },
+      $push: { [`sanction_history.${guildId}`]: { id: caseId, type, description, date: new Date().toISOString(), moderatorId } },
       $set: { updatedAt: new Date() },
     } as never,
   );
+  return caseId;
 }
 
 function validateTarget(
@@ -98,6 +101,14 @@ function validateTarget(
   return null;
 }
 
+function checkBotPerms(guild: Guild, ...perms: PermissionResolvable[]): ModerationError | null {
+  const bot = guild.members.me;
+  if (!bot) return new ModerationError("INSUFFICIENT_PERMISSIONS", "Bot is not a guild member");
+  const missing = missingPermission(bot, ...perms);
+  if (missing) return new ModerationError("INSUFFICIENT_PERMISSIONS", `Bot missing permission: ${String(missing)}`);
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // ban
 // ---------------------------------------------------------------------------
@@ -111,15 +122,18 @@ export async function ban(
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
 
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.BanMembers);
+  if (botErr) return ErrResult(botErr);
+
   try {
     await guild.members.ban(target.id, { reason: `${reason} | by ${moderator.user.tag}` });
   } catch (err) {
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Ban failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 
-  await pushSanction(target.id, guild.id, "BAN", reason).catch(() => {});
+  const caseId = await pushSanction(target.id, guild.id, "BAN", reason, moderator.id).catch(() => generateCaseId());
 
-  return OkResult({ type: "BAN", targetId: target.id, targetTag: target.tag, reason, moderatorId: moderator.id });
+  return OkResult({ type: "BAN", targetId: target.id, targetTag: target.tag, reason, moderatorId: moderator.id, caseId });
 }
 
 // ---------------------------------------------------------------------------
@@ -135,15 +149,18 @@ export async function kick(
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
 
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.KickMembers);
+  if (botErr) return ErrResult(botErr);
+
   try {
     await target.kick(`${reason} | by ${moderator.user.tag}`);
   } catch (err) {
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Kick failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 
-  await pushSanction(target.id, guild.id, "KICK", reason).catch(() => {});
+  const caseId = await pushSanction(target.id, guild.id, "KICK", reason, moderator.id).catch(() => generateCaseId());
 
-  return OkResult({ type: "KICK", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id });
+  return OkResult({ type: "KICK", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
 }
 
 // ---------------------------------------------------------------------------
@@ -176,15 +193,18 @@ export async function mute(
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Invalid duration: ${durationKey}`));
   }
 
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.ModerateMembers);
+  if (botErr) return ErrResult(botErr);
+
   try {
     await target.timeout(durationMs, `${reason} | by ${moderator.user.tag}`);
   } catch (err) {
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Mute failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 
-  await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`).catch(() => {});
+  const caseId = await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`, moderator.id).catch(() => generateCaseId());
 
-  return OkResult({ type: "TIMEOUT", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id });
+  return OkResult({ type: "TIMEOUT", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
 }
 
 // ---------------------------------------------------------------------------
@@ -200,9 +220,9 @@ export async function warn(
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
 
-  await pushSanction(target.id, guild.id, "WARN", reason).catch(() => {});
+  const caseId = await pushSanction(target.id, guild.id, "WARN", reason, moderator.id).catch(() => generateCaseId());
 
-  return OkResult({ type: "WARN", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id });
+  return OkResult({ type: "WARN", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
 }
 
 // ---------------------------------------------------------------------------
@@ -212,10 +232,10 @@ export async function warn(
 export async function getCases(
   userId: string,
   guildId: string,
-): Promise<Result<SanctionEntry[], ModerationError>> {
+): Promise<Result<SanctionHistoryEntry[], ModerationError>> {
   const res = await userStore.get(userId);
   if (res.isErr()) return ErrResult(new ModerationError("DB_FAILED", res.error.message));
   const user = res.unwrap();
-  const history = (user?.sanction_history?.[guildId] as SanctionEntry[] | undefined) ?? [];
+  const history = (user?.sanction_history?.[guildId] as SanctionHistoryEntry[] | undefined) ?? [];
   return OkResult(history);
 }
