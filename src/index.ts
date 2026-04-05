@@ -61,6 +61,8 @@ import * as muteCmd from "@/features/moderation/commands/mute";
 import * as warnCmd from "@/features/moderation/commands/warn";
 import * as unbanCmd from "@/features/moderation/commands/unban";
 import * as casesCmd from "@/features/moderation/commands/cases";
+import * as restrictCmd from "@/features/moderation/commands/restrict";
+import * as modconfigCmd from "@/features/moderation/commands/modconfig";
 
 // ---------------------------------------------------------------------------
 // Command imports (tickets)
@@ -140,7 +142,7 @@ const ALL_COMMANDS: CommandModule[] = [
   // rpg
   fightCmd, gatherMineCmd, gatherCutdownCmd, processCmd, rpgProfileCmd, rpgQuestCmd,
   // moderation
-  banCmd, kickCmd, muteCmd, warnCmd, unbanCmd, casesCmd,
+  banCmd, kickCmd, muteCmd, warnCmd, unbanCmd, casesCmd, restrictCmd, modconfigCmd,
   // tickets
   ticketCmd,
   // autoroles

@@ -239,6 +239,38 @@ export async function warn(
 }
 
 // ---------------------------------------------------------------------------
+// restrict
+// ---------------------------------------------------------------------------
+
+export async function restrict(
+  guild: Guild,
+  moderator: GuildMember,
+  target: GuildMember,
+  restrictionType: "forums" | "voice" | "jobs" | "all",
+  roleId: string,
+  reason: string,
+): Promise<Result<ModerationResult, ModerationError>> {
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.ManageRoles);
+  if (botErr) return ErrResult(botErr);
+
+  const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
+  if (validationErr) return ErrResult(validationErr);
+
+  try {
+    await target.roles.add(roleId, reason);
+  } catch (err) {
+    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Restrict failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
+
+  const caseId = await pushSanction(target.id, guild.id, "RESTRICT", reason, moderator.id).catch((err) => {
+    log.error("Failed to record sanction in DB", err);
+    return generateCaseId();
+  });
+
+  return OkResult({ type: "RESTRICT", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
+}
+
+// ---------------------------------------------------------------------------
 // getCases
 // ---------------------------------------------------------------------------
 
