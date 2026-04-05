@@ -275,6 +275,37 @@ export async function removeWarn(
 }
 
 // ---------------------------------------------------------------------------
+// unban
+// ---------------------------------------------------------------------------
+
+export async function unban(
+  guild: Guild,
+  moderator: GuildMember,
+  targetId: string,
+  reason: string,
+): Promise<Result<ModerationResult, ModerationError>> {
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.BanMembers);
+  if (botErr) return ErrResult(botErr);
+
+  if (targetId === moderator.id) {
+    return ErrResult(new ModerationError("CANNOT_MODERATE_SELF", "Cannot unban yourself"));
+  }
+
+  try {
+    await guild.members.unban(targetId, reason);
+  } catch (err) {
+    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Unban failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
+
+  const caseId = await pushSanction(targetId, guild.id, "PARDON", reason, moderator.id).catch((err) => {
+    log.error("Failed to record sanction in DB", err);
+    return generateCaseId();
+  });
+
+  return OkResult({ type: "PARDON", targetId, targetTag: targetId, reason, moderatorId: moderator.id, caseId });
+}
+
+// ---------------------------------------------------------------------------
 // clearWarns
 // ---------------------------------------------------------------------------
 

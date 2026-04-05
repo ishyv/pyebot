@@ -59,6 +59,7 @@ import * as banCmd from "@/features/moderation/commands/ban";
 import * as kickCmd from "@/features/moderation/commands/kick";
 import * as muteCmd from "@/features/moderation/commands/mute";
 import * as warnCmd from "@/features/moderation/commands/warn";
+import * as unbanCmd from "@/features/moderation/commands/unban";
 import * as casesCmd from "@/features/moderation/commands/cases";
 
 // ---------------------------------------------------------------------------
@@ -139,7 +140,7 @@ const ALL_COMMANDS: CommandModule[] = [
   // rpg
   fightCmd, gatherMineCmd, gatherCutdownCmd, processCmd, rpgProfileCmd, rpgQuestCmd,
   // moderation
-  banCmd, kickCmd, muteCmd, warnCmd, casesCmd,
+  banCmd, kickCmd, muteCmd, warnCmd, unbanCmd, casesCmd,
   // tickets
   ticketCmd,
   // autoroles

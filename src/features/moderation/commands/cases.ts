@@ -12,6 +12,7 @@ const SANCTION_EMOJI: Record<SanctionType, string> = {
   TIMEOUT: "🔇",
   WARN: "⚠️",
   RESTRICT: "🚫",
+  PARDON: "✅",
 };
 
 export const data = new SlashCommandBuilder()
