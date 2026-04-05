@@ -163,8 +163,14 @@ async function bootstrap(): Promise<void> {
   log.info("Starting tx-v2...");
 
   // 1. MongoDB
-  await getDb();
+  const db = await getDb();
   log.info("MongoDB connected.");
+
+  // Create TTL index for automod link tracking (idempotent — safe to run every startup)
+  await db.collection("automod_link_tracking").createIndex(
+    { updatedAt: 1 },
+    { expireAfterSeconds: 300, name: "ttl_link_tracking" },
+  );
 
   // 2. Content packs (optional — gracefully skip if no pack dir)
   const contentDir = process.env.CONTENT_PACKS_DIR;

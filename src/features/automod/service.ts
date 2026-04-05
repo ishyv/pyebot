@@ -19,6 +19,7 @@ import {
 } from "discord.js";
 import { getGuild } from "@/db/repositories/guilds";
 import { createLogger } from "@/core/logger";
+import { recordLinks, clearLinkRecord } from "./linkTracker";
 
 const log = createLogger("automod");
 
@@ -63,9 +64,6 @@ const SCAM_FILTERS: RegExp[] = SCAM_PHRASES.map(
   (phrase) => new RegExp(`\\b${phrase.replace(/\s+/g, "[\\s\\W_]+")}\\b`, "i"),
 );
 
-// ─── Link spam tracking (in-memory per guild:user) ────────────────────────────
-
-const linkTimestamps = new Map<string, number[]>(); // `${guildId}:${userId}` → timestamps
 
 function extractLinks(content: string): string[] {
   return content.match(/https?:\/\/[^\s>]+/gi) ?? [];
@@ -110,18 +108,13 @@ export async function checkMessage(message: Message): Promise<CheckResult> {
     });
 
     if (nonWhitelisted.length > 0) {
-      const key = `${message.guild.id}:${message.author.id}`;
-      const now = Date.now();
       const windowMs = config.linkSpam.windowSeconds * 1000;
+      const totalLinks = await recordLinks(message.guild.id, message.author.id, nonWhitelisted.length, windowMs);
 
-      const times = (linkTimestamps.get(key) ?? []).filter((t) => now - t < windowMs);
-      times.push(...Array(nonWhitelisted.length).fill(now));
-      linkTimestamps.set(key, times);
-
-      if (times.length >= config.linkSpam.maxLinks) {
-        linkTimestamps.delete(key);
+      if (totalLinks >= config.linkSpam.maxLinks) {
+        await clearLinkRecord(message.guild.id, message.author.id);
         const action = config.linkSpam.action;
-        const reason = `Link spam (${times.length} links in ${config.linkSpam.windowSeconds}s)`;
+        const reason = `Link spam (${totalLinks} links in ${config.linkSpam.windowSeconds}s)`;
 
         if (action === "timeout" || action === "mute") {
           await applyTimeout(message.member, config.linkSpam.timeoutSeconds * 1000, reason);
