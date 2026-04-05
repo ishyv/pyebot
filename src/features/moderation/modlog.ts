@@ -33,9 +33,11 @@ export async function sendModLog(
 ): Promise<void> {
   try {
     const guildResult = await getGuild(guild.id);
-    if (guildResult.isErr() || !guildResult.unwrap()) return;
+    if (guildResult.isErr()) return;
+    const guildData = guildResult.unwrap();
+    if (!guildData) return;
 
-    const channelId = guildResult.unwrap()!.channels.core["modlog"]?.channelId;
+    const channelId = guildData.channels.core["modlog"]?.channelId;
     if (!channelId) return;
 
     let channel: Awaited<ReturnType<typeof guild.channels.fetch>>;
