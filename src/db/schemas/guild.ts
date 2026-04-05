@@ -56,9 +56,25 @@ export const GuildFeaturesSchema = z.record(z.string(), z.boolean()).catch(() =>
 export const CoreChannelSchema = z.object({ channelId: z.string() });
 export const ManagedChannelSchema = z.object({ id: z.string(), label: z.string(), channelId: z.string() });
 
+export const ModerationConfigSchema = z.object({
+  restrictionRoles: z.object({
+    forums: z.string().nullable().catch(null),
+    voice:  z.string().nullable().catch(null),
+    jobs:   z.string().nullable().catch(null),
+    all:    z.string().nullable().catch(null),
+  }).catch(() => ({ forums: null, voice: null, jobs: null, all: null })),
+  escalation: z.object({
+    enabled:        z.boolean().catch(false),
+    warnThreshold:  z.number().int().catch(3),
+    muteDurationMs: z.number().int().catch(3_600_000),
+  }).catch(() => ({ enabled: false, warnThreshold: 3, muteDurationMs: 3_600_000 })),
+}).catch(() => ({ restrictionRoles: { forums: null, voice: null, jobs: null, all: null }, escalation: { enabled: false, warnThreshold: 3, muteDurationMs: 3_600_000 } }));
+
+export type ModerationConfig = z.infer<typeof ModerationConfigSchema>;
+
 export const GuildChannelsSchema = z.object({
   core: z.record(z.string(), CoreChannelSchema.nullable()).catch(() => ({
-    welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null,
+    welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null, modlog: null,
   })),
   managed: z.record(z.string(), ManagedChannelSchema).catch(() => ({})),
   ticketMessageId: z.string().nullable().catch(null),
@@ -100,7 +116,7 @@ export const GuildSchema = z.object({
   _id: z.string(),
   roles: z.record(z.string(), z.unknown()).catch(() => ({})),
   channels: GuildChannelsSchema.catch(() => ({
-    core: { welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null },
+    core: { welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null, modlog: null },
     managed: {},
     ticketMessageId: null,
     ticketHelperRoles: [],
@@ -112,6 +128,7 @@ export const GuildSchema = z.object({
   ai: AiConfigSchema.catch(() => ({ provider: DEFAULT_PROVIDER_ID, model: DEFAULT_GEMINI_MODEL })),
   reputation: z.object({ keywords: z.array(z.string()).catch(() => []) }).catch(() => ({ keywords: [] })),
   automod: AutomodSchema,
+  moderation: ModerationConfigSchema,
   economy: z.object({
     daily: DailyConfigSchema.catch(() => ({ dailyReward: 250, dailyCooldownHours: 24, dailyCurrencyId: "coins", dailyFeeRate: 0, dailyFeeSector: "tax" as const, dailyStreakBonus: 5, dailyStreakCap: 10 })),
     work: WorkConfigSchema.catch(() => ({ workRewardBase: 120, workBaseMintReward: 100, workBonusFromWorksMax: 100, workBonusScaleMode: "flat" as const, workCooldownMinutes: 30, workDailyCap: 5, workCurrencyId: "coins", workPaysFromSector: "works" as const, workFailureChance: 0.1 })),

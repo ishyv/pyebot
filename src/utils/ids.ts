@@ -22,3 +22,8 @@ export function buildAchievementId(userId: string, achievementId: string): strin
 export function buildListingId(): string {
   return `listing:${buildCorrelationId()}`;
 }
+
+/** Generates a short 5-character uppercase alphanumeric case ID (e.g. "A3F9K"). */
+export function generateCaseId(): string {
+  return Math.random().toString(36).slice(2, 7).toUpperCase();
+}
