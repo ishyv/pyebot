@@ -67,6 +67,10 @@ export async function sendModLog(
       embed.addFields({ name: "Restriction", value: extras.restrictionType });
     }
 
+    if (result.escalated) {
+      embed.addFields({ name: "Escalation", value: "⚡ Auto-escalated: user timed out", inline: false });
+    }
+
     await channel.send({ embeds: [embed] });
   } catch (err) {
     log.error("Failed to send mod log", err);

@@ -23,6 +23,7 @@ import { PermissionFlagsBits, type PermissionResolvable } from "discord.js";
 import { OkResult, ErrResult, type Result } from "@/core/result";
 import { getDb } from "@/core/db";
 import { userStore } from "@/db/repositories/users";
+import { getGuild } from "@/db/repositories/guilds";
 import { generateCaseId } from "@/utils/ids";
 import { missingPermission } from "@/middleware/permissions";
 import { createLogger } from "@/core/logger";
@@ -220,7 +221,27 @@ export async function warn(
     return generateCaseId();
   });
 
-  return OkResult({ type: "WARN", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
+  let escalated = false;
+
+  const guildResult = await getGuild(guild.id);
+  if (!guildResult.isErr() && guildResult.unwrap()) {
+    const config = guildResult.unwrap()!.moderation;
+    if (config.escalation.enabled) {
+      const userRes = await userStore.get(target.id);
+      const user = userRes.isErr() ? null : userRes.unwrap();
+      const warnCount = (user?.sanction_history?.[guild.id] as Array<{type: string}> | undefined)?.filter(e => e.type === "WARN").length ?? 0;
+
+      if (warnCount >= config.escalation.warnThreshold) {
+        // Auto-mute failure is intentionally swallowed — the warn record stands regardless
+        await target.timeout(config.escalation.muteDurationMs, "Auto-escalation: warn threshold reached")
+          .then(() => pushSanction(target.id, guild.id, "TIMEOUT", `Auto-escalation after ${warnCount} warnings`, guild.client.user.id))
+          .then(() => { escalated = true; })
+          .catch(() => {});
+      }
+    }
+  }
+
+  return OkResult({ type: "WARN", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId, escalated });
 }
 
 // ---------------------------------------------------------------------------
