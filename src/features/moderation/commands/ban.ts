@@ -6,6 +6,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { ban } from "@/features/moderation/service";
+import { sendModLog } from "../modlog";
 
 export const data = new SlashCommandBuilder()
   .setName("ban")
@@ -31,6 +32,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   await interaction.deferReply({ ephemeral: true });
 
+  // Send DM before ban — after the ban they can no longer receive DMs from this server
+  await target.send(`You have been banned from **${interaction.guild.name}**. Reason: ${reason}`).catch(() => {});
+
   const result = await ban(interaction.guild, moderator, target, reason);
 
   if (result.isErr()) {
@@ -38,11 +42,18 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  const sanctionResult = result.unwrap();
+
+  await sendModLog(interaction.guild, sanctionResult);
+
   const embed = new EmbedBuilder()
     .setColor(Colors.Red)
     .setTitle("User Banned")
     .setDescription(`**${target.tag}** has been banned.`)
-    .addFields({ name: "Reason", value: reason })
+    .addFields(
+      { name: "Reason", value: reason },
+      { name: "Case ID", value: `#${sanctionResult.caseId}`, inline: true },
+    )
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
