@@ -57,7 +57,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const moderator = await interaction.guild.members.fetch(interaction.user.id);
 
-  const result = await unban(interaction.guild, moderator, userId, reason);
+  const targetUser = await interaction.guild.client.users.fetch(userId).catch(() => null);
+  const result = await unban(interaction.guild, moderator, userId, reason, targetUser?.tag);
 
   if (result.isErr()) {
     const embed = new EmbedBuilder()

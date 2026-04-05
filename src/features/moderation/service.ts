@@ -283,13 +283,13 @@ export async function unban(
   moderator: GuildMember,
   targetId: string,
   reason: string,
+  targetTag?: string,
 ): Promise<Result<ModerationResult, ModerationError>> {
+  const validationErr = validateTarget(moderator.id, guild.client.user.id, targetId);
+  if (validationErr) return ErrResult(validationErr);
+
   const botErr = checkBotPerms(guild, PermissionFlagsBits.BanMembers);
   if (botErr) return ErrResult(botErr);
-
-  if (targetId === moderator.id) {
-    return ErrResult(new ModerationError("CANNOT_MODERATE_SELF", "Cannot unban yourself"));
-  }
 
   try {
     await guild.members.unban(targetId, reason);
@@ -302,7 +302,7 @@ export async function unban(
     return generateCaseId();
   });
 
-  return OkResult({ type: "PARDON", targetId, targetTag: targetId, reason, moderatorId: moderator.id, caseId });
+  return OkResult({ type: "PARDON", targetId, targetTag: targetTag ?? targetId, reason, moderatorId: moderator.id, caseId });
 }
 
 // ---------------------------------------------------------------------------
