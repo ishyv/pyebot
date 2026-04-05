@@ -6,6 +6,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { ban } from "@/features/moderation/service";
+import { dmUser } from "../notifications";
 import { sendModLog } from "../modlog";
 
 export const data = new SlashCommandBuilder()
@@ -32,9 +33,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   await interaction.deferReply({ ephemeral: true });
 
-  // Send DM before ban — after the ban they can no longer receive DMs from this server
-  await target.send(`You have been banned from **${interaction.guild.name}**. Reason: ${reason}`).catch(() => {});
-
   const result = await ban(interaction.guild, moderator, target, reason);
 
   if (result.isErr()) {
@@ -44,6 +42,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const sanctionResult = result.unwrap();
 
+  // Send DM after successful ban — User objects can be DMed post-ban
+  // even though the user is no longer on the server
+  await dmUser(target, "BAN", interaction.guild.name, reason, sanctionResult.caseId);
   await sendModLog(interaction.guild, sanctionResult);
 
   const embed = new EmbedBuilder()
