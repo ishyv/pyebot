@@ -25,7 +25,10 @@ import { getDb } from "@/core/db";
 import { userStore } from "@/db/repositories/users";
 import { generateCaseId } from "@/utils/ids";
 import { missingPermission } from "@/middleware/permissions";
-import type { SanctionHistoryEntry } from "@/db/schemas/user";
+import { createLogger } from "@/core/logger";
+import type { SanctionHistoryEntry, SanctionType } from "@/db/schemas/user";
+
+const log = createLogger("moderation");
 
 // ---------------------------------------------------------------------------
 // Error
@@ -50,8 +53,6 @@ export class ModerationError extends Error {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export type SanctionType = "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON";
 
 export interface ModerationResult {
   readonly type: SanctionType;
@@ -131,7 +132,10 @@ export async function ban(
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Ban failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 
-  const caseId = await pushSanction(target.id, guild.id, "BAN", reason, moderator.id).catch(() => generateCaseId());
+  const caseId = await pushSanction(target.id, guild.id, "BAN", reason, moderator.id).catch((err) => {
+    log.error("Failed to record sanction in DB", err);
+    return generateCaseId();
+  });
 
   return OkResult({ type: "BAN", targetId: target.id, targetTag: target.tag, reason, moderatorId: moderator.id, caseId });
 }
@@ -158,7 +162,10 @@ export async function kick(
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Kick failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 
-  const caseId = await pushSanction(target.id, guild.id, "KICK", reason, moderator.id).catch(() => generateCaseId());
+  const caseId = await pushSanction(target.id, guild.id, "KICK", reason, moderator.id).catch((err) => {
+    log.error("Failed to record sanction in DB", err);
+    return generateCaseId();
+  });
 
   return OkResult({ type: "KICK", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
 }
@@ -202,7 +209,10 @@ export async function mute(
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Mute failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 
-  const caseId = await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`, moderator.id).catch(() => generateCaseId());
+  const caseId = await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`, moderator.id).catch((err) => {
+    log.error("Failed to record sanction in DB", err);
+    return generateCaseId();
+  });
 
   return OkResult({ type: "TIMEOUT", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
 }
@@ -220,7 +230,10 @@ export async function warn(
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
 
-  const caseId = await pushSanction(target.id, guild.id, "WARN", reason, moderator.id).catch(() => generateCaseId());
+  const caseId = await pushSanction(target.id, guild.id, "WARN", reason, moderator.id).catch((err) => {
+    log.error("Failed to record sanction in DB", err);
+    return generateCaseId();
+  });
 
   return OkResult({ type: "WARN", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId });
 }
