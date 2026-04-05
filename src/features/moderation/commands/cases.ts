@@ -5,7 +5,8 @@ import {
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { getCases, type SanctionType } from "@/features/moderation/service";
+import { getCases } from "@/features/moderation/service";
+import type { SanctionType } from "@/db/schemas/user";
 import { hasPermission } from "@/middleware/permissions";
 
 const SANCTION_EMOJI: Record<SanctionType, string> = {
