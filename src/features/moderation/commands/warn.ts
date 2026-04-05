@@ -116,11 +116,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   // list
   // ---------------------------------------------------------------------------
   if (subcommand === "list") {
-    if (!hasPermission(callerMember, PermissionFlagsBits.ModerateMembers)) {
-      await interaction.editReply({ content: "You don't have permission to view warnings." });
-      return;
-    }
-
     const casesResult = await getCases(targetUser.id, interaction.guild.id);
 
     if (casesResult.isErr()) {
