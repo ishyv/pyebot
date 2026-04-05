@@ -2,9 +2,11 @@ import {
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { getCases, type SanctionType } from "@/features/moderation/service";
+import { hasPermission } from "@/middleware/permissions";
 
 const SANCTION_EMOJI: Record<SanctionType, string> = {
   BAN: "🔨",
@@ -32,6 +34,22 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const targetUser = interaction.options.getUser("user") ?? interaction.user;
 
   await interaction.deferReply({ ephemeral: true });
+
+  // Privacy gate: only allow viewing other users' history if caller has ModerateMembers
+  const isSelf = targetUser.id === interaction.user.id;
+  if (!isSelf) {
+    const callerMember = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    if (!callerMember || !hasPermission(callerMember, PermissionFlagsBits.ModerateMembers)) {
+      const embed = new EmbedBuilder()
+        .setColor(Colors.Red)
+        .setTitle("Permission Denied")
+        .setDescription("You can only view your own case history.")
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+  }
 
   const result = await getCases(targetUser.id, interaction.guild.id);
 
