@@ -4,10 +4,7 @@
  * Subcommands:
  *   modlog         — Set the mod log channel
  *   restrict-roles — Configure roles for restriction types
- *   escalation     — Enable/disable auto-escalation + warn threshold
- *
- * Note: Duration parsing for escalation is deferred to Phase 4b when
- * parseDuration utility is implemented. For now only threshold is stored.
+ *   escalation     — Enable/disable auto-escalation + warn threshold + mute duration
  */
 
 import {
@@ -19,6 +16,8 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
+import { parseDuration } from "@/utils/duration";
+import { msToHuman } from "@/utils/time";
 
 export const data = new SlashCommandBuilder()
   .setName("modconfig")
@@ -181,8 +180,24 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
   const action = interaction.options.getString("action", true);
   const enabled = action === "enable";
   const threshold = interaction.options.getInteger("threshold");
-  // Duration parsing is deferred to Phase 4b — accept the string but do not persist it yet
-  const _duration = interaction.options.getString("duration");
+  const durationStr = interaction.options.getString("duration");
+
+  // Validate duration if provided
+  let durationMs: number | null = null;
+  if (durationStr !== null) {
+    durationMs = parseDuration(durationStr);
+    if (durationMs === null) {
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(Colors.Red)
+            .setTitle("Invalid Duration")
+            .setDescription("Invalid duration. Valid formats: 10s, 5m, 2h, 3d, 1w (maximum 28 days)"),
+        ],
+      });
+      return;
+    }
+  }
 
   const paths: Record<string, unknown> = {
     "moderation.escalation.enabled": enabled,
@@ -190,6 +205,10 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
 
   if (threshold !== null) {
     paths["moderation.escalation.warnThreshold"] = threshold;
+  }
+
+  if (durationMs !== null) {
+    paths["moderation.escalation.muteDurationMs"] = durationMs;
   }
 
   const result = await updateGuildPaths(interaction.guild.id, paths);
@@ -215,8 +234,8 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
     embed.addFields({ name: "Warn Threshold", value: `${threshold}`, inline: true });
   }
 
-  if (_duration) {
-    embed.addFields({ name: "Duration", value: `${_duration} *(will be applied in Phase 4b)*`, inline: true });
+  if (durationMs !== null) {
+    embed.addFields({ name: "Mute Duration", value: msToHuman(durationMs), inline: true });
   }
 
   await interaction.editReply({ embeds: [embed] });

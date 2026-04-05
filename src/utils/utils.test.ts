@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { buildCorrelationId, buildCompositeId, buildProgressId, buildAchievementId, buildListingId } from "./ids";
 import { msToHuman, getCooldownExpiry, isCooldownExpired, minutesToMs, hoursToMs, daysToMs } from "./time";
 import { formatAmount, applyTaxRate, clamp, formatCurrencyAmount, isValidAmount } from "./currency";
+import { parseDuration } from "./duration";
 
 describe("ids", () => {
   test("buildCorrelationId returns a non-empty string", () => {
@@ -77,6 +78,57 @@ describe("time", () => {
   test("daysToMs converts correctly", () => {
     expect(daysToMs(1)).toBe(86_400_000);
     expect(daysToMs(7)).toBe(604_800_000);
+  });
+});
+
+describe("parseDuration", () => {
+  test("parses seconds", () => {
+    expect(parseDuration("10s")).toBe(10_000);
+  });
+
+  test("parses minutes", () => {
+    expect(parseDuration("5m")).toBe(300_000);
+  });
+
+  test("parses hours", () => {
+    expect(parseDuration("2h")).toBe(7_200_000);
+  });
+
+  test("parses days", () => {
+    expect(parseDuration("3d")).toBe(3 * 86_400_000);
+  });
+
+  test("parses weeks", () => {
+    expect(parseDuration("1w")).toBe(604_800_000);
+  });
+
+  test("is case-insensitive", () => {
+    expect(parseDuration("5M")).toBe(300_000);
+    expect(parseDuration("2H")).toBe(7_200_000);
+  });
+
+  test("trims whitespace", () => {
+    expect(parseDuration("  10m  ")).toBe(600_000);
+  });
+
+  test("returns null for invalid format", () => {
+    expect(parseDuration("abc")).toBeNull();
+    expect(parseDuration("10")).toBeNull();
+    expect(parseDuration("m10")).toBeNull();
+    expect(parseDuration("")).toBeNull();
+  });
+
+  test("returns null for zero duration", () => {
+    expect(parseDuration("0m")).toBeNull();
+  });
+
+  test("returns null when exceeding 28 days", () => {
+    expect(parseDuration("29d")).toBeNull();
+    expect(parseDuration("5w")).toBeNull();
+  });
+
+  test("accepts exactly 28 days", () => {
+    expect(parseDuration("28d")).toBe(28 * 86_400_000);
   });
 });
 

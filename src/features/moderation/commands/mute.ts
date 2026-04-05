@@ -5,7 +5,11 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { mute, MUTE_DURATION_CHOICES } from "@/features/moderation/service";
+import { mute } from "@/features/moderation/service";
+import { parseDuration } from "@/utils/duration";
+import { msToHuman } from "@/utils/time";
+import { dmUser } from "@/features/moderation/notifications";
+import { sendModLog } from "@/features/moderation/modlog";
 
 export const data = new SlashCommandBuilder()
   .setName("mute")
@@ -16,11 +20,8 @@ export const data = new SlashCommandBuilder()
   .addStringOption((opt) =>
     opt
       .setName("duration")
-      .setDescription("Timeout duration")
-      .setRequired(true)
-      .addChoices(
-        ...MUTE_DURATION_CHOICES.map((d) => ({ name: d, value: d })),
-      ),
+      .setDescription("Duration (e.g. 10m, 2h, 1d, 7d, 1w — max 28d)")
+      .setRequired(true),
   )
   .addStringOption((opt) =>
     opt.setName("reason").setDescription("Reason for the mute").setRequired(true),
@@ -35,10 +36,23 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const targetUser = interaction.options.getUser("user", true);
-  const duration = interaction.options.getString("duration", true);
+  const durationStr = interaction.options.getString("duration", true);
   const reason = interaction.options.getString("reason", true);
 
   await interaction.deferReply({ ephemeral: true });
+
+  const durationMs = parseDuration(durationStr);
+  if (durationMs === null) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(Colors.Red)
+          .setTitle("Invalid Duration")
+          .setDescription("Invalid duration. Valid formats: 10s, 5m, 2h, 3d, 1w (maximum 28 days)"),
+      ],
+    });
+    return;
+  }
 
   const [moderator, targetMember] = await Promise.all([
     interaction.guild.members.fetch(interaction.user.id),
@@ -50,18 +64,29 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const result = await mute(interaction.guild, moderator, targetMember, duration, reason);
+  const result = await mute(interaction.guild, moderator, targetMember, durationMs, reason);
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Failed: ${result.error.message}` });
     return;
   }
 
+  const modResult = result.unwrap();
+  const humanDuration = msToHuman(durationMs);
+
+  await Promise.all([
+    dmUser(targetMember.user, "TIMEOUT", interaction.guild.name, reason, modResult.caseId),
+    sendModLog(interaction.guild, modResult, { duration: humanDuration }),
+  ]);
+
   const embed = new EmbedBuilder()
     .setColor(Colors.Yellow)
     .setTitle("Member Muted")
-    .setDescription(`**${targetUser.tag}** has been timed out for **${duration}**.`)
-    .addFields({ name: "Reason", value: reason })
+    .setDescription(`**${targetUser.tag}** has been timed out for **${humanDuration}**.`)
+    .addFields(
+      { name: "Reason", value: reason },
+      { name: "Case ID", value: `#${modResult.caseId}` },
+    )
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });

@@ -26,6 +26,7 @@ import { userStore } from "@/db/repositories/users";
 import { generateCaseId } from "@/utils/ids";
 import { missingPermission } from "@/middleware/permissions";
 import { createLogger } from "@/core/logger";
+import { msToHuman } from "@/utils/time";
 import type { SanctionHistoryEntry, SanctionType } from "@/db/schemas/user";
 
 const log = createLogger("moderation");
@@ -174,31 +175,15 @@ export async function kick(
 // mute (Discord timeout)
 // ---------------------------------------------------------------------------
 
-const DURATION_MAP: Record<string, number> = {
-  "10m": 10 * 60 * 1000,
-  "1h": 60 * 60 * 1000,
-  "6h": 6 * 60 * 60 * 1000,
-  "12h": 12 * 60 * 60 * 1000,
-  "1d": 24 * 60 * 60 * 1000,
-  "7d": 7 * 24 * 60 * 60 * 1000,
-};
-
-export const MUTE_DURATION_CHOICES = Object.keys(DURATION_MAP);
-
 export async function mute(
   guild: Guild,
   moderator: GuildMember,
   target: GuildMember,
-  durationKey: string,
+  durationMs: number,
   reason: string,
 ): Promise<Result<ModerationResult, ModerationError>> {
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
-
-  const durationMs = DURATION_MAP[durationKey];
-  if (!durationMs) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Invalid duration: ${durationKey}`));
-  }
 
   const botErr = checkBotPerms(guild, PermissionFlagsBits.ModerateMembers);
   if (botErr) return ErrResult(botErr);
@@ -209,7 +194,7 @@ export async function mute(
     return ErrResult(new ModerationError("DISCORD_API_FAILED", `Mute failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 
-  const caseId = await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`, moderator.id).catch((err) => {
+  const caseId = await pushSanction(target.id, guild.id, "TIMEOUT", `${msToHuman(durationMs)} — ${reason}`, moderator.id).catch((err) => {
     log.error("Failed to record sanction in DB", err);
     return generateCaseId();
   });
