@@ -1,21 +1,24 @@
-import type { FeatureModule, ComponentInteraction } from "@/core/feature";
-import type { ButtonInteraction } from "discord.js";
+import type { ButtonInteraction, ChatInputCommandInteraction } from "discord.js";
+import { Button, compileFeatureClass, Feature, SlashCommand } from "@/framework";
 import * as ticketCmd from "./commands/ticket";
-import { isTicketCloseButton, handleTicketClose } from "./handlers/close";
+import { TICKET_CLOSE_BUTTON_PREFIX } from "./commands/ticket";
+import { handleTicketClose } from "./handlers/close";
 
-const tickets: FeatureModule = {
-  id: "tickets",
-  featureGate: "tickets",
-  commands: [
-    { data: ticketCmd.data, execute: ticketCmd.execute },
-  ],
-  components: [
-    {
-      prefix: "tickets:close:",
-      matches: isTicketCloseButton,
-      handle: (i: ComponentInteraction) => handleTicketClose(i as ButtonInteraction),
-    },
-  ],
-};
+@Feature({ id: "tickets", gate: "tickets" })
+class TicketsFeature {
+  @SlashCommand({
+    name: ticketCmd.data.name,
+    description: "Ticket system",
+    data: ticketCmd.data,
+  })
+  async ticket(interaction: ChatInputCommandInteraction): Promise<void> {
+    await ticketCmd.execute(interaction);
+  }
 
-export default tickets;
+  @Button({ prefix: TICKET_CLOSE_BUTTON_PREFIX })
+  async close(interaction: ButtonInteraction): Promise<void> {
+    await handleTicketClose(interaction);
+  }
+}
+
+export default compileFeatureClass(TicketsFeature);

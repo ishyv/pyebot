@@ -1,0 +1,22 @@
+{
+  "name": "tx-v2-starter",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "doctor": "bun ../../scripts/doctor.ts",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}

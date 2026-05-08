@@ -6,6 +6,7 @@
     "bun": ">=1.1.0"
   },
   "scripts": {
+    "doctor": "bun scripts/doctor.ts",
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "content:check": "bun test src/content/content.test.ts",

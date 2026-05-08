@@ -1,108 +1,107 @@
-<div align="center">
-
 # tx-v2
 
-**A Discord bot built for community servers. Moderation, a player-driven economy, and a full RPG progression system.**
+tx-v2 is a Bun-first TypeScript framework and starter codebase for building Discord bots through code.
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)](https://www.typescriptlang.org/)
-[![Discord.js](https://img.shields.io/badge/Discord.js-14-5865F2?logo=discord)](https://discord.js.org/)
-[![Bun](https://img.shields.io/badge/Runtime-Bun-f9f1e1?logo=bun)](https://bun.sh/)
-[![MongoDB](https://img.shields.io/badge/Database-MongoDB-47A248?logo=mongodb)](https://www.mongodb.com/)
+The goal is not visual scripting, mystery globals, or "hope Discord likes this payload" nonsense. Bot authors write normal TypeScript: classes, decorators, functions, typed config, explicit storage, and tests.
 
-</div>
+## Quick Start
 
----
+Requirements:
 
-## Features
-
-### Moderation
-- Ban, kick, mute, warn — full case history with `/cases`
-- Role-based permission limits
-- Auto-mod: link filtering, shorteners, domain blocklist
-
-### Economy
-- Coin balance, `/work` (hourly), `/daily` rewards
-- Coinflip and trivia minigames
-- Player-to-player `/transfer` and `/rob`
-- **Market**: list, browse, buy, and cancel listings with a 2% fee
-- Quest system: `/quest-list`, `/quest-accept`, `/quest-claim`
-
-### RPG
-A profession-based gathering and crafting loop.
-
-**Getting started:** `/rpg-profile` — pick Miner ⛏️ or Lumberjack 🪓 to receive your starter tool.
-
-| Command | What it does |
-|---|---|
-| `/gather-mine` | Pick a mine location via button UI, gather ore |
-| `/gather-cutdown` | Pick a forest location via button UI, chop wood |
-| `/gather-locations` | Browse all locations and see what's locked/unlocked |
-| `/process` | Convert raw materials into refined goods (62% success) |
-| `/craft` | Craft tools from processed materials |
-| `/equip` | Equip a tool from your inventory via dropdown menu |
-| `/inventory` | View your materials, processed goods, and tools |
-| `/fight @user` | Challenge another player to PvP combat |
-| `/rpg-quest` | Browse and track RPG quests |
-
-**Tool tier progression:**
-
-```
-T1 starter → T2 stone → T3 copper → T4 iron
-```
-
-Each tier unlocks new gathering locations. Tools degrade with use.
-
-### AI
-- Per-channel chatbot powered by OpenAI or Gemini
-- Auto-replies in configured threads
-
-### Utility
-- Ticket system
-- Auto-roles on join or reaction
-- `/help` — browse commands by category or look up any command individually
-
----
-
-## Setup
-
-**Requirements:** [Bun](https://bun.sh/) · MongoDB
+- Bun 1.1.0 or newer
+- A Discord application and bot token
+- MongoDB only if you run the bundled full bot feature set
 
 ```bash
-git clone https://github.com/ishyv/pyebot.git
-cd pyebot
 bun install
-```
-
-Create a `.env` file:
-
-```env
-TOKEN=your_discord_bot_token
-CLIENT_ID=your_discord_client_id
-MONGO_URI=mongodb://localhost:27017
-DB_NAME=txbot
-
-# Optional
-GEMINI_API_KEY=...
-OPENAI_API_KEY=...
-```
-
-```bash
-bun start
-```
-
-**Dev (hot reload):**
-```bash
+cp .env.example .env
+bun run doctor
 bun run dev
 ```
 
-**Reset test data:**
-```bash
-bun scripts/reset-accounts.ts          # wipe economy + RPG, keep moderation data
-bun scripts/reset-accounts.ts --hard   # delete all user documents
+Edit `.env`:
+
+```env
+TOKEN=your_discord_bot_token
+CLIENT_ID=your_discord_application_client_id
+GUILD_ID=optional_dev_guild_id
+
+# Optional for starter bots, required for the bundled full bot.
+MONGO_URI=mongodb://localhost:27017
+DB_NAME=txbot
 ```
 
----
+Use `GUILD_ID` while developing commands so Discord updates them quickly. Leave it empty when you intentionally want global command registration.
 
-## License
+## First Bot Code
 
-MIT.
+New framework code should use `createBot` and decorated feature classes:
+
+```ts
+import { Feature, SlashCommand, createBot, MemoryStorageAdapter } from "@/framework";
+
+@Feature({ id: "hello", intents: ["Guilds"] })
+class HelloFeature {
+  @SlashCommand({ name: "hello", description: "Say hello" })
+  async hello(interaction: import("discord.js").ChatInputCommandInteraction) {
+    await interaction.reply("Hello.");
+  }
+}
+
+const bot = createBot({
+  name: "my-bot",
+  features: [HelloFeature],
+  storage: new MemoryStorageAdapter(),
+});
+
+await bot.start();
+```
+
+The current bundled tx-v2 bot still lives under `src/features/**`. It is being migrated through the same framework runtime; legacy feature modules are supported during the transition.
+
+## Project Map
+
+- `src/framework/**` — public framework runtime: decorators, `createBot`, storage adapters, doctor checks.
+- `src/core/**` — legacy compatibility core used by the bundled bot while migration continues.
+- `src/features/**` — bundled moderation, economy, RPG, AI, tickets, offers, automod, autoroles, admin panels, and counting features.
+- `src/content/**` — typed RPG content pack runtime and authoring helpers.
+- `templates/starter/**` — starter project shape for new bots.
+- `docs/**` — feature authoring, content authoring, storage, and migration notes.
+
+## Commands
+
+```bash
+bun run doctor       # Check local runtime/env before startup
+bun run dev          # Start with watch mode
+bun run start        # Start once
+bun test             # Run tests
+bun run typecheck    # TypeScript compile check
+bun run check        # Biome format+lint check
+```
+
+This repository currently uses Bun as the supported runtime. Node support is not a promise yet, because pretending two runtimes are supported before one path is boringly reliable is how frameworks get cursed.
+
+## Framework Philosophy
+
+- Explicit metadata: decorators collect metadata; startup compiles that into a registry and validates duplicates.
+- Typed failures: expected domain failures use `Result` or typed errors; unexpected exceptions are caught at framework boundaries.
+- Storage adapters: starter bots can use memory/file storage; production bots can use MongoDB.
+- No hidden registration soup: features declare commands, components, events, config, intents, and jobs in one place.
+- Source comments explain policy and boundaries, not every obvious line of code.
+
+## Current Migration State
+
+Implemented now:
+
+- Baseline checkpoint branch.
+- `bun run doctor`.
+- Decorator-class feature API.
+- `createBot` runtime bridge.
+- Memory and file storage adapters.
+- Legacy feature-module compatibility.
+
+Still being migrated:
+
+- Converting every bundled feature to decorated classes.
+- Moving all repository code onto storage adapters.
+- Splitting the largest legacy feature files.

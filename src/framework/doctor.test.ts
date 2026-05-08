@@ -1,0 +1,44 @@
+import { describe, expect, test } from "bun:test";
+import { createDoctorReport } from "@/framework/doctor";
+
+describe("createDoctorReport", () => {
+  test("fails before startup when Bun is missing", () => {
+    const report = createDoctorReport({
+      bunVersion: null,
+      env: { TOKEN: "token", CLIENT_ID: "client" },
+      nodeModulesPresent: true,
+      lockfilePresent: true,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        id: "bun",
+        status: "fail",
+      }),
+    );
+  });
+
+  test("accepts either TOKEN or DISCORD_TOKEN for compatibility", () => {
+    const report = createDoctorReport({
+      bunVersion: "1.1.0",
+      env: { DISCORD_TOKEN: "token", CLIENT_ID: "client" },
+      nodeModulesPresent: true,
+      lockfilePresent: true,
+    });
+
+    expect(report.checks.find((check) => check.id === "discord-token")?.status).toBe("pass");
+  });
+
+  test("warns when Mongo is not configured because dev storage can still run", () => {
+    const report = createDoctorReport({
+      bunVersion: "1.1.0",
+      env: { TOKEN: "token", CLIENT_ID: "client" },
+      nodeModulesPresent: true,
+      lockfilePresent: true,
+    });
+
+    expect(report.checks.find((check) => check.id === "mongo")?.status).toBe("warn");
+    expect(report.ok).toBe(true);
+  });
+});
