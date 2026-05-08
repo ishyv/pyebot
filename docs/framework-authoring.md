@@ -67,15 +67,6 @@ class MaintenanceFeature {
 
 Jobs are owned by the framework runtime. Shutdown clears their intervals before calling feature shutdown hooks.
 
-## Compatibility
+## Latest-Only Boundary
 
-Legacy `FeatureModule` objects still work and can be mixed with decorated classes:
-
-```ts
-createBot({
-  name: "mixed-bot",
-  features: [LegacyFeatureModule, NewFeatureClass],
-});
-```
-
-This compatibility exists to make migration safe. New features should use decorated classes.
+`createBot({ features })` accepts decorated feature classes only. Plain feature objects are rejected during startup validation. If a feature needs commands, components, events, config, or jobs, declare them on the class with decorators so the compiler can build one explicit registry record.

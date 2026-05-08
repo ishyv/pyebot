@@ -2,7 +2,7 @@
  * Feature manifest.
  *
  * This is the single file you edit when adding or removing a feature.
- * Each entry is a lazy import factory — features load in order, errors are isolated.
+ * Each entry is a lazy import factory for a decorated feature class.
  *
  * Why lazy imports instead of static:
  * - A static `import * from "@/features/economy"` at module load time would mean
@@ -11,9 +11,9 @@
  * - TypeScript still validates the import path and the returned type at build time.
  */
 
-import type { FeatureModule } from "@/core/feature";
+import type { FeatureConstructor } from "@/framework";
 
-export const featureFactories: Array<() => Promise<FeatureModule>> = [
+export const featureFactories: Array<() => Promise<FeatureConstructor>> = [
   () => import("@/features/adminPanels/index").then((m) => m.default),
   () => import("@/features/economy/index").then((m) => m.default),
   () => import("@/features/rpg/index").then((m) => m.default),

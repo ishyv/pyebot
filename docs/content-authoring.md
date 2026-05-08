@@ -5,8 +5,7 @@ canonical source for built-in items, deterministic crafting recipes, gathering
 locations, and drop tables.
 
 Do not add new RPG content by editing `src/features/rpg/**` internals. Those
-feature files read from the content registry. A couple of old crafting files
-still exist as compatibility shims, but they are not the authoring surface.
+feature files read from the content registry.
 
 ## Quick Start
 
@@ -153,7 +152,7 @@ Runtime validation catches:
 - missing required fields
 - duplicate IDs
 - bad enum values
-- unknown references from JSON5 legacy packs
+- unknown references between typed content records
 - bad quantity ranges
 - duplicate processing recipe inputs
 - location/drop-table action mismatches
@@ -170,20 +169,6 @@ For a broader check:
 bun run typecheck
 ```
 
-## Legacy JSON5 Packs
-
-The loader still supports JSON/JSON5 packs when `CONTENT_PACKS_DIR` is set.
-Those packs must include:
-
-- `rpg.materials.json5`
-- `rpg.craftables.json5`
-- `rpg.recipes.json5`
-- `rpg.drop_tables.json5`
-- `rpg.locations.json5`
-
-That path is for compatibility. New built-in content should go in the typed
-pack.
-
 ## Common Mistakes
 
 - Adding an item to a recipe output but forgetting to define the item.
@@ -193,4 +178,5 @@ pack.
 - Adding a mining location with a forest drop table.
 - Defining a tool without `tool.toolKind`, which makes gathering fall back to
   weak ID-name guessing.
-- Editing `src/features/rpg/crafting/item-registry.ts`; that file is a shim.
+- Trying to load external JSON/JSON5 content packs. tx supports the current
+  typed content pack only.

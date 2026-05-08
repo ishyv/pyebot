@@ -1,5 +1,5 @@
-import type { FeatureModule, ComponentInteraction } from "@/core/feature";
 import type { ButtonInteraction } from "discord.js";
+import { Button, Feature, Job, SlashCommand } from "@/framework";
 
 // Commands
 import * as fightCmd from "./commands/fight";
@@ -19,50 +19,77 @@ import { isFightMoveButton, handleCombatMove } from "./handlers/combatMove";
 import { isOnboardButton, handleOnboard } from "./handlers/onboard";
 import { isExpeditionButton, handleExpeditionButton } from "./handlers/expeditionHandlers";
 
-// Interval
-import { register as registerFightExpiry } from "./handlers/fightExpiry";
+import { expirePendingFights } from "./handlers/fightExpiry";
 
-const rpg: FeatureModule = {
-  id: "rpg",
-  featureGate: "game",
-  commands: [
-    { data: fightCmd.data, execute: fightCmd.execute },
-    { data: gatherMineCmd.data, execute: gatherMineCmd.execute },
-    { data: gatherCutdownCmd.data, execute: gatherCutdownCmd.execute },
-    { data: processCmd.data, execute: processCmd.execute },
-    { data: rpgProfileCmd.data, execute: rpgProfileCmd.execute },
-    { data: rpgQuestCmd.data, execute: rpgQuestCmd.execute },
-    { data: expeditionCmd.data, execute: expeditionCmd.execute },
-    { data: hideoutCmd.data, execute: hideoutCmd.execute },
-    { data: craftCmd.data, execute: craftCmd.execute },
+@Feature({ id: "rpg", gate: "game", intents: ["Guilds"] })
+export default class RpgFeature {
+  @SlashCommand({ name: fightCmd.data.name, description: "Start a fight", data: fightCmd.data })
+  async fight(...args: Parameters<typeof fightCmd.execute>): Promise<void> {
+    await fightCmd.execute(...args);
+  }
 
-  ],
-  components: [
-    {
-      prefix: "fight_accept:",
-      matches: isFightAcceptButton,
-      handle: (i: ComponentInteraction) => handleFightAccept(i as ButtonInteraction),
-    },
-    {
-      prefix: "fight_move:",
-      matches: isFightMoveButton,
-      handle: (i: ComponentInteraction) => handleCombatMove(i as ButtonInteraction),
-    },
-    {
-      prefix: "rpg:onboard:",
-      matches: isOnboardButton,
-      handle: (i: ComponentInteraction) => handleOnboard(i as ButtonInteraction),
-    },
-    {
-      prefix: "expedition_",
-      matches: isExpeditionButton,
-      handle: (i: ComponentInteraction) => handleExpeditionButton(i as ButtonInteraction),
-    },
-  ],
-  onLoad() {
-    // Start the fight session expiry interval (cleans up stale pending fights every minute)
-    registerFightExpiry();
-  },
-};
+  @SlashCommand({ name: gatherMineCmd.data.name, description: "Mine materials", data: gatherMineCmd.data })
+  async gatherMine(...args: Parameters<typeof gatherMineCmd.execute>): Promise<void> {
+    await gatherMineCmd.execute(...args);
+  }
 
-export default rpg;
+  @SlashCommand({ name: gatherCutdownCmd.data.name, description: "Cut wood", data: gatherCutdownCmd.data })
+  async gatherCutdown(...args: Parameters<typeof gatherCutdownCmd.execute>): Promise<void> {
+    await gatherCutdownCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: processCmd.data.name, description: "Process materials", data: processCmd.data })
+  async process(...args: Parameters<typeof processCmd.execute>): Promise<void> {
+    await processCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: rpgProfileCmd.data.name, description: "View RPG profile", data: rpgProfileCmd.data })
+  async profile(...args: Parameters<typeof rpgProfileCmd.execute>): Promise<void> {
+    await rpgProfileCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: rpgQuestCmd.data.name, description: "Manage RPG quests", data: rpgQuestCmd.data })
+  async quest(...args: Parameters<typeof rpgQuestCmd.execute>): Promise<void> {
+    await rpgQuestCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: expeditionCmd.data.name, description: "Run an expedition", data: expeditionCmd.data })
+  async expedition(...args: Parameters<typeof expeditionCmd.execute>): Promise<void> {
+    await expeditionCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: hideoutCmd.data.name, description: "Manage hideout", data: hideoutCmd.data })
+  async hideout(...args: Parameters<typeof hideoutCmd.execute>): Promise<void> {
+    await hideoutCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: craftCmd.data.name, description: "Craft items", data: craftCmd.data })
+  async craft(...args: Parameters<typeof craftCmd.execute>): Promise<void> {
+    await craftCmd.execute(...args);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "fight_accept:", matches: isFightAcceptButton })
+  async fightAccept(interaction: ButtonInteraction): Promise<void> {
+    await handleFightAccept(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "fight_move:", matches: isFightMoveButton })
+  async combatMove(interaction: ButtonInteraction): Promise<void> {
+    await handleCombatMove(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "rpg:onboard:", matches: isOnboardButton })
+  async onboard(interaction: ButtonInteraction): Promise<void> {
+    await handleOnboard(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "expedition_", matches: isExpeditionButton })
+  async expeditionButton(interaction: ButtonInteraction): Promise<void> {
+    await handleExpeditionButton(interaction);
+  }
+
+  @Job({ name: "fight-expiry", everyMs: 60_000, runOnReady: true })
+  expireFights(): void {
+    expirePendingFights();
+  }
+}

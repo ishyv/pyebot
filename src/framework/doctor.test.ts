@@ -5,7 +5,7 @@ describe("createDoctorReport", () => {
   test("fails before startup when Bun is missing", () => {
     const report = createDoctorReport({
       bunVersion: null,
-      env: { TOKEN: "token", CLIENT_ID: "client" },
+      env: { DISCORD_TOKEN: "token", CLIENT_ID: "client" },
       nodeModulesPresent: true,
       lockfilePresent: true,
     });
@@ -19,7 +19,7 @@ describe("createDoctorReport", () => {
     );
   });
 
-  test("accepts either TOKEN or DISCORD_TOKEN for compatibility", () => {
+  test("requires DISCORD_TOKEN", () => {
     const report = createDoctorReport({
       bunVersion: "1.1.0",
       env: { DISCORD_TOKEN: "token", CLIENT_ID: "client" },
@@ -30,10 +30,21 @@ describe("createDoctorReport", () => {
     expect(report.checks.find((check) => check.id === "discord-token")?.status).toBe("pass");
   });
 
-  test("warns when Mongo is not configured because dev storage can still run", () => {
+  test("does not accept TOKEN as an alias", () => {
     const report = createDoctorReport({
       bunVersion: "1.1.0",
       env: { TOKEN: "token", CLIENT_ID: "client" },
+      nodeModulesPresent: true,
+      lockfilePresent: true,
+    });
+
+    expect(report.checks.find((check) => check.id === "discord-token")?.status).toBe("fail");
+  });
+
+  test("warns when Mongo is not configured because dev storage can still run", () => {
+    const report = createDoctorReport({
+      bunVersion: "1.1.0",
+      env: { DISCORD_TOKEN: "token", CLIENT_ID: "client" },
       nodeModulesPresent: true,
       lockfilePresent: true,
     });

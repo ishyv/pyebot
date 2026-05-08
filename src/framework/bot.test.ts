@@ -19,4 +19,15 @@ describe("createBot", () => {
     expect(bot.registry.allFeatures().map((feature) => feature.id)).toEqual(["starter"]);
     expect(bot.registry.allCommandData()).toHaveLength(1);
   });
+
+  test("rejects old feature module objects at startup", () => {
+    expect(() =>
+      createBot({
+        name: "starter",
+        features: [{ id: "old-module", commands: [] } as never],
+        storage: new MemoryStorageAdapter(),
+        registerCommands: false,
+      }),
+    ).toThrow("Feature source at index 0 must be a decorated class.");
+  });
 });

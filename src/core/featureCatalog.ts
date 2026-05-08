@@ -1,15 +1,15 @@
-import type { FeatureModule } from "@/core/feature";
+import type { RuntimeFeature } from "@/core/feature";
 
-let loadedFeatures: readonly FeatureModule[] = [];
+let loadedFeatures: readonly RuntimeFeature[] = [];
 
-export function setFeatureCatalog(features: readonly FeatureModule[]): void {
+export function setFeatureCatalog(features: readonly RuntimeFeature[]): void {
   loadedFeatures = [...features];
 }
 
-export function listFeatureCatalog(): readonly FeatureModule[] {
+export function listFeatureCatalog(): readonly RuntimeFeature[] {
   return loadedFeatures;
 }
 
-export function listConfigurableFeatures(): readonly FeatureModule[] {
+export function listConfigurableFeatures(): readonly RuntimeFeature[] {
   return loadedFeatures.filter((feature) => feature.config !== undefined);
 }

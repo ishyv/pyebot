@@ -2,9 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   deepClone,
   collectTouchedPaths,
-  pruneConflictsFromSetOnInsert,
   buildSafeUpsertUpdate,
-  unwrapFindOneAndUpdateResult,
 } from "./helpers";
 
 describe("deepClone", () => {
@@ -83,25 +81,5 @@ describe("buildSafeUpsertUpdate", () => {
       new Date("2025-01-01"),
     );
     expect((result as any).$set?.updatedAt).toBeUndefined();
-  });
-});
-
-describe("unwrapFindOneAndUpdateResult", () => {
-  test("returns null for null input", () => {
-    expect(unwrapFindOneAndUpdateResult(null)).toBeNull();
-  });
-
-  test("returns document directly if not wrapped", () => {
-    const doc = { _id: "test", name: "x" };
-    expect(unwrapFindOneAndUpdateResult(doc)).toBe(doc);
-  });
-
-  test("unwraps legacy {value} wrapper", () => {
-    const doc = { _id: "test" };
-    expect(unwrapFindOneAndUpdateResult({ value: doc })).toBe(doc);
-  });
-
-  test("returns null for {value: null}", () => {
-    expect(unwrapFindOneAndUpdateResult({ value: null })).toBeNull();
   });
 });

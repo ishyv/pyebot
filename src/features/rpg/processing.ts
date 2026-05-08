@@ -31,6 +31,7 @@ export class ProcessingError extends Error {
   constructor(
     public readonly code:
       | "PROFILE_NOT_FOUND"
+      | "CONTENT_NOT_LOADED"
       | "RECIPE_NOT_FOUND"
       | "INSUFFICIENT_MATERIALS"
       | "INSUFFICIENT_FUNDS"
@@ -67,7 +68,7 @@ export interface ProcessingResult {
 }
 
 // ---------------------------------------------------------------------------
-// Default processing recipes (fallback when no content registry is loaded)
+// Processing recipes
 // ---------------------------------------------------------------------------
 
 interface ProcessingRecipe {
@@ -78,36 +79,25 @@ interface ProcessingRecipe {
   readonly tier: number;
 }
 
-const DEFAULT_RECIPES: readonly ProcessingRecipe[] = [
-  { inputItemId: "stone",      outputItemId: "stone_block",   materialsPerBatch: 2, outputPerBatch: 1, tier: 1 },
-  { inputItemId: "copper_ore", outputItemId: "copper_ingot",  materialsPerBatch: 2, outputPerBatch: 1, tier: 2 },
-  { inputItemId: "iron_ore",   outputItemId: "iron_ingot",    materialsPerBatch: 2, outputPerBatch: 1, tier: 3 },
-  { inputItemId: "silver_ore", outputItemId: "silver_ingot",  materialsPerBatch: 2, outputPerBatch: 1, tier: 4 },
-  { inputItemId: "oak_wood",   outputItemId: "oak_plank",     materialsPerBatch: 2, outputPerBatch: 1, tier: 1 },
-  { inputItemId: "spruce_wood", outputItemId: "spruce_plank", materialsPerBatch: 2, outputPerBatch: 1, tier: 2 },
-  { inputItemId: "palm_wood",  outputItemId: "palm_plank",    materialsPerBatch: 2, outputPerBatch: 1, tier: 3 },
-  { inputItemId: "pine_wood",  outputItemId: "pine_plank",    materialsPerBatch: 2, outputPerBatch: 1, tier: 4 },
-];
-
 const BASE_SUCCESS_CHANCE = 0.62;
 const BASE_FEE_PER_BATCH = 10;
 const FEE_TIER_MULTIPLIER = 5;
 
 function getRecipe(rawMaterialId: string): ProcessingRecipe | null {
   const registry = getContentRegistry();
-  if (registry) {
-    const recipe = registry.findProcessingRecipeByInput(rawMaterialId);
-    if (recipe) {
-      return {
-        inputItemId: rawMaterialId,
-        outputItemId: recipe.itemOutputs[0]?.itemId ?? "",
-        materialsPerBatch: recipe.itemInputs[0]?.quantity ?? 2,
-        outputPerBatch: recipe.itemOutputs[0]?.quantity ?? 1,
-        tier: recipe.tierRequirement ?? 1,
-      };
-    }
+  if (!registry) return null;
+
+  const recipe = registry.findProcessingRecipeByInput(rawMaterialId);
+  if (recipe) {
+    return {
+      inputItemId: rawMaterialId,
+      outputItemId: recipe.itemOutputs[0]?.itemId ?? "",
+      materialsPerBatch: recipe.itemInputs[0]?.quantity ?? 2,
+      outputPerBatch: recipe.itemOutputs[0]?.quantity ?? 1,
+      tier: recipe.tierRequirement ?? 1,
+    };
   }
-  return DEFAULT_RECIPES.find((r) => r.inputItemId === rawMaterialId) ?? null;
+  return null;
 }
 
 function calculateSuccessChance(luckLevel: number): number {
@@ -136,6 +126,10 @@ export async function process(
   }
 
   // Resolve recipe
+  if (!getContentRegistry()) {
+    return ErrResult(new ProcessingError("CONTENT_NOT_LOADED", "Content registry is not loaded."));
+  }
+
   const recipe = getRecipe(rawMaterialId);
   if (!recipe) {
     return ErrResult(new ProcessingError("RECIPE_NOT_FOUND", `No processing recipe for "${rawMaterialId}"`));

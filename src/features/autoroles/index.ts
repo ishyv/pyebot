@@ -1,18 +1,18 @@
-import type { FeatureModule } from "@/core/feature";
+import { Event, Feature, SlashCommand } from "@/framework";
 import * as autoroleCmd from "./commands/autorole";
 import { register as registerJoin } from "./handlers/guildMemberAdd";
 import { register as registerReact } from "./handlers/messageReactionAdd";
 
-const autoroles: FeatureModule = {
-  id: "autoroles",
-  featureGate: "autoroles",
-  commands: [
-    { data: autoroleCmd.data, execute: autoroleCmd.execute },
-  ],
-  events: [
-    { event: "guildMemberAdd", register: registerJoin },
-    { event: "messageReactionAdd", register: registerReact },
-  ],
-};
+@Feature({ id: "autoroles", gate: "autoroles", intents: ["Guilds", "GuildMembers", "GuildMessageReactions"] })
+export default class AutorolesFeature {
+  @SlashCommand({ name: autoroleCmd.data.name, description: "Configure autoroles", data: autoroleCmd.data })
+  async autorole(...args: Parameters<typeof autoroleCmd.execute>): Promise<void> {
+    await autoroleCmd.execute(...args);
+  }
 
-export default autoroles;
+  @Event({ name: "guildMemberAdd", intents: ["GuildMembers"], register: registerJoin })
+  registerJoin(): void {}
+
+  @Event({ name: "messageReactionAdd", intents: ["GuildMessageReactions"], register: registerReact })
+  registerReaction(): void {}
+}

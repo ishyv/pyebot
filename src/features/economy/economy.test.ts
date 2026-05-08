@@ -19,6 +19,10 @@ function makeUser(overrides: Partial<User> = {}): User {
     openTickets: [],
     currency: {},
     inventory: {},
+    mod_notes: {},
+    quarantine_roles: {},
+    economyAccount: undefined,
+    rpgProfile: undefined,
     ...overrides,
   };
 }
@@ -36,7 +40,7 @@ const mockUpdatePaths = mock(
   async (
     _id: string,
     _paths: Record<string, unknown>,
-    _opts?: { upsert?: boolean },
+    _opts?: { upsert?: boolean; pipeline?: unknown[] },
   ) => OkResult(undefined as void),
 );
 
@@ -67,6 +71,8 @@ function makeEconomyAccount() {
     updatedAt: NOW,
     lastActivityAt: NOW,
     version: 0,
+    dailyStreak: 0,
+    lastDailyAt: null,
   };
 }
 
@@ -197,6 +203,8 @@ describe("ensureAccount", () => {
         updatedAt: capturedCreatedAt ?? NOW,
         lastActivityAt: capturedCreatedAt ?? NOW,
         version: 0,
+        dailyStreak: 0,
+        lastDailyAt: null,
       };
       return OkResult<User | null>(makeUser({ _id: "user-3", economyAccount }));
     });

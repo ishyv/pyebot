@@ -1,11 +1,10 @@
 /**
  * Runtime content schemas and inferred public content types.
  *
- * These Zod schemas validate loaded RPG content from typed built-in packs and
- * legacy JSON/JSON5 packs. Compile-time authoring constraints live in
- * content/authoring.ts; cross-record checks such as duplicate IDs and unknown
- * references live in content/validation.ts. Keep this file focused on the
- * shape of one record at a time.
+ * These Zod schemas validate RPG content records from the typed default pack.
+ * Compile-time authoring constraints live in content/authoring.ts; cross-record
+ * checks such as duplicate IDs and unknown references live in
+ * content/validation.ts. Keep this file focused on one record at a time.
  */
 import { z } from "zod";
 

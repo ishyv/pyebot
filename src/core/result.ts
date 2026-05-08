@@ -27,6 +27,7 @@ export type Result<T, E = Error> = Ok<T, E> | Err<T, E>;
 export class Ok<T, E> {
   readonly ok = true;
   readonly err = false;
+  readonly error: E = undefined as never;
 
   constructor(public readonly value: T) {}
 

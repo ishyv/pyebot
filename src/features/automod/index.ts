@@ -1,11 +1,11 @@
-import type { FeatureModule, ComponentInteraction } from "@/core/feature";
 import type { ButtonInteraction } from "discord.js";
+import { Button, Event, Feature, Job, SlashCommand } from "@/framework";
 import * as automodCmd from "./commands/automod";
 import { register as registerMessageCreate } from "./handlers/messageCreate";
-import { startCleanupInterval } from "./crossChannelSpam";
-import { startMentionSpamCleanup } from "./mentionSpam";
-import { startSlowmodeCleanup } from "./slowmode";
-import { registerRaidDetection, startRaidDetectionCleanup } from "./raidDetection";
+import { pruneCrossChannelSpam } from "./crossChannelSpam";
+import { pruneMentionSpam } from "./mentionSpam";
+import { pruneSlowmodeMessages } from "./slowmode";
+import { registerRaidDetection, pruneRaidDetectionHistory } from "./raidDetection";
 import {
   isSpamTimeout, handleSpamTimeout,
   isSpamBan, handleSpamBan,
@@ -16,49 +16,61 @@ import {
   isRaidDismiss, handleRaidDismiss,
 } from "./handlers/raidAlert";
 
-const automod: FeatureModule = {
-  id: "automod",
-  featureGate: "automod",
-  commands: [
-    { data: automodCmd.data, execute: automodCmd.execute },
-  ],
-  components: [
-    {
-      prefix: "automod:spam:timeout:",
-      matches: isSpamTimeout,
-      handle: (i: ComponentInteraction) => handleSpamTimeout(i as ButtonInteraction),
-    },
-    {
-      prefix: "automod:spam:ban:",
-      matches: isSpamBan,
-      handle: (i: ComponentInteraction) => handleSpamBan(i as ButtonInteraction),
-    },
-    {
-      prefix: "automod:spam:dismiss:",
-      matches: isSpamDismiss,
-      handle: (i: ComponentInteraction) => handleSpamDismiss(i as ButtonInteraction),
-    },
-    {
-      prefix: "automod:raid:lockdown:",
-      matches: isRaidLockdown,
-      handle: (i: ComponentInteraction) => handleRaidLockdown(i as ButtonInteraction),
-    },
-    {
-      prefix: "automod:raid:dismiss:",
-      matches: isRaidDismiss,
-      handle: (i: ComponentInteraction) => handleRaidDismiss(i as ButtonInteraction),
-    },
-  ],
-  events: [
-    { event: "messageCreate", register: registerMessageCreate },
-    { event: "guildMemberAdd", register: registerRaidDetection },
-  ],
-  onLoad() {
-    startCleanupInterval();
-    startMentionSpamCleanup();
-    startSlowmodeCleanup();
-    startRaidDetectionCleanup();
-  },
-};
+@Feature({ id: "automod", gate: "automod", intents: ["Guilds", "GuildMessages", "MessageContent", "GuildMembers"] })
+export default class AutomodFeature {
+  @SlashCommand({ name: automodCmd.data.name, description: "Configure automod", data: automodCmd.data })
+  async automod(...args: Parameters<typeof automodCmd.execute>): Promise<void> {
+    await automodCmd.execute(...args);
+  }
 
-export default automod;
+  @Button<ButtonInteraction>({ prefix: "automod:spam:timeout:", matches: isSpamTimeout })
+  async spamTimeout(interaction: ButtonInteraction): Promise<void> {
+    await handleSpamTimeout(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "automod:spam:ban:", matches: isSpamBan })
+  async spamBan(interaction: ButtonInteraction): Promise<void> {
+    await handleSpamBan(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "automod:spam:dismiss:", matches: isSpamDismiss })
+  async spamDismiss(interaction: ButtonInteraction): Promise<void> {
+    await handleSpamDismiss(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "automod:raid:lockdown:", matches: isRaidLockdown })
+  async raidLockdown(interaction: ButtonInteraction): Promise<void> {
+    await handleRaidLockdown(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "automod:raid:dismiss:", matches: isRaidDismiss })
+  async raidDismiss(interaction: ButtonInteraction): Promise<void> {
+    await handleRaidDismiss(interaction);
+  }
+
+  @Event({ name: "messageCreate", intents: ["GuildMessages", "MessageContent"], register: registerMessageCreate })
+  registerMessages(): void {}
+
+  @Event({ name: "guildMemberAdd", intents: ["GuildMembers"], register: registerRaidDetection })
+  registerRaidDetection(): void {}
+
+  @Job({ name: "automod-cross-channel-prune", everyMs: 5 * 60 * 1000, runOnReady: true })
+  pruneCrossChannel(): void {
+    pruneCrossChannelSpam();
+  }
+
+  @Job({ name: "automod-mention-prune", everyMs: 5 * 60 * 1000, runOnReady: true })
+  pruneMentions(): void {
+    pruneMentionSpam();
+  }
+
+  @Job({ name: "automod-slowmode-prune", everyMs: 5 * 60 * 1000, runOnReady: true })
+  pruneSlowmode(): void {
+    pruneSlowmodeMessages();
+  }
+
+  @Job({ name: "automod-raid-prune", everyMs: 5 * 60 * 1000, runOnReady: true })
+  pruneRaids(): void {
+    pruneRaidDetectionHistory();
+  }
+}

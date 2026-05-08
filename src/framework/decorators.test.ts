@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   Button,
+  compileFeatureClasses,
   compileFeatureClass,
-  compileFeatureModules,
   Event,
   Feature,
   SlashCommand,
-} from "@/framework";
+} from "@/framework/decorators";
 
 describe("decorator feature compiler", () => {
   test("compiles a decorated feature class into the existing feature module shape", () => {
@@ -40,7 +40,7 @@ describe("decorator feature compiler", () => {
       async same() {}
     }
 
-    expect(() => compileFeatureModules([OneFeature, TwoFeature])).toThrow(
+    expect(() => compileFeatureClasses([OneFeature, TwoFeature])).toThrow(
       'Command "same" is already registered',
     );
   });
@@ -58,8 +58,19 @@ describe("decorator feature compiler", () => {
       async second() {}
     }
 
-    expect(() => compileFeatureModules([OneFeature, TwoFeature])).toThrow(
+    expect(() => compileFeatureClasses([OneFeature, TwoFeature])).toThrow(
       'Component prefix "shared:" is already registered',
+    );
+  });
+
+  test("rejects old feature module objects instead of compiling them", () => {
+    const oldModule = {
+      id: "old-module",
+      commands: [],
+    };
+
+    expect(() => compileFeatureClasses([oldModule as never])).toThrow(
+      'Feature source at index 0 must be a decorated class.',
     );
   });
 

@@ -9,7 +9,7 @@ describe("atomicTransition", () => {
       attempts: 3,
       getInitial: async () => OkResult({ value: 10 }),
       getFresh: async (u) => OkResult(u),
-      getSnapshot: (u) => u.value,
+      getSnapshot: (u: { value: number }) => u.value,
       computeNext: (snapshot) => OkResult(snapshot + 5),
       commit: async (_expected, next) => {
         committed = true;
@@ -29,7 +29,7 @@ describe("atomicTransition", () => {
       attempts: 3,
       getInitial: async () => OkResult({ value: 0 }),
       getFresh: async (u) => OkResult({ value: u.value + 1 }),
-      getSnapshot: (u) => u.value,
+      getSnapshot: (u: { value: number }) => u.value,
       computeNext: (snapshot) => OkResult(snapshot + 10),
       commit: async (_expected, _next) => {
         attempts++;
@@ -107,8 +107,8 @@ describe("atomicTransition", () => {
     const result = await atomicTransition({
       attempts: 3,
       getInitial: async () => OkResult({ value: 0 }),
-      getFresh: async () => ErrResult(new Error("fresh error")),
-      getSnapshot: (u) => u.value,
+      getFresh: async () => ErrResult<{ value: number }, Error>(new Error("fresh error")),
+      getSnapshot: (u: { value: number }) => u.value,
       computeNext: (s) => OkResult(s),
       commit: async () => OkResult(null), // always triggers retry
       project: (_u, next) => next,

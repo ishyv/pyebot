@@ -1,11 +1,9 @@
 /**
- * Guild document schema and recovery defaults.
+ * Guild document schema and latest defaults.
  *
- * This schema parses persisted Mongo documents from live servers, so most
- * fields use Zod .catch() defaults to keep one bad or old config slice from
- * crashing the bot at startup or interaction time. Treat those defaults as
- * product behavior, not harmless type noise: changing them changes how legacy
- * or partially written guild documents heal themselves.
+ * tx is latest-only: missing fields receive explicit defaults for newly created
+ * documents, but malformed old top-level config slices should fail validation
+ * instead of being silently normalized.
  *
  * Feature-owned admin metadata lives in core/featureConfig.ts. This file owns
  * the durable shape and fallback policy only.
@@ -277,7 +275,7 @@ export const ModerationConfigSchema = z.object({
 export const GuildSchema = z.object({
   _id: z.string(),
   roles: GuildRolesSchema,
-  channels: GuildChannelsSchema.catch(() => ({
+  channels: GuildChannelsSchema.default(() => ({
     core: defaultCoreChannels(),
     managed: {},
     ticketMessageId: null,

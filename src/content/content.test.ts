@@ -25,7 +25,7 @@ import {
   buildRegistryFromPacks,
   loadContentRegistry,
 } from "@/content/registry";
-import type { LoadedContentPacks, SourcedItemDef, SourcedRecipeDef, SourcedDropTableDef, SourcedLocationDef } from "@/content/loader";
+import { loadContentPacks, type LoadedContentPacks, type SourcedItemDef, type SourcedRecipeDef, type SourcedDropTableDef, type SourcedLocationDef } from "@/content/loader";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -468,10 +468,16 @@ describe("typed content authoring helpers", () => {
   });
 
   test("default typed content pack loads through the registry", async () => {
-    const registry = await loadContentRegistry(undefined, { forceReload: true });
+    const registry = await loadContentRegistry({ forceReload: true });
     expect(registry.loadedFrom).toBe("typed:ashenmoor_default");
     expect(registry.getItem("stone")?.trait1).toBe("Density");
     expect(registry.getRecipe("stone_to_sharp")).not.toBeNull();
+  });
+
+  test("external content pack directories are not supported", async () => {
+    await expect(loadContentPacks("/tmp/tx-old-pack")).rejects.toThrow(
+      "External content pack directories are not supported.",
+    );
   });
 });
 

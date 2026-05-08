@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test, mock, beforeEach } from "bun:test";
-import { OkResult, ErrResult } from "@/core/result";
+import { OkResult } from "@/core/result";
 import type { User } from "@/db/schemas/user";
 import type { MarketListingDoc } from "@/db/schemas/market";
 
@@ -36,7 +36,7 @@ const NOW = new Date("2026-01-01T00:00:00.000Z");
 
 function makeAccountResult(userId: string, status: "ok" | "blocked" | "banned" = "ok") {
   return OkResult({
-    account: { userId, status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0 },
+    account: { userId, status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0, dailyStreak: 0, lastDailyAt: null },
     isNew: false,
   });
 }
@@ -61,6 +61,10 @@ function makeUser(currency: Record<string, number> = { coins: 500 }): User {
     sanction_history: {},
     openTickets: [],
     currency,
+    mod_notes: {},
+    quarantine_roles: {},
+    economyAccount: undefined,
+    rpgProfile: undefined,
     inventory: {},
   };
 }

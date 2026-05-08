@@ -4,18 +4,21 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { getContentRegistry } from "@/content/registry";
+import { DEFAULT_CONTENT_PACK } from "@/content/packs/default";
 import { craftItems } from "@/features/rpg/crafting/crafting-engine";
-import { getItemDef, ITEM_REGISTRY } from "@/features/rpg/crafting/item-registry";
 
 // Build dynamic choices — Discord limit is 25
-const contentItems = getContentRegistry()?.listItems() ?? Object.values(ITEM_REGISTRY);
+const contentItems = Object.values(DEFAULT_CONTENT_PACK.items);
 const choices = contentItems
-  .filter(item => item.sources.includes("gather") || item.sources.includes("craft"))
+  .filter((item) => {
+    const sources = item.sources as readonly string[];
+    return sources.includes("gather") || sources.includes("craft");
+  })
   .slice(0, 25)
   .map(item => ({ name: item.name, value: item.id }));
 
 function getCraftItemDef(id: string) {
-  return getContentRegistry()?.getItem(id) ?? getItemDef(id);
+  return getContentRegistry()?.getItem(id) ?? null;
 }
 
 const DISCOVERY_QUOTES = [

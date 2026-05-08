@@ -21,18 +21,13 @@ const channelMessages = new Map<string, number[]>();
 // Channels currently under forced slowmode (we set it; we should release it)
 const managedSlowmodes = new Map<string, ReturnType<typeof setTimeout>>();
 
-export function startSlowmodeCleanup(): void {
-  setInterval(
-    () => {
-      const cutoff = Date.now() - 5 * 60 * 1000;
-      for (const [key, entries] of channelMessages) {
-        const live = entries.filter((t) => t > cutoff);
-        if (live.length === 0) channelMessages.delete(key);
-        else channelMessages.set(key, live);
-      }
-    },
-    5 * 60 * 1000,
-  );
+export function pruneSlowmodeMessages(): void {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [key, entries] of channelMessages) {
+    const live = entries.filter((t) => t > cutoff);
+    if (live.length === 0) channelMessages.delete(key);
+    else channelMessages.set(key, live);
+  }
 }
 
 // ─── Main check ──────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import type { Client } from "discord.js";
-import type { FeatureModule, ComponentInteraction } from "@/core/feature";
 import type { ButtonInteraction } from "discord.js";
+import { Button, Event, Feature, Job, SlashCommand } from "@/framework";
 import * as banCmd from "./commands/ban";
 import * as kickCmd from "./commands/kick";
 import * as muteCmd from "./commands/mute";
@@ -43,63 +43,91 @@ async function sweepTempBans(client: Client): Promise<void> {
   }
 }
 
-// Moderation has no featureGate — it should always be available to servers.
-const moderation: FeatureModule = {
-  id: "moderation",
-  commands: [
-    { data: banCmd.data, execute: banCmd.execute },
-    { data: kickCmd.data, execute: kickCmd.execute },
-    { data: muteCmd.data, execute: muteCmd.execute },
-    { data: warnCmd.data, execute: warnCmd.execute },
-    { data: casesCmd.data, execute: casesCmd.execute },
-    { data: caseCmd.data, execute: caseCmd.execute },
-    { data: noteCmd.data, execute: noteCmd.execute },
-    { data: modsetCmd.data, execute: modsetCmd.execute },
-    { data: quarantineCmd.data, execute: quarantineCmd.execute },
-    { data: purgeCmd.data, execute: purgeCmd.execute },
-    { data: lockdownCmd.data, execute: lockdownCmd.execute },
-  ],
-  components: [
-    {
-      prefix: "mod:appeal:",
-      matches: isAppealButton,
-      handle: (i: ComponentInteraction) => handleAppealButton(i as ButtonInteraction),
-    },
-    {
-      prefix: "mod:appeal:approve:",
-      matches: isAppealApprove,
-      handle: (i: ComponentInteraction) => handleAppealApprove(i as ButtonInteraction),
-    },
-    {
-      prefix: "mod:appeal:deny:",
-      matches: isAppealDeny,
-      handle: (i: ComponentInteraction) => handleAppealDeny(i as ButtonInteraction),
-    },
-    {
-      prefix: "mod:verify:",
-      matches: isVerifyButton,
-      handle: (i: ComponentInteraction) => handleVerifyButton(i as ButtonInteraction),
-    },
-  ],
-  events: [
-    { event: "guildMemberAdd", register: registerVerification },
-    { event: "guildMemberAdd", register: registerAltDetection },
-  ],
-  onLoad() {
-    // Sweep expired temp bans every 60 seconds
-    setInterval(() => {
-      // We don't have the client here; sweeping requires the client — done in onReady instead
-    }, 60_000);
-  },
-  onReady(client: Client) {
-    // Sweep on startup to catch bans that expired during downtime
-    sweepTempBans(client).catch((err) => log.error("Startup temp ban sweep failed", err));
+@Feature({ id: "moderation", intents: ["Guilds", "GuildMembers", "GuildModeration"] })
+export default class ModerationFeature {
+  @SlashCommand({ name: banCmd.data.name, description: "Ban a user", data: banCmd.data })
+  async ban(...args: Parameters<typeof banCmd.execute>): Promise<void> {
+    await banCmd.execute(...args);
+  }
 
-    // Repeat every 60 seconds
-    setInterval(() => {
-      sweepTempBans(client).catch((err) => log.error("Temp ban sweep failed", err));
-    }, 60_000);
-  },
-};
+  @SlashCommand({ name: kickCmd.data.name, description: "Kick a user", data: kickCmd.data })
+  async kick(...args: Parameters<typeof kickCmd.execute>): Promise<void> {
+    await kickCmd.execute(...args);
+  }
 
-export default moderation;
+  @SlashCommand({ name: muteCmd.data.name, description: "Mute a user", data: muteCmd.data })
+  async mute(...args: Parameters<typeof muteCmd.execute>): Promise<void> {
+    await muteCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: warnCmd.data.name, description: "Warn a user", data: warnCmd.data })
+  async warn(...args: Parameters<typeof warnCmd.execute>): Promise<void> {
+    await warnCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: casesCmd.data.name, description: "View moderation cases", data: casesCmd.data })
+  async cases(...args: Parameters<typeof casesCmd.execute>): Promise<void> {
+    await casesCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: caseCmd.data.name, description: "View a moderation case", data: caseCmd.data })
+  async modCase(...args: Parameters<typeof caseCmd.execute>): Promise<void> {
+    await caseCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: noteCmd.data.name, description: "Manage moderation notes", data: noteCmd.data })
+  async note(...args: Parameters<typeof noteCmd.execute>): Promise<void> {
+    await noteCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: modsetCmd.data.name, description: "Configure moderation", data: modsetCmd.data })
+  async modset(...args: Parameters<typeof modsetCmd.execute>): Promise<void> {
+    await modsetCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: quarantineCmd.data.name, description: "Quarantine a user", data: quarantineCmd.data })
+  async quarantine(...args: Parameters<typeof quarantineCmd.execute>): Promise<void> {
+    await quarantineCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: purgeCmd.data.name, description: "Purge messages", data: purgeCmd.data })
+  async purge(...args: Parameters<typeof purgeCmd.execute>): Promise<void> {
+    await purgeCmd.execute(...args);
+  }
+
+  @SlashCommand({ name: lockdownCmd.data.name, description: "Lock down a channel", data: lockdownCmd.data })
+  async lockdown(...args: Parameters<typeof lockdownCmd.execute>): Promise<void> {
+    await lockdownCmd.execute(...args);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "mod:appeal:", matches: isAppealButton })
+  async appeal(interaction: ButtonInteraction): Promise<void> {
+    await handleAppealButton(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "mod:appeal:approve:", matches: isAppealApprove })
+  async appealApprove(interaction: ButtonInteraction): Promise<void> {
+    await handleAppealApprove(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "mod:appeal:deny:", matches: isAppealDeny })
+  async appealDeny(interaction: ButtonInteraction): Promise<void> {
+    await handleAppealDeny(interaction);
+  }
+
+  @Button<ButtonInteraction>({ prefix: "mod:verify:", matches: isVerifyButton })
+  async verify(interaction: ButtonInteraction): Promise<void> {
+    await handleVerifyButton(interaction);
+  }
+
+  @Event({ name: "guildMemberAdd", intents: ["GuildMembers"], register: registerVerification })
+  registerVerification(): void {}
+
+  @Event({ name: "guildMemberAdd", intents: ["GuildMembers"], register: registerAltDetection })
+  registerAltDetection(): void {}
+
+  @Job({ name: "temp-ban-sweep", everyMs: 60_000, runOnReady: true })
+  async sweepTempBans(client: Client): Promise<void> {
+    await sweepTempBans(client);
+  }
+}

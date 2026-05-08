@@ -146,18 +146,3 @@ export function buildSafeUpsertUpdate<TSchema>(
 
   return nextUpdate;
 }
-
-/**
- * Normalises a MongoDB findOneAndUpdate result.
- * The native driver (v5+) returns the document directly; legacy wrappers return `{ value: doc }`.
- * Returns `null` if the document was not found.
- */
-export function unwrapFindOneAndUpdateResult<T>(
-  result: T | { value?: T | null } | null | undefined,
-): T | null {
-  if (!result) return null;
-  if (typeof result === "object" && "value" in result) {
-    return (result as { value?: T | null }).value ?? null;
-  }
-  return result as T;
-}

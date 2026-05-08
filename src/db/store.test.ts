@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 
 // We test MongoStore's parse/default behavior by using a minimal schema
@@ -9,7 +9,6 @@ const TestSchema = z.object({
   name: z.string().catch("default_name"),
   count: z.number().int().catch(0),
 });
-type TestDoc = z.infer<typeof TestSchema>;
 
 describe("MongoStore (unit — schema behavior)", () => {
   test("schema applies defaults for missing fields", () => {

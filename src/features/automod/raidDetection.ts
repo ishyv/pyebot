@@ -39,18 +39,13 @@ interface JoinEntry {
 
 const joinHistory = new Map<string, JoinEntry[]>(); // guildId → entries
 
-export function startRaidDetectionCleanup(): void {
-  setInterval(
-    () => {
-      const cutoff = Date.now() - 5 * 60 * 1000;
-      for (const [key, entries] of joinHistory) {
-        const live = entries.filter((e) => e.ts > cutoff);
-        if (live.length === 0) joinHistory.delete(key);
-        else joinHistory.set(key, live);
-      }
-    },
-    5 * 60 * 1000,
-  );
+export function pruneRaidDetectionHistory(): void {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [key, entries] of joinHistory) {
+    const live = entries.filter((e) => e.ts > cutoff);
+    if (live.length === 0) joinHistory.delete(key);
+    else joinHistory.set(key, live);
+  }
 }
 
 // ─── Registration ─────────────────────────────────────────────────────────────

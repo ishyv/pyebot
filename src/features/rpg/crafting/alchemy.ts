@@ -1,10 +1,8 @@
 /**
  * Active runtime for Crucible alchemy.
  *
- * Unlike the deterministic recipe and item-registry shim files in this
- * directory, this module still owns live behavior: ingredient checks, AI-backed
- * discovery naming, discovery persistence, and inventory mutation for 3-item
- * alchemy crafts.
+ * Owns live Crucible behavior: ingredient checks, AI-backed discovery naming,
+ * discovery persistence, and inventory mutation for 3-item alchemy crafts.
  */
 import { OkResult, ErrResult, type Result } from "@/core/result";
 import { getContentRegistry } from "@/content/registry";
@@ -12,7 +10,6 @@ import type { Trait } from "@/content/schemas";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
 import { getDiscoveredRecipe, saveDiscoveredRecipe } from "@/db/repositories/rpg-discovery";
 import { generateResilientText } from "@/features/ai/service";
-import { ITEM_REGISTRY } from "./item-registry";
 
 export interface ItemData {
   id: string;
@@ -21,19 +18,8 @@ export interface ItemData {
   trait2: Trait;
 }
 
-/**
- * Convert from the full ItemDef registry to the lean ItemData the Crucible uses.
- * Also exported as BASE_ITEMS for backward compatibility with commands/tests.
- */
-export const BASE_ITEMS: Record<string, ItemData> = Object.fromEntries(
-  Object.entries(ITEM_REGISTRY).map(([key, def]) => [
-    key,
-    { id: def.id, name: def.name, trait1: def.trait1, trait2: def.trait2 },
-  ]),
-);
-
 function getAlchemyItem(itemId: string): ItemData | null {
-  const item = getContentRegistry()?.getItem(itemId) ?? ITEM_REGISTRY[itemId];
+  const item = getContentRegistry()?.getItem(itemId);
   if (!item) return null;
 
   return {

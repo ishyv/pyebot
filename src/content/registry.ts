@@ -251,10 +251,9 @@ let cachedRegistry: ContentRegistry | null = null;
 let cachedDir: string | null = null;
 
 export async function loadContentRegistry(
-  packDir?: string,
   options?: { forceReload?: boolean },
 ): Promise<ContentRegistry> {
-  const cacheKey = packDir ?? "typed:default";
+  const cacheKey = "typed:default";
   if (
     !options?.forceReload &&
     cachedRegistry &&
@@ -263,7 +262,7 @@ export async function loadContentRegistry(
     return cachedRegistry;
   }
 
-  const packs = await loadContentPacks(packDir);
+  const packs = await loadContentPacks();
   validateLoadedContent(packs);
   const registry = new RuntimeContentRegistry(packs);
   cachedRegistry = registry;
@@ -272,7 +271,7 @@ export async function loadContentRegistry(
 }
 
 export async function loadContentRegistryOrThrow(): Promise<ContentRegistry> {
-  return loadContentRegistry(undefined, { forceReload: true });
+  return loadContentRegistry({ forceReload: true });
 }
 
 export function getContentRegistry(): ContentRegistry | null {

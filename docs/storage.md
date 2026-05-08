@@ -25,10 +25,10 @@ This contract is intentionally smaller than MongoDB. Framework code should not d
 
 - `MemoryStorageAdapter` is for tests and throwaway local bots. It does not persist after process exit.
 - `FileStorageAdapter` writes one JSON file per collection and is useful for starter bots that need persistence without MongoDB.
-- Existing bundled tx-v2 features still use Mongo repositories during migration.
+- The bundled tx-v2 feature set still uses Mongo repositories where those features need Mongo-specific behavior.
 
 ## Mongo Boundary
 
 The full bundled bot still requires MongoDB because moderation, economy, RPG, tickets, offers, AI memory, autoroles, and admin panels have repository code built around Mongo collections.
 
-Migration rule: new repository work should depend on adapter interfaces first. Reach for raw Mongo only when the feature needs a Mongo-specific capability and document that decision at the module boundary.
+Rule: new framework-facing repository work should depend on adapter interfaces first. Reach for raw Mongo only when the feature needs a Mongo-specific capability and document that decision at the module boundary.

@@ -20,7 +20,7 @@ export {
   type FeatureConfigValidationIssue,
 } from "./featureConfig";
 export { listConfigurableFeatures, listFeatureCatalog, setFeatureCatalog } from "./featureCatalog";
-export type { FeatureModule, FeatureCommand, ComponentHandler, EventRegistration, CommandContext, MiddlewareFn } from "./feature";
+export type { RuntimeFeature, FeatureCommand, ComponentHandler, EventRegistration, CommandContext, MiddlewareFn } from "./feature";
 export { FeatureRegistry } from "./registry";
 export { runMiddleware } from "./middleware";
 export { createDispatcher } from "./dispatcher";

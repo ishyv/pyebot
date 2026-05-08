@@ -25,18 +25,13 @@ const log = createLogger("automod:mention-spam");
 
 const mentionHistory = new Map<string, Array<{ count: number; ts: number }>>();
 
-export function startMentionSpamCleanup(): void {
-  setInterval(
-    () => {
-      const cutoff = Date.now() - 5 * 60 * 1000;
-      for (const [key, entries] of mentionHistory) {
-        const live = entries.filter((e) => e.ts > cutoff);
-        if (live.length === 0) mentionHistory.delete(key);
-        else mentionHistory.set(key, live);
-      }
-    },
-    5 * 60 * 1000,
-  );
+export function pruneMentionSpam(): void {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [key, entries] of mentionHistory) {
+    const live = entries.filter((e) => e.ts > cutoff);
+    if (live.length === 0) mentionHistory.delete(key);
+    else mentionHistory.set(key, live);
+  }
 }
 
 // ─── Main check ──────────────────────────────────────────────────────────────

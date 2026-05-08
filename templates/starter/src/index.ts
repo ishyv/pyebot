@@ -9,7 +9,7 @@ const bot = createBot({
   name: "tx-v2-starter",
   features: [HelloFeature],
   storage: new MemoryStorageAdapter(),
-  token: process.env.TOKEN ?? process.env.DISCORD_TOKEN,
+  token: process.env.DISCORD_TOKEN,
   clientId: process.env.CLIENT_ID,
   guildId: process.env.GUILD_ID,
 });

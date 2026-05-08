@@ -6,7 +6,7 @@ import { createDispatcher } from "@/core/dispatcher";
 import { setFeatureCatalog } from "@/core/featureCatalog";
 import { createLogger } from "@/core/logger";
 import { FeatureRegistry } from "@/core/registry";
-import { compileFeatureModules, type FeatureSource } from "@/framework/decorators";
+import { compileFeatureClasses, type FeatureConstructor } from "@/framework/decorators";
 import type { StorageAdapter } from "@/framework/storage";
 
 const log = createLogger("framework:bot");
@@ -16,9 +16,8 @@ export interface CreateBotOptions {
   readonly token?: string;
   readonly clientId?: string;
   readonly guildId?: string;
-  readonly features: readonly FeatureSource[];
+  readonly features: readonly FeatureConstructor[];
   readonly storage?: StorageAdapter;
-  readonly contentDir?: string;
   readonly loadContent?: boolean;
   readonly registerCommands?: boolean;
   readonly connectMongo?: boolean;
@@ -33,7 +32,7 @@ export interface BotApplication {
 }
 
 export function createBot(options: CreateBotOptions): BotApplication {
-  const modules = compileFeatureModules(options.features);
+  const modules = compileFeatureClasses(options.features);
   const registry = new FeatureRegistry();
   for (const mod of modules) registry.register(mod);
   setFeatureCatalog(registry.allFeatures());
@@ -62,7 +61,7 @@ export function createBot(options: CreateBotOptions): BotApplication {
       }
 
       if (shouldLoadContent(options)) {
-        const reg = await loadContentRegistry(options.contentDir);
+        const reg = await loadContentRegistry();
         log.info(`Content registry loaded from ${reg.loadedFrom}`);
       }
 
@@ -72,8 +71,8 @@ export function createBot(options: CreateBotOptions): BotApplication {
         });
       }
 
-      const token = options.token ?? process.env.TOKEN ?? process.env.DISCORD_TOKEN;
-      if (!token) throw new Error("TOKEN or DISCORD_TOKEN environment variable is not set.");
+      const token = options.token ?? process.env.DISCORD_TOKEN;
+      if (!token) throw new Error("DISCORD_TOKEN environment variable is not set.");
 
       client.once(Events.ClientReady, async (readyClient) => {
         log.info(`${options.name} logged in as ${readyClient.user.tag}`);
@@ -114,7 +113,6 @@ export function createBot(options: CreateBotOptions): BotApplication {
 
 function shouldLoadContent(options: CreateBotOptions): boolean {
   if (options.loadContent !== undefined) return options.loadContent;
-  if (options.contentDir) return true;
   return options.connectMongo ?? !options.storage;
 }
 

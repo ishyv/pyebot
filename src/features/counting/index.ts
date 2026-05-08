@@ -1,18 +1,14 @@
-import type { FeatureModule } from "@/core/feature";
+import { Event, Feature } from "@/framework";
 import { register as registerMessageCreate } from "./handlers/messageCreate";
 import { countingFeatureConfig } from "./config";
 
-const counting: FeatureModule = {
+@Feature({
   id: "counting",
-  featureGate: "counting",
+  gate: "counting",
   config: countingFeatureConfig,
-  capabilities: {
-    discordIntents: ["GuildMessages", "MessageContent"],
-  },
-  commands: [],
-  events: [
-    { event: "messageCreate", register: registerMessageCreate },
-  ],
-};
-
-export default counting;
+  intents: ["GuildMessages", "MessageContent"],
+})
+export default class CountingFeature {
+  @Event({ name: "messageCreate", intents: ["GuildMessages", "MessageContent"], register: registerMessageCreate })
+  registerMessages(): void {}
+}

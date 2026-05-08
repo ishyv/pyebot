@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import tickets from "@/features/tickets";
+import { compileFeatureClass } from "@/framework/decorators";
 
-describe("tickets feature module", () => {
-  test("is exported through the decorator compiler", () => {
-    expect(tickets.id).toBe("tickets");
-    expect(tickets.featureGate).toBe("tickets");
-    expect(tickets.commands.map((command) => command.data.name)).toEqual(["ticket"]);
-    expect(tickets.components?.[0]?.matches("tickets:close:123")).toBe(true);
+describe("tickets decorated feature", () => {
+  test("compiles into the runtime registry shape", () => {
+    const feature = compileFeatureClass(tickets);
+
+    expect(feature.id).toBe("tickets");
+    expect(feature.featureGate).toBe("tickets");
+    expect(feature.commands.map((command) => command.data.name)).toEqual(["ticket"]);
+    expect(feature.components?.[0]?.matches("tickets:close:123")).toBe(true);
   });
 });

@@ -10,7 +10,7 @@
 import type { Collection, Document, Filter, FindOptions, UpdateFilter } from "mongodb";
 import type { ZodSchema } from "zod";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { buildSafeUpsertUpdate, unwrapFindOneAndUpdateResult } from "./helpers";
+import { buildSafeUpsertUpdate } from "./helpers";
 import { getDb } from "@/core/db";
 
 export class MongoStore<T extends Document & { _id: string }> {
@@ -75,8 +75,8 @@ export class MongoStore<T extends Document & { _id: string }> {
         update as UpdateFilter<T>,
         { upsert: true, returnDocument: "after" },
       );
-      const doc = unwrapFindOneAndUpdateResult<T>(res as any);
-      return OkResult(this.parse(doc));
+      if (!res) return ErrResult(new Error(`Failed to ensure ${this.collectionName}:${id}`));
+      return OkResult(this.parse(res));
     } catch (error) { return ErrResult(this.mapError(error)); }
   }
 
@@ -90,8 +90,8 @@ export class MongoStore<T extends Document & { _id: string }> {
         update as UpdateFilter<T>,
         { upsert: true, returnDocument: "after" },
       );
-      const doc = unwrapFindOneAndUpdateResult<T>(res as any);
-      return OkResult(this.parse(doc));
+      if (!res) return ErrResult(new Error(`Failed to patch ${this.collectionName}:${id}`));
+      return OkResult(this.parse(res));
     } catch (error) { return ErrResult(this.mapError(error)); }
   }
 
@@ -114,8 +114,7 @@ export class MongoStore<T extends Document & { _id: string }> {
         { $set: { ...next, updatedAt: new Date() } as any },
         { returnDocument: "after" },
       );
-      const doc = unwrapFindOneAndUpdateResult<T>(res as any);
-      return OkResult(doc ? this.parse(doc) : null);
+      return OkResult(res ? this.parse(res) : null);
     } catch (error) { return ErrResult(this.mapError(error)); }
   }
 

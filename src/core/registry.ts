@@ -1,7 +1,7 @@
 /**
  * Feature registry.
  *
- * Holds all loaded FeatureModules and provides O(1) lookup for the dispatcher.
+ * Holds all loaded RuntimeFeatures and provides O(1) lookup for the dispatcher.
  * Built once during bootstrap from the feature manifest; read-only at runtime.
  *
  * Component handler lookup is a linear scan — there are only ~6 handlers and
@@ -9,16 +9,16 @@
  * handlers parse the customId before deciding). Correctness over micro-perf.
  */
 
-import type { FeatureModule, FeatureCommand, ComponentHandler } from "@/core/feature";
+import type { RuntimeFeature, FeatureCommand, ComponentHandler } from "@/core/feature";
 import { createLogger } from "@/core/logger";
 
 const log = createLogger("registry");
 
 export class FeatureRegistry {
-  private readonly features = new Map<string, FeatureModule>();
-  private readonly commandIndex = new Map<string, { feature: FeatureModule; command: FeatureCommand }>();
+  private readonly features = new Map<string, RuntimeFeature>();
+  private readonly commandIndex = new Map<string, { feature: RuntimeFeature; command: FeatureCommand }>();
 
-  register(mod: FeatureModule): void {
+  register(mod: RuntimeFeature): void {
     if (this.features.has(mod.id)) {
       throw new Error(`Feature "${mod.id}" is already registered.`);
     }
@@ -35,7 +35,7 @@ export class FeatureRegistry {
     log.info(`Registered feature "${mod.id}" (${mod.commands.length} commands, ${mod.components?.length ?? 0} components, ${mod.events?.length ?? 0} events)`);
   }
 
-  getCommand(name: string): { feature: FeatureModule; command: FeatureCommand } | undefined {
+  getCommand(name: string): { feature: RuntimeFeature; command: FeatureCommand } | undefined {
     return this.commandIndex.get(name);
   }
 
@@ -43,7 +43,7 @@ export class FeatureRegistry {
    * Finds the first ComponentHandler across all features whose matches() returns true.
    * Returns both the handler and its owning feature (for feature gating).
    */
-  getComponentHandler(customId: string): { feature: FeatureModule; handler: ComponentHandler } | undefined {
+  getComponentHandler(customId: string): { feature: RuntimeFeature; handler: ComponentHandler } | undefined {
     for (const feature of this.features.values()) {
       for (const handler of feature.components ?? []) {
         if (handler.matches(customId)) {
@@ -60,7 +60,7 @@ export class FeatureRegistry {
   }
 
   /** All features, in registration order. */
-  allFeatures(): FeatureModule[] {
+  allFeatures(): RuntimeFeature[] {
     return [...this.features.values()];
   }
 }

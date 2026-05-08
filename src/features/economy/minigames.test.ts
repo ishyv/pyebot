@@ -45,7 +45,7 @@ const NOW = new Date("2026-01-01T00:00:00.000Z");
 
 function makeAccountResult(userId: string, status: "ok" | "blocked" | "banned" = "ok") {
   return OkResult({
-    account: { userId, status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0 },
+    account: { userId, status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0, dailyStreak: 0, lastDailyAt: null },
     isNew: false,
   });
 }
@@ -70,6 +70,10 @@ function makeUser(currency: Record<string, number> = { coins: 200 }): User {
     sanction_history: {},
     openTickets: [],
     currency,
+    mod_notes: {},
+    quarantine_roles: {},
+    economyAccount: undefined,
+    rpgProfile: undefined,
     inventory: {},
   };
 }

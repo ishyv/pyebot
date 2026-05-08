@@ -1,29 +1,9 @@
 /**
- * Feature module contract.
+ * Compiled feature runtime contract.
  *
- * Each feature exports a plain FeatureModule object from its index.ts.
- * The framework wires everything: commands get uploaded, interactions get routed,
- * feature gates get enforced. No base classes, no decorators.
- *
- * See docs/features.md for the full guide. Minimal example:
- *
- * ```ts
- * // src/features/polls/index.ts
- * import type { FeatureModule } from "@/core/feature";
- * import * as pollCmd from "./commands/poll";
- *
- * const polls: FeatureModule = {
- *   id: "polls",
- *   featureGate: "polls",
- *   commands: [{ data: pollCmd.data, execute: pollCmd.execute }],
- * };
- * export default polls;
- * ```
- *
- * Then one line in src/features/manifest.ts:
- * ```ts
- * () => import("@/features/polls/index").then((m) => m.default),
- * ```
+ * Public bot authors write decorated classes from `src/framework`. Bootstrap
+ * compiles those classes into this explicit runtime shape so dispatch,
+ * lifecycle, feature gates, and admin config can stay simple and inspectable.
  */
 
 import type {
@@ -74,7 +54,7 @@ export type MiddlewareFn = (
 // ---------------------------------------------------------------------------
 
 export interface FeatureCommand {
-  /** SlashCommandBuilder (or compatible) with .name and .toJSON(). */
+  /** Slash command data with .name and .toJSON(). */
   readonly data: { name: string; toJSON(): unknown };
   readonly execute: (interaction: ChatInputCommandInteraction, ctx: CommandContext) => Promise<void>;
   /**
@@ -125,10 +105,10 @@ export interface FeatureCapabilities {
 }
 
 // ---------------------------------------------------------------------------
-// Feature module
+// Compiled feature
 // ---------------------------------------------------------------------------
 
-export interface FeatureModule {
+export interface RuntimeFeature {
   /**
    * Unique identifier. Used as the namespace for logging and bus subscriptions.
    * Convention: lowercase, no spaces (e.g. "economy", "rpg", "tickets").

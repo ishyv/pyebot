@@ -1,17 +1,13 @@
 /**
  * Crafting facade used by RPG commands.
  *
- * Deterministic recipes come from the content registry when available, with
- * legacy shim data as fallback. Three-item unknown combinations are delegated
- * to active Crucible alchemy. Do not classify this file as a compatibility
- * shim until deterministic crafting inventory ownership is settled.
+ * Deterministic recipes come from the loaded typed content registry. Three-item
+ * unknown combinations are delegated to active Crucible alchemy.
  */
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { getContentRegistry } from "@/content/registry";
 import type { SourcedRecipeDef } from "@/content/loader";
-import { CRAFTING_RECIPES } from "./recipes";
 import { craftInCrucible } from "./alchemy";
-import { getItemDef } from "./item-registry";
 
 export interface CraftingResult {
   outputId: string;
@@ -53,22 +49,18 @@ function toDeterministicRecipe(recipe: SourcedRecipeDef): DeterministicRecipe {
   };
 }
 
-function listDeterministicRecipes(): readonly DeterministicRecipe[] {
+function listDeterministicRecipes(): readonly DeterministicRecipe[] | null {
   const registry = getContentRegistry();
-  if (registry) {
-    return registry.listRecipesByType("crafting").map(toDeterministicRecipe);
-  }
-
-  return CRAFTING_RECIPES;
+  if (!registry) return null;
+  return registry.listRecipesByType("crafting").map(toDeterministicRecipe);
 }
 
 function getOutputItemName(itemId: string): string | null {
-  return getContentRegistry()?.getItem(itemId)?.name ?? getItemDef(itemId)?.name ?? null;
+  return getContentRegistry()?.getItem(itemId)?.name ?? null;
 }
 
 /**
  * The core engine that handles all crafting in Ashenmoor.
- * It favors deterministic recipes from recipes.ts, then falls back to AI alchemy for 3-item mixes.
  */
 export async function craftItems(
   userId: string,
@@ -80,9 +72,16 @@ export async function craftItems(
 
   // Sort item IDs to ensure consistency for lookups
   const sortedInputs = [...itemIds].sort();
+  const deterministicRecipes = listDeterministicRecipes();
+  if (!deterministicRecipes) {
+    return craftingErr({
+      code: "ENGINE_ERROR",
+      message: "Content registry is not loaded.",
+    });
+  }
 
   // 1. Check for deterministic recipes
-  const recipe = listDeterministicRecipes().find(r => {
+  const recipe = deterministicRecipes.find(r => {
     if (r.ingredients.length !== sortedInputs.length) return false;
     const sortedRecipeInputs = [...r.ingredients].sort();
     return sortedRecipeInputs.every((val, index) => val === sortedInputs[index]);

@@ -128,7 +128,7 @@ function checkInstall(nodeModulesPresent: boolean): DoctorCheck {
 }
 
 function checkToken(env: Record<string, string | undefined>): DoctorCheck {
-  const hasToken = hasValue(env.TOKEN) || hasValue(env.DISCORD_TOKEN);
+  const hasToken = hasValue(env.DISCORD_TOKEN);
   return hasToken
     ? {
         id: "discord-token",
@@ -141,7 +141,7 @@ function checkToken(env: Record<string, string | undefined>): DoctorCheck {
         label: "Discord token",
         status: "fail",
         message: "No Discord bot token was found.",
-        fix: "Set TOKEN or DISCORD_TOKEN in .env.",
+        fix: "Set DISCORD_TOKEN in .env.",
       };
 }
 

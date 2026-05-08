@@ -1,15 +1,14 @@
-import type { FeatureModule } from "@/core/feature";
+import { Event, Feature, SlashCommand } from "@/framework";
 import * as aiCmd from "./commands/ai";
 import { register as registerMessageCreate } from "./handlers/messageCreate";
 
-const ai: FeatureModule = {
-  id: "ai",
-  commands: [
-    { data: aiCmd.data, execute: aiCmd.execute },
-  ],
-  events: [
-    { event: "messageCreate", register: registerMessageCreate },
-  ],
-};
+@Feature({ id: "ai", intents: ["Guilds", "GuildMessages", "MessageContent"] })
+export default class AiFeature {
+  @SlashCommand({ name: aiCmd.data.name, description: "Configure AI", data: aiCmd.data })
+  async ai(...args: Parameters<typeof aiCmd.execute>): Promise<void> {
+    await aiCmd.execute(...args);
+  }
 
-export default ai;
+  @Event({ name: "messageCreate", intents: ["GuildMessages", "MessageContent"], register: registerMessageCreate })
+  registerMessages(): void {}
+}

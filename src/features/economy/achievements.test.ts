@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test, mock, beforeEach } from "bun:test";
-import { OkResult, ErrResult } from "@/core/result";
+import { OkResult } from "@/core/result";
 import type { User } from "@/db/schemas/user";
 import type { AchievementProgressDoc, UnlockedAchievementDoc } from "@/db/schemas/achievement";
 
@@ -20,6 +20,10 @@ function makeUser(currency: Record<string, number> = { coins: 100 }): User {
     sanction_history: {},
     openTickets: [],
     currency,
+    mod_notes: {},
+    quarantine_roles: {},
+    economyAccount: undefined,
+    rpgProfile: undefined,
     inventory: {},
   };
 }

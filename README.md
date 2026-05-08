@@ -22,7 +22,7 @@ bun run dev
 Edit `.env`:
 
 ```env
-TOKEN=your_discord_bot_token
+DISCORD_TOKEN=your_discord_bot_token
 CLIENT_ID=your_discord_application_client_id
 GUILD_ID=optional_dev_guild_id
 
@@ -57,16 +57,16 @@ const bot = createBot({
 await bot.start();
 ```
 
-The current bundled tx-v2 bot still lives under `src/features/**`. It is being migrated through the same framework runtime; legacy feature modules are supported during the transition.
+The bundled tx-v2 bot also lives on the same decorated feature-class runtime. tx is latest-only: old feature module objects, old env aliases, old JSON content packs, and old persisted data shapes are not supported.
 
 ## Project Map
 
 - `src/framework/**` — public framework runtime: decorators, `createBot`, storage adapters, doctor checks.
-- `src/core/**` — legacy compatibility core used by the bundled bot while migration continues.
+- `src/core/**` — internal runtime services used by the framework compiler, dispatcher, repositories, and bundled features.
 - `src/features/**` — bundled moderation, economy, RPG, AI, tickets, offers, automod, autoroles, admin panels, and counting features.
 - `src/content/**` — typed RPG content pack runtime and authoring helpers.
 - `templates/starter/**` — starter project shape for new bots.
-- `docs/**` — feature authoring, content authoring, storage, and migration notes.
+- `docs/**` — feature authoring, content authoring, storage, and latest-only policy notes.
 
 ## Commands
 
@@ -89,19 +89,13 @@ This repository currently uses Bun as the supported runtime. Node support is not
 - No hidden registration soup: features declare commands, components, events, config, intents, and jobs in one place.
 - Source comments explain policy and boundaries, not every obvious line of code.
 
-## Current Migration State
+## Latest-Only Policy
 
-Implemented now:
+tx does not preserve compatibility with previous framework versions. When the framework shape changes, old authoring APIs and old data loaders are removed instead of bridged. Keep rollback through git checkpoints, not runtime compatibility branches.
 
-- Baseline checkpoint branch.
-- `bun run doctor`.
-- Decorator-class feature API.
-- `createBot` runtime bridge.
-- Memory and file storage adapters.
-- Legacy feature-module compatibility.
+Current public authoring surface:
 
-Still being migrated:
-
-- Converting every bundled feature to decorated classes.
-- Moving all repository code onto storage adapters.
-- Splitting the largest legacy feature files.
+- `createBot({ name, token, clientId, storage, features })`
+- decorated feature classes with `@Feature`, `@SlashCommand`, `@Button`, `@Select`, `@Modal`, `@Event`, and `@Job`
+- typed content in `src/content/packs/default.ts`
+- `DISCORD_TOKEN` as the single Discord token environment key

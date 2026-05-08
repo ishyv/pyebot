@@ -44,6 +44,10 @@ function makeUser(currency: Record<string, number> = { coins: 100 }): User {
     sanction_history: {},
     openTickets: [],
     currency,
+    mod_notes: {},
+    quarantine_roles: {},
+    economyAccount: undefined,
+    rpgProfile: undefined,
     inventory: {},
   };
 }

@@ -28,7 +28,7 @@ import {
   type APIEmbedField,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import type { ComponentInteraction, FeatureModule } from "@/core/feature";
+import type { ComponentInteraction, RuntimeFeature } from "@/core/feature";
 import { getDb } from "@/core/db";
 import { listConfigurableFeatures } from "@/core/featureCatalog";
 import { buildConfigFieldPatch, getConfigPathValue, type FeatureConfigField } from "@/core/featureConfig";
@@ -291,7 +291,7 @@ function renderFeaturesPanel(session: PanelState, cfg: GuildConfig): PanelPayloa
 export function renderFeatureConfigPanel(
   session: PanelState,
   cfg: GuildConfig,
-  features: readonly FeatureModule[] = listConfigurableFeatures(),
+  features: readonly RuntimeFeature[] = listConfigurableFeatures(),
 ): PanelPayload {
   const configurable = features.filter((feature) => feature.config);
   const selectedFeature = selectFeatureConfigModule(configurable, session.selectedFeatureConfigId);
@@ -301,7 +301,7 @@ export function renderFeatureConfigPanel(
     .setCustomId(makePanelCustomId(session, "feature-config", "feature"))
     .setPlaceholder("Choose feature")
     .setDisabled(configurable.length === 0)
-    .addOptions((configurable.length ? configurable : [{ id: "none" } as FeatureModule]).slice(0, 25).map((feature) =>
+    .addOptions((configurable.length ? configurable : [{ id: "none" } as RuntimeFeature]).slice(0, 25).map((feature) =>
       new StringSelectMenuOptionBuilder()
         .setLabel(feature.id)
         .setDescription(feature.config ? `${Object.keys(feature.config.fields).length} configurable field(s)` : "No configurable features")
@@ -347,9 +347,9 @@ export function renderFeatureConfigPanel(
 }
 
 function selectFeatureConfigModule(
-  features: readonly FeatureModule[],
+  features: readonly RuntimeFeature[],
   selectedFeatureId: string | undefined,
-): FeatureModule | undefined {
+): RuntimeFeature | undefined {
   return features.find((feature) => feature.id === selectedFeatureId) ?? features[0];
 }
 
@@ -814,7 +814,7 @@ export async function applyFeatureConfigAction(
   interaction: ComponentInteraction,
   session: PanelState,
   action: string,
-  features: readonly FeatureModule[] = listConfigurableFeatures(),
+  features: readonly RuntimeFeature[] = listConfigurableFeatures(),
 ): Promise<boolean> {
   const configurable = features.filter((feature) => feature.config);
   if (interaction.isStringSelectMenu() && action === "feature") {
@@ -867,7 +867,7 @@ export async function applyFeatureConfigAction(
 
 async function writeFeatureConfigField(
   guildId: string,
-  feature: FeatureModule,
+  feature: RuntimeFeature,
   field: FeatureConfigField,
   value: unknown,
 ): Promise<void> {

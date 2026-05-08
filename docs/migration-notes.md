@@ -1,36 +1,17 @@
-# Framework Migration Notes
+# Latest-Only Notes
 
-This refactor is intentionally compatibility-first.
+tx does not keep runtime compatibility with previous framework versions. Use
+git checkpoints for rollback; do not add compatibility branches to startup,
+content loading, env parsing, or schema parsing.
 
-## Current Bridge
+Current boundaries:
 
-- `src/framework/**` is the new public framework surface.
-- `src/core/bootstrap.ts` now starts the bundled bot through `createBot`.
-- Existing `FeatureModule` objects still compile into the same runtime registry as decorated feature classes.
-- New code should use decorators; old modules can be migrated feature by feature.
+- Features are decorated classes passed to `createBot`.
+- Content comes from the typed default pack in `src/content/packs/default.ts`.
+- `DISCORD_TOKEN` is the only Discord token env key.
+- MongoDB reads use the current driver result shape.
+- Existing persisted data from older shapes should be reset or migrated outside
+  runtime before starting this version.
 
-## Migration Order
-
-1. Keep the baseline commit intact as the rollback point.
-2. Migrate features with small surface area first: tickets, offers, counting.
-3. Migrate high-risk shared surfaces after tests are expanded: admin panels, moderation, automod.
-4. Migrate economy/RPG after storage and content boundaries are stable.
-
-## Feature Checklist
-
-For each feature migration:
-
-- Declare `@Feature({ id, gate, intents, config })`.
-- Move commands to `@SlashCommand` methods.
-- Move buttons/selects/modals to typed component decorators with explicit prefixes.
-- Move client events to `@Event` and declare required intents.
-- Replace unmanaged intervals with `@Job`.
-- Keep feature-owned config beside the feature.
-- Add tests for command metadata, component parsing, and any storage behavior touched.
-
-## Known Deferred Work
-
-- Existing feature files are not all converted to classes yet.
-- Repository code still uses Mongo directly.
-- The admin panel runtime still has too much policy in large files.
-- Some baseline tests fail typecheck because fixtures lag behind current schema types.
+When removing an old path, delete the code, update the tests, and update the
+docs in the same change. Half-removed compatibility is just bloat with a hat.

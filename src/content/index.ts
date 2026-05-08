@@ -1,9 +1,6 @@
 export {
   loadContentPacks,
   loadDefaultContentPacks,
-  loadLegacyContentPacks,
-  DEFAULT_CONTENT_PACKS_DIR,
-  ContentLoadError,
   type LoadedContentPacks,
   type SourceMeta,
   type Sourced,

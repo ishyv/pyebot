@@ -3,14 +3,13 @@ import type {
   ComponentInteraction,
   EventRegistration,
   FeatureCommand,
-  FeatureModule,
+  RuntimeFeature,
   MiddlewareFn,
 } from "@/core/feature";
 import type { FeatureConfigDefinition } from "@/core/featureConfig";
 
 export type DiscordIntentName = string;
 export type FeatureConstructor<T extends object = object> = new () => T;
-export type FeatureSource = FeatureModule | FeatureConstructor;
 
 export interface FeatureOptions {
   readonly id: string;
@@ -30,6 +29,7 @@ export interface SlashCommandOptions {
 
 export interface ComponentOptions<TParsed = unknown> {
   readonly prefix: string;
+  readonly matches?: (customId: string) => boolean;
   readonly parse?: (customId: string) => TParsed;
 }
 
@@ -37,6 +37,7 @@ export interface EventOptions {
   readonly name: string;
   readonly intents?: readonly DiscordIntentName[];
   readonly once?: boolean;
+  readonly register?: (client: Client) => void;
 }
 
 export interface JobOptions {
@@ -139,7 +140,7 @@ export function Use(...middleware: readonly MiddlewareFn[]): ClassDecorator & Me
 
 export function compileFeatureClass<T extends object>(
   FeatureClass: FeatureConstructor<T>,
-): FeatureModule {
+): RuntimeFeature {
   const metadata = metadataByClass.get(FeatureClass);
   if (!metadata?.feature) {
     throw new Error(`Class "${FeatureClass.name}" is missing @Feature metadata.`);
@@ -166,7 +167,7 @@ export function compileFeatureClass<T extends object>(
 
   const components = metadata.components.map((component) => ({
     prefix: component.prefix,
-    matches: (customId: string) => customId.startsWith(component.prefix),
+    matches: component.matches ?? ((customId: string) => customId.startsWith(component.prefix)),
     handle: async (interaction: ComponentInteraction) => {
       const parsed = component.parse?.(interaction.customId);
       await invoke(instance, component.methodName, interaction, parsed);
@@ -177,6 +178,10 @@ export function compileFeatureClass<T extends object>(
     (event): EventRegistration => ({
       event: event.name,
       register: (client: Client) => {
+        if (event.register) {
+          event.register(client);
+          return;
+        }
         const register = event.once ? client.once.bind(client) : client.on.bind(client);
         register(event.name as never, async (...args: never[]) => {
           await invoke(instance, event.methodName, ...args);
@@ -201,12 +206,12 @@ export function compileFeatureClass<T extends object>(
       if (onReady) await onReady(client);
       for (const job of metadata.jobs) {
         if (job.runOnReady) {
-          Promise.resolve(invoke(instance, job.methodName)).catch((err) => {
+          Promise.resolve(invoke(instance, job.methodName, client)).catch((err) => {
             console.error(`[framework:job:${job.name}]`, err);
           });
         }
         const timer = setInterval(() => {
-          Promise.resolve(invoke(instance, job.methodName)).catch((err) => {
+          Promise.resolve(invoke(instance, job.methodName, client)).catch((err) => {
             console.error(`[framework:job:${job.name}]`, err);
           });
         }, job.everyMs);
@@ -222,10 +227,13 @@ export function compileFeatureClass<T extends object>(
   };
 }
 
-export function compileFeatureModules(sources: readonly FeatureSource[]): FeatureModule[] {
-  const modules = sources.map((source) =>
-    isFeatureModule(source) ? source : compileFeatureClass(source),
-  );
+export function compileFeatureClasses(sources: readonly FeatureConstructor[]): RuntimeFeature[] {
+  const modules = sources.map((source, index) => {
+    if (typeof source !== "function") {
+      throw new Error(`Feature source at index ${index} must be a decorated class.`);
+    }
+    return compileFeatureClass(source);
+  });
   validateUniqueFeatures(modules);
   validateUniqueCommands(modules);
   validateUniqueComponentPrefixes(modules);
@@ -303,7 +311,7 @@ function validateDeclaredIntents(
   }
 }
 
-function validateUniqueFeatures(modules: readonly FeatureModule[]): void {
+function validateUniqueFeatures(modules: readonly RuntimeFeature[]): void {
   const seen = new Set<string>();
   for (const mod of modules) {
     if (seen.has(mod.id)) {
@@ -313,7 +321,7 @@ function validateUniqueFeatures(modules: readonly FeatureModule[]): void {
   }
 }
 
-function validateUniqueCommands(modules: readonly FeatureModule[]): void {
+function validateUniqueCommands(modules: readonly RuntimeFeature[]): void {
   const seen = new Map<string, string>();
   for (const mod of modules) {
     for (const command of mod.commands) {
@@ -328,7 +336,7 @@ function validateUniqueCommands(modules: readonly FeatureModule[]): void {
   }
 }
 
-function validateUniqueComponentPrefixes(modules: readonly FeatureModule[]): void {
+function validateUniqueComponentPrefixes(modules: readonly RuntimeFeature[]): void {
   const seen = new Map<string, string>();
   for (const mod of modules) {
     for (const component of mod.components ?? []) {
@@ -343,6 +351,3 @@ function validateUniqueComponentPrefixes(modules: readonly FeatureModule[]): voi
   }
 }
 
-function isFeatureModule(source: FeatureSource): source is FeatureModule {
-  return typeof source === "object" && source !== null && "id" in source && "commands" in source;
-}

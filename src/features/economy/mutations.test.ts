@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test, mock, beforeEach } from "bun:test";
-import { OkResult, ErrResult } from "@/core/result";
+import { OkResult } from "@/core/result";
 import type { User } from "@/db/schemas/user";
 
 // ---------------------------------------------------------------------------
@@ -19,6 +19,10 @@ function makeUser(overrides: Partial<User> = {}): User {
     openTickets: [],
     currency: {},
     inventory: {},
+    mod_notes: {},
+    quarantine_roles: {},
+    economyAccount: undefined,
+    rpgProfile: undefined,
     ...overrides,
   };
 }
@@ -165,7 +169,7 @@ describe("adjustBalance", () => {
 
     const result = await adjustBalance("user-1", "coins", -50);
     expect(result.isErr()).toBe(true);
-    const error = result.error as MutationError;
+    const error = result.error as InstanceType<typeof MutationError>;
     expect(error).toBeInstanceOf(MutationError);
     expect(error.code).toBe("INSUFFICIENT_FUNDS");
     expect(mockUpdatePaths).not.toHaveBeenCalled();
@@ -187,7 +191,7 @@ describe("adjustBalance", () => {
   test("rejects invalid currency ID", async () => {
     const result = await adjustBalance("user-1", "INVALID!", 10);
     expect(result.isErr()).toBe(true);
-    const error = result.error as MutationError;
+    const error = result.error as InstanceType<typeof MutationError>;
     expect(error).toBeInstanceOf(MutationError);
     expect(error.code).toBe("INVALID_CURRENCY");
   });
@@ -195,7 +199,7 @@ describe("adjustBalance", () => {
   test("rejects zero delta", async () => {
     const result = await adjustBalance("user-1", "coins", 0);
     expect(result.isErr()).toBe(true);
-    const error = result.error as MutationError;
+    const error = result.error as InstanceType<typeof MutationError>;
     expect(error).toBeInstanceOf(MutationError);
     expect(error.code).toBe("INVALID_AMOUNT");
   });
@@ -228,7 +232,7 @@ describe("transfer", () => {
   test("rejects self-transfer", async () => {
     const result = await transfer("user-1", "user-1", "coins", 50);
     expect(result.isErr()).toBe(true);
-    const error = result.error as MutationError;
+    const error = result.error as InstanceType<typeof MutationError>;
     expect(error).toBeInstanceOf(MutationError);
     expect(error.code).toBe("SELF_TRANSFER");
   });
@@ -241,7 +245,7 @@ describe("transfer", () => {
 
     const result = await transfer("sender", "recipient", "coins", 100);
     expect(result.isErr()).toBe(true);
-    const error = result.error as MutationError;
+    const error = result.error as InstanceType<typeof MutationError>;
     expect(error).toBeInstanceOf(MutationError);
     expect(error.code).toBe("INSUFFICIENT_FUNDS");
   });
@@ -249,14 +253,14 @@ describe("transfer", () => {
   test("rejects invalid amount (zero)", async () => {
     const result = await transfer("sender", "recipient", "coins", 0);
     expect(result.isErr()).toBe(true);
-    const error = result.error as MutationError;
+    const error = result.error as InstanceType<typeof MutationError>;
     expect(error.code).toBe("INVALID_AMOUNT");
   });
 
   test("rejects invalid currency ID", async () => {
     const result = await transfer("sender", "recipient", "INVALID!", 50);
     expect(result.isErr()).toBe(true);
-    const error = result.error as MutationError;
+    const error = result.error as InstanceType<typeof MutationError>;
     expect(error.code).toBe("INVALID_CURRENCY");
   });
 });

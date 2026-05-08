@@ -4,8 +4,8 @@
  * content/schemas.ts validates the shape of individual records. This module
  * validates relationships between records after a pack is loaded: duplicate
  * IDs, unknown item/location/drop-table references, and recipe constraints.
- * Keeping these checks here lets typed built-in packs and legacy JSON5 packs
- * share the same runtime safety net.
+ * Keeping these checks here lets typed authoring stay focused on literal IDs
+ * while runtime validation enforces cross-record consistency before startup.
  */
 const DEFAULT_CURRENCY_IDS = new Set(["coins", "rep"]);
 

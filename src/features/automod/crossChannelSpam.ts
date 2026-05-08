@@ -44,19 +44,13 @@ function normalize(content: string): string {
     .trim();
 }
 
-/** Call once from onLoad — prunes stale entries every 5 minutes. */
-export function startCleanupInterval(): void {
-  setInterval(
-    () => {
-      const cutoff = Date.now() - 5 * 60 * 1000;
-      for (const [key, entries] of recentMessages) {
-        const live = entries.filter((e) => e.ts > cutoff);
-        if (live.length === 0) recentMessages.delete(key);
-        else recentMessages.set(key, live);
-      }
-    },
-    5 * 60 * 1000,
-  );
+export function pruneCrossChannelSpam(): void {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [key, entries] of recentMessages) {
+    const live = entries.filter((e) => e.ts > cutoff);
+    if (live.length === 0) recentMessages.delete(key);
+    else recentMessages.set(key, live);
+  }
 }
 
 // ─── Main check ──────────────────────────────────────────────────────────────

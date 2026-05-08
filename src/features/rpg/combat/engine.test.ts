@@ -16,7 +16,6 @@ import {
   generateSessionId,
   COMBAT_CONFIG,
   type ActiveCombatSession,
-  type CombatMove,
 } from "./engine";
 
 // ---------------------------------------------------------------------------
@@ -247,7 +246,6 @@ describe("resolveRound", () => {
 
     // Same seed but different round → different RNG inputs → likely different damage
     // (not guaranteed to differ, but for seed=12345 rounds 1 vs 2 they should)
-    const sameDamage = r1.p1Damage === r2.p1Damage && r1.p2Damage === r2.p2Damage;
     // This is a probabilistic test — just verify structure is correct
     expect(r1.roundNumber).toBe(1);
     expect(r2.roundNumber).toBe(2);

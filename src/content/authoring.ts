@@ -3,8 +3,8 @@
  *
  * These helpers intentionally duplicate some runtime schema concepts so the
  * default pack can fail during TypeScript checking when object keys, nested
- * IDs, or intra-pack references drift. Runtime validation still runs for
- * loaded packs, especially legacy JSON5 content that TypeScript cannot see.
+ * IDs, or intra-pack references drift. Runtime validation still runs at startup
+ * for cross-record invariants that are clearer outside the type system.
  */
 import type {
   DropTableDef,

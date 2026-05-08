@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { GuildSchema } from "./guild";
 
 describe("guild schema admin panel defaults", () => {
-  it("normalizes legacy panel config slices", () => {
+  it("builds the latest default panel config slices", () => {
     const guild = GuildSchema.parse({ _id: "guild-1" });
 
     expect(guild.channels.core.messageLogs).toBeNull();
@@ -14,6 +14,10 @@ describe("guild schema admin panel defaults", () => {
     expect(guild.economy.features.store).toBe(true);
     expect(guild.features.counting).toBe(true);
     expect(guild.counting.channelId).toBeNull();
+  });
+
+  it("rejects malformed old panel config slices", () => {
+    expect(() => GuildSchema.parse({ _id: "guild-1", channels: "general" })).toThrow();
   });
 
   it("accepts typed role policies", () => {
