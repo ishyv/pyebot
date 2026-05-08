@@ -4,6 +4,7 @@
  */
 
 import {
+  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
@@ -21,7 +22,8 @@ import {
   makeTicketChannelName,
   TicketError,
 } from "@/features/tickets/service";
-import { getGuild } from "@/db/repositories/guilds";
+import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
+import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 
 export const TICKET_CLOSE_BUTTON_PREFIX = "tickets:close:";
 
@@ -46,6 +48,23 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("close")
       .setDescription("Close the current ticket channel"),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("setup")
+      .setDescription("Setup the ticket system (Admin only)")
+      .addChannelOption((opt) =>
+        opt
+          .setName("category")
+          .setDescription("The category channel for tickets")
+          .addChannelTypes(ChannelType.GuildCategory)
+          .setRequired(true),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("panel")
+      .setDescription("Open the tickets configuration panel"),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -55,11 +74,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await handleOpen(interaction);
   } else if (sub === "close") {
     await handleClose(interaction);
+  } else if (sub === "setup") {
+    await handleSetup(interaction);
+  } else if (sub === "panel") {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "tickets");
   }
 }
 
 async function handleOpen(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guild = interaction.guild;
   if (!guild) {
@@ -140,7 +164,7 @@ async function handleOpen(interaction: ChatInputCommandInteraction): Promise<voi
 }
 
 async function handleClose(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guild = interaction.guild;
   const channel = interaction.channel;
@@ -180,4 +204,44 @@ async function handleClose(interaction: ChatInputCommandInteraction): Promise<vo
   await interaction.editReply({ embeds: [closingEmbed] });
 
   await closeTicket(guild, channel.id);
+}
+
+async function handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.editReply({ content: "This command can only be used in a server." });
+    return;
+  }
+
+  const member = interaction.member;
+  const isAdmin =
+    member &&
+    typeof member.permissions !== "string" &&
+    member.permissions.has(PermissionFlagsBits.Administrator);
+
+  if (!isAdmin) {
+    await interaction.editReply({ content: "Only administrators can setup the ticket system." });
+    return;
+  }
+
+  const category = interaction.options.getChannel("category", true);
+
+  const updateResult = await updateGuildPaths(guild.id, {
+    "channels.ticketCategoryId": category.id,
+  }, { upsert: true });
+
+  if (updateResult.isErr()) {
+    await interaction.editReply({ content: `Failed to save configuration: ${updateResult.error.message}` });
+    return;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(Colors.Green)
+    .setTitle("✅ Ticket System Configured")
+    .setDescription(`Tickets will now be created in the <#${category.id}> category.`)
+    .setFooter({ text: "Use /ticket open to test the system." });
+
+  await interaction.editReply({ embeds: [embed] });
 }

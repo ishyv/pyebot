@@ -7,6 +7,7 @@
  */
 
 import {
+  MessageFlags,
   type ButtonInteraction,
   PermissionFlagsBits,
   ModalBuilder,
@@ -54,17 +55,17 @@ export async function handleOfferReview(interaction: ButtonInteraction): Promise
 
 async function handleApprove(interaction: ButtonInteraction, offerId: string): Promise<void> {
   if (!requireModerator(interaction)) {
-    await interaction.reply({ content: "You need ManageGuild to review offers.", ephemeral: true });
+    await interaction.reply({ content: "You need ManageGuild to review offers.", flags: MessageFlags.Ephemeral });
     return;
   }
 
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.reply({ content: "Guild not found.", ephemeral: true });
+    await interaction.reply({ content: "Guild not found.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const result = await approveOffer(guild, offerId, interaction.user.id);
 
@@ -82,13 +83,13 @@ async function handleRejectOrChanges(
   type: "reject" | "changes",
 ): Promise<void> {
   if (!requireModerator(interaction)) {
-    await interaction.reply({ content: "You need ManageGuild to review offers.", ephemeral: true });
+    await interaction.reply({ content: "You need ManageGuild to review offers.", flags: MessageFlags.Ephemeral });
     return;
   }
 
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.reply({ content: "Guild not found.", ephemeral: true });
+    await interaction.reply({ content: "Guild not found.", flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -129,14 +130,14 @@ async function handleRejectOrChanges(
     if (result.isErr()) {
       await modalInteraction.reply({
         content: `Failed: ${result.error.message}`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     await modalInteraction.reply({
       content: type === "reject" ? "Offer rejected." : "Changes requested.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   } catch {
     // Modal timed out — user didn't submit

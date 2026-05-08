@@ -42,6 +42,8 @@ export const RpgProfileSchema = z.object({
   activeFightId: z.string().nullable().catch(null),
   starterKitType: StarterKitTypeSchema.nullable().catch(null),
   starterKitClaimedAt: z.coerce.date().nullable().catch(null),
+  stashSize: z.number().int().min(10).catch(20), // Initial stash size
+  activeExpeditionId: z.string().nullable().catch(null),
   createdAt: DateSchema,
   updatedAt: DateSchema,
   version: z.number().int().nonnegative().catch(0),

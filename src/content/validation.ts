@@ -1,6 +1,46 @@
-import type { LoadedContentPacks } from "@/content/loader";
-
+/**
+ * Cross-record validation for loaded content packs.
+ *
+ * content/schemas.ts validates the shape of individual records. This module
+ * validates relationships between records after a pack is loaded: duplicate
+ * IDs, unknown item/location/drop-table references, and recipe constraints.
+ * Keeping these checks here lets typed built-in packs and legacy JSON5 packs
+ * share the same runtime safety net.
+ */
 const DEFAULT_CURRENCY_IDS = new Set(["coins", "rep"]);
+
+interface SourceMeta {
+  readonly file: string;
+  readonly jsonPath: string;
+}
+
+interface SourcedEntry {
+  readonly id: string;
+  readonly __source: SourceMeta;
+}
+
+interface LoadedContentPacks {
+  readonly packDir: string;
+  readonly items: readonly SourcedEntry[];
+  readonly recipes: readonly (SourcedEntry & {
+    readonly type: string;
+    readonly craftingMethod?: string;
+    readonly itemInputs: readonly { readonly itemId: string }[];
+    readonly itemOutputs: readonly { readonly itemId: string }[];
+    readonly currencyInput?: { readonly currencyId: string };
+    readonly guildFee?: { readonly currencyId: string };
+  })[];
+  readonly dropTables: readonly (SourcedEntry & {
+    readonly action: string;
+    readonly locationId?: string;
+    readonly entries: readonly { readonly itemId: string }[];
+  })[];
+  readonly locations: readonly (SourcedEntry & {
+    readonly action: string;
+    readonly dropTableId?: string;
+    readonly materials: readonly string[];
+  })[];
+}
 
 export interface ValidationContext {
   /** Known item IDs from outside content packs (e.g. hardcoded inventory items). Defaults to empty set. */
@@ -65,8 +105,15 @@ export function validateLoadedContent(content: LoadedContentPacks, ctx: Validati
   const knownCurrencyIds = ctx.knownCurrencyIds ?? DEFAULT_CURRENCY_IDS;
   const knownDropTableIds = new Set(content.dropTables.map((table) => table.id));
   const knownLocationIds = new Set(content.locations.map((location) => location.id));
+  const dropTablesById = new Map(content.dropTables.map((table) => [table.id, table]));
 
   for (const recipe of content.recipes) {
+    if (recipe.type !== "crafting" && recipe.craftingMethod) {
+      issues.push(
+        `${sourceLabel(recipe)} $.craftingMethod is only valid for crafting recipes`,
+      );
+    }
+
     recipe.itemInputs.forEach((input, inputIndex) => {
       if (!knownItemIds.has(input.itemId)) {
         issues.push(
@@ -119,6 +166,13 @@ export function validateLoadedContent(content: LoadedContentPacks, ctx: Validati
     if (location.dropTableId && !knownDropTableIds.has(location.dropTableId)) {
       issues.push(
         `${sourceLabel(location)} $.dropTableId references unknown drop table '${location.dropTableId}'`,
+      );
+    }
+
+    const dropTable = location.dropTableId ? dropTablesById.get(location.dropTableId) : null;
+    if (dropTable && dropTable.action !== location.action) {
+      issues.push(
+        `${sourceLabel(location)} $.dropTableId references drop table '${dropTable.id}' with action '${dropTable.action}', expected '${location.action}'`,
       );
     }
 

@@ -14,6 +14,7 @@
 import type { FeatureModule } from "@/core/feature";
 
 export const featureFactories: Array<() => Promise<FeatureModule>> = [
+  () => import("@/features/adminPanels/index").then((m) => m.default),
   () => import("@/features/economy/index").then((m) => m.default),
   () => import("@/features/rpg/index").then((m) => m.default),
   () => import("@/features/moderation/index").then((m) => m.default),
@@ -22,4 +23,5 @@ export const featureFactories: Array<() => Promise<FeatureModule>> = [
   () => import("@/features/ai/index").then((m) => m.default),
   () => import("@/features/offers/index").then((m) => m.default),
   () => import("@/features/automod/index").then((m) => m.default),
+  () => import("@/features/counting/index").then((m) => m.default),
 ];

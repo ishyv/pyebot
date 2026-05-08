@@ -93,10 +93,18 @@ async function pushSanction(
   description: string,
   moderatorId: string,
   caseId: number,
+  moderatorRoleIds: readonly string[] = [],
 ): Promise<void> {
   await userStore.ensure(userId);
   const db = await getDb();
-  const entry: SanctionEntry = { type, description, date: new Date().toISOString(), caseId, moderatorId };
+  const entry: SanctionEntry & { moderatorRoleIds?: string[] } = {
+    type,
+    description,
+    date: new Date().toISOString(),
+    caseId,
+    moderatorId,
+    ...(moderatorRoleIds.length ? { moderatorRoleIds: [...moderatorRoleIds] } : {}),
+  };
   await db.collection("users").updateOne(
     { _id: userId } as never,
     {
@@ -104,6 +112,10 @@ async function pushSanction(
       $set: { updatedAt: new Date() },
     } as never,
   );
+}
+
+function moderationRoleSnapshot(member: GuildMember): string[] {
+  return [...member.roles.cache.filter((role) => !role.managed && role.id !== member.guild.id).keys()];
 }
 
 function validateTarget(
@@ -195,7 +207,7 @@ export async function ban(
 
   const caseId = await nextCaseId(guild.id);
   const durationLabel = duration ? ` (${duration})` : "";
-  await pushSanction(target.id, guild.id, "BAN", `${reason}${durationLabel}`, moderator.id, caseId).catch(() => {});
+  await pushSanction(target.id, guild.id, "BAN", `${reason}${durationLabel}`, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
 
   // Schedule auto-unban if duration provided
   if (duration && TEMP_BAN_DURATION_MAP[duration]) {
@@ -270,7 +282,7 @@ export async function kick(
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "KICK", reason, moderator.id, caseId).catch(() => {});
+  await pushSanction(target.id, guild.id, "KICK", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "KICK",
@@ -324,7 +336,7 @@ export async function mute(
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`, moderator.id, caseId).catch(() => {});
+  await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "TIMEOUT",
@@ -355,7 +367,7 @@ export async function warn(
   if (validationErr) return ErrResult(validationErr);
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "WARN", reason, moderator.id, caseId).catch(() => {});
+  await pushSanction(target.id, guild.id, "WARN", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "WARN",
@@ -587,7 +599,7 @@ export async function quarantine(
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "RESTRICT", reason, moderator.id, caseId).catch(() => {});
+  await pushSanction(target.id, guild.id, "RESTRICT", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "RESTRICT",

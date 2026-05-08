@@ -17,6 +17,7 @@
  */
 
 import {
+  MessageFlags,
   SlashCommandBuilder,
   PermissionFlagsBits,
   EmbedBuilder,
@@ -25,6 +26,7 @@ import {
 } from "discord.js";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { DURATION_MAP } from "@/features/moderation/service";
+import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 
 export const data = new SlashCommandBuilder()
   .setName("modset")
@@ -190,6 +192,9 @@ export const data = new SlashCommandBuilder()
   // ── Status ────────────────────────────────────────────────────────────────
   .addSubcommand((sub) =>
     sub.setName("status").setDescription("Show full moderation configuration"),
+  )
+  .addSubcommand((sub) =>
+    sub.setName("panel").setDescription("Open the moderation configuration panel"),
   );
 
 // ---------------------------------------------------------------------------
@@ -198,11 +203,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "Server only.", ephemeral: true });
+    await interaction.reply({ content: "Server only.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const group = interaction.options.getSubcommandGroup(false);
   const sub = interaction.options.getSubcommand();
@@ -213,6 +218,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (sub === "appeals-channel") return handleAppealsChannel(interaction, guildId);
     if (sub === "alt-detection") return handleAltDetection(interaction, guildId);
     if (sub === "status") return handleStatus(interaction, guildId);
+    if (sub === "panel") {
+      if (!(await assertPanelPermission(interaction))) return;
+      return openAdminPanel(interaction, "moderation");
+    }
   }
 
   if (group === "escalation") {

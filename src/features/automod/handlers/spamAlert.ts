@@ -9,6 +9,7 @@
  */
 
 import {
+  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -56,7 +57,7 @@ async function disableButtons(interaction: ButtonInteraction): Promise<void> {
 // ─── Timeout ─────────────────────────────────────────────────────────────────
 
 export async function handleSpamTimeout(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
 
   const userId = interaction.customId.slice(SPAM_TIMEOUT_PREFIX.length);
@@ -78,7 +79,7 @@ export async function handleSpamTimeout(interaction: ButtonInteraction): Promise
 // ─── Ban ─────────────────────────────────────────────────────────────────────
 
 export async function handleSpamBan(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
 
   const userId = interaction.customId.slice(SPAM_BAN_PREFIX.length);
@@ -102,7 +103,7 @@ export async function handleSpamBan(interaction: ButtonInteraction): Promise<voi
 // ─── Dismiss ─────────────────────────────────────────────────────────────────
 
 export async function handleSpamDismiss(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
   await interaction.editReply({ content: "Alert dismissed. No further action taken." });
 }

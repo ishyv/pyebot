@@ -2,9 +2,17 @@
  * Shared formatting utilities for user-facing Discord messages.
  */
 
-/** Format a coin amount: `1,234 coins` */
+export const CURRENCY_EMOJIS: Record<string, string> = {
+  coins: "🪙",
+  gems: "💎",
+  tokens: "🎟️",
+};
+
+/** Format a coin amount: `🪙 1,234 Coins` */
 export function coins(n: number, currencyId = "coins"): string {
-  return `${n.toLocaleString()} ${currencyId}`;
+  const emoji = CURRENCY_EMOJIS[currencyId.toLowerCase()] ?? "💰";
+  const label = currencyId.charAt(0).toUpperCase() + currencyId.slice(1);
+  return `${emoji} ${n.toLocaleString()} ${label}`;
 }
 
 /** Discord relative timestamp from a future ms epoch: `<t:1234567890:R>` */

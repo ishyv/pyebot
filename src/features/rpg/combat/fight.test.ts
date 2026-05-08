@@ -133,7 +133,7 @@ describe("initiateFight", () => {
 
   test("rejects self-combat", async () => {
     const result = await initiateFight("p1", "p1");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("SELF_COMBAT");
   });
@@ -142,7 +142,7 @@ describe("initiateFight", () => {
     profileStore.set("p1", makeProfile({ isFighting: true }));
 
     const result = await initiateFight("p1", "p2");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("IN_COMBAT");
   });
@@ -151,7 +151,7 @@ describe("initiateFight", () => {
     profileStore.set("p2", makeProfile({ isFighting: true }));
 
     const result = await initiateFight("p1", "p2");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("IN_COMBAT");
   });
@@ -195,7 +195,7 @@ describe("acceptFight", () => {
 
   test("rejects when session not found", async () => {
     const result = await acceptFight("nonexistent", "p2");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("SESSION_NOT_FOUND");
   });
@@ -257,15 +257,15 @@ describe("submitMove", () => {
     await submitMove(sessionId, "p1", "attack");
 
     const result = await submitMove(sessionId, "p1", "block");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("ALREADY_MOVED");
   });
 
-  test("rejects when not a participant", async () => {
+  test("rejects when outsider submits move", async () => {
     const sessionId = await startActiveFight();
     const result = await submitMove(sessionId, "outsider", "attack");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("NOT_YOUR_FIGHT");
   });
@@ -318,7 +318,7 @@ describe("forfeit", () => {
 
   test("returns SESSION_NOT_FOUND for unknown session", async () => {
     const result = await forfeit("nonexistent", "p1");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("SESSION_NOT_FOUND");
   });
@@ -326,7 +326,7 @@ describe("forfeit", () => {
   test("returns NOT_YOUR_FIGHT for non-participant", async () => {
     const { sessionId } = (await initiateFight("p1", "p2")).unwrap();
     const result = await forfeit(sessionId, "outsider");
-    expect(result.isErr()).toBe(true);
+    if (result.isOk()) throw new Error("Expected error but got Ok");
     const err = result.error as InstanceType<typeof FightError>;
     expect(err.code).toBe("NOT_YOUR_FIGHT");
   });

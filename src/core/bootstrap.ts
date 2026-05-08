@@ -13,12 +13,13 @@
  * 9. On ready: upload slash commands via REST, call onReady() on each feature
  */
 
-import { REST, Routes } from "discord.js";
+import { Events, REST, Routes } from "discord.js";
 import { getDb, disconnectDb } from "@/core/db";
 import { createClient } from "@/core/client";
 import { createLogger } from "@/core/logger";
 import { FeatureRegistry } from "@/core/registry";
 import { createDispatcher } from "@/core/dispatcher";
+import { setFeatureCatalog } from "@/core/featureCatalog";
 import { loadContentRegistry } from "@/content/registry";
 import { featureFactories } from "@/features/manifest";
 
@@ -39,7 +40,8 @@ export async function bootstrap(): Promise<void> {
       log.info(`Content registry loaded from ${reg.loadedFrom}`);
     }
   } else {
-    log.info("CONTENT_PACKS_DIR not set — running without content packs.");
+    const reg = await loadContentRegistry();
+    log.info(`Typed content registry loaded from ${reg.loadedFrom}`);
   }
 
   // 3. Load features
@@ -57,6 +59,7 @@ export async function bootstrap(): Promise<void> {
       await mod.onLoad();
     }
   }
+  setFeatureCatalog(registry.allFeatures());
 
   // 4. Create client
   const client = createClient();
@@ -93,7 +96,7 @@ export async function bootstrap(): Promise<void> {
   await client.login(token);
 
   // 9. Ready
-  client.once("ready", async (c) => {
+  client.once(Events.ClientReady, async (c) => {
     log.info(`Logged in as ${c.user.tag}`);
 
     for (const feature of registry.allFeatures()) {

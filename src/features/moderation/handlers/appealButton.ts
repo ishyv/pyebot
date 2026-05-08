@@ -10,6 +10,7 @@
  */
 
 import {
+  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -60,7 +61,7 @@ async function disableAppealButtons(interaction: ButtonInteraction, _label: stri
 // ─── Step 1: User clicks appeal in their DM ──────────────────────────────────
 
 export async function handleAppealButton(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.customId.slice(APPEAL_PREFIX.length);
 
@@ -130,7 +131,7 @@ export async function handleAppealButton(interaction: ButtonInteraction): Promis
 // ─── Step 2a: Mod approves appeal ────────────────────────────────────────────
 
 export async function handleAppealApprove(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableAppealButtons(interaction, "Approved");
 
   const [userId, guildId] = interaction.customId.slice(APPEAL_APPROVE_PREFIX.length).split(":");
@@ -158,7 +159,7 @@ export async function handleAppealApprove(interaction: ButtonInteraction): Promi
 // ─── Step 2b: Mod denies appeal ───────────────────────────────────────────────
 
 export async function handleAppealDeny(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableAppealButtons(interaction, "Denied");
 
   await interaction.editReply({ content: "Appeal denied." });

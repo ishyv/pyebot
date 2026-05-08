@@ -1,5 +1,7 @@
 export {
   loadContentPacks,
+  loadDefaultContentPacks,
+  loadLegacyContentPacks,
   DEFAULT_CONTENT_PACKS_DIR,
   ContentLoadError,
   type LoadedContentPacks,
@@ -10,6 +12,16 @@ export {
   type SourcedDropTableDef,
   type SourcedLocationDef,
 } from "@/content/loader";
+
+export {
+  defineContentPack,
+  defineItems,
+  defineRecipes,
+  defineDropTables,
+  defineLocations,
+  materializeContentPack,
+  type DefinedContentPack,
+} from "@/content/authoring";
 
 export {
   validateLoadedContent,
@@ -34,6 +46,10 @@ export {
   ContentIdSchema,
   ProfessionSchema,
   GatherActionSchema,
+  TraitSchema,
+  ItemCategorySchema,
+  ItemRaritySchema,
+  ItemSourceSchema,
   MarketCategorySchema,
   MarketMetadataSchema,
   ItemDefSchema,
@@ -42,6 +58,10 @@ export {
   LocationDefSchema,
   type Profession,
   type GatherAction,
+  type Trait,
+  type ItemCategory,
+  type ItemRarity,
+  type ItemSource,
   type MarketCategory,
   type MarketMetadata,
   type ItemDef,

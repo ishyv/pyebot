@@ -38,6 +38,8 @@ import {
   type LocationDef,
   type RecipeDef,
 } from "@/content/schemas";
+import { materializeContentPack } from "@/content/authoring";
+import { DEFAULT_CONTENT_PACK } from "@/content/packs/default";
 
 const PACK_FILE_BASENAMES = {
   materials: "rpg.materials",
@@ -149,7 +151,11 @@ function sourceJoin(basePath: string, index: number): string {
   return `${basePath}[${index}]`;
 }
 
-export async function loadContentPacks(
+export async function loadDefaultContentPacks(): Promise<LoadedContentPacks> {
+  return materializeContentPack(DEFAULT_CONTENT_PACK);
+}
+
+export async function loadLegacyContentPacks(
   packDir: string = DEFAULT_CONTENT_PACKS_DIR,
 ): Promise<LoadedContentPacks> {
   const files = {
@@ -254,4 +260,14 @@ export async function loadContentPacks(
     dropTables: sourcedDropTables,
     locations: sourcedLocations,
   };
+}
+
+export async function loadContentPacks(
+  packDir?: string,
+): Promise<LoadedContentPacks> {
+  if (!packDir) {
+    return loadDefaultContentPacks();
+  }
+
+  return loadLegacyContentPacks(packDir);
 }

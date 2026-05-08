@@ -7,6 +7,14 @@ import {
   LocationDefSchema,
 } from "@/content/schemas";
 import {
+  defineContentPack,
+  defineDropTables,
+  defineItems,
+  defineLocations,
+  defineRecipes,
+  materializeContentPack,
+} from "@/content/authoring";
+import {
   validateLoadedContent,
   ContentValidationError,
   type ValidationContext,
@@ -15,6 +23,7 @@ import {
   getContentRegistry,
   resetContentRegistryForTests,
   buildRegistryFromPacks,
+  loadContentRegistry,
 } from "@/content/registry";
 import type { LoadedContentPacks, SourcedItemDef, SourcedRecipeDef, SourcedDropTableDef, SourcedLocationDef } from "@/content/loader";
 
@@ -30,6 +39,11 @@ function makeItem(id: string, overrides: Record<string, unknown> = {}): SourcedI
   return {
     id,
     name: `Item ${id}`,
+    category: "mineral",
+    rarity: "common",
+    trait1: "Density",
+    trait2: "None",
+    sources: ["gather"],
     description: `Description for ${id}`,
     ...makeSrc("test.json", `$.items[0]`),
     ...overrides,
@@ -122,6 +136,11 @@ describe("ItemDefSchema", () => {
     const result = ItemDefSchema.safeParse({
       id: "iron_ore",
       name: "Iron Ore",
+      category: "mineral",
+      rarity: "common",
+      trait1: "Density",
+      trait2: "None",
+      sources: ["gather"],
       description: "A chunk of iron ore.",
     });
     expect(result.success).toBe(true);
@@ -135,6 +154,11 @@ describe("ItemDefSchema", () => {
     const result = ItemDefSchema.safeParse({
       id: "iron_ore",
       name: "Iron Ore",
+      category: "mineral",
+      rarity: "common",
+      trait1: "Density",
+      trait2: "None",
+      sources: ["gather"],
       description: "A chunk of iron ore.",
       maxStack: 100,
       weight: 1.5,
@@ -153,6 +177,11 @@ describe("ItemDefSchema", () => {
     const result = ItemDefSchema.safeParse({
       id: "iron_ore",
       description: "A chunk of iron ore.",
+      category: "mineral",
+      rarity: "common",
+      trait1: "Density",
+      trait2: "None",
+      sources: ["gather"],
     });
     expect(result.success).toBe(false);
   });
@@ -161,6 +190,11 @@ describe("ItemDefSchema", () => {
     const result = ItemDefSchema.safeParse({
       id: "iron_ore",
       name: "Iron Ore",
+      category: "mineral",
+      rarity: "common",
+      trait1: "Density",
+      trait2: "None",
+      sources: ["gather"],
     });
     expect(result.success).toBe(false);
   });
@@ -169,6 +203,11 @@ describe("ItemDefSchema", () => {
     const result = ItemDefSchema.safeParse({
       id: "iron_ore",
       name: "Iron Ore",
+      category: "mineral",
+      rarity: "common",
+      trait1: "Density",
+      trait2: "None",
+      sources: ["gather"],
       description: "A chunk.",
       unknownField: true,
     });
@@ -272,6 +311,167 @@ describe("LocationDefSchema", () => {
       materials: ["iron_ore", "copper_ore"],
     });
     expect(result.success).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authoring.ts tests
+// ---------------------------------------------------------------------------
+
+describe("typed content authoring helpers", () => {
+  test("valid typed pack materializes into sourced content", () => {
+    const items = defineItems({
+      iron_ore: {
+        id: "iron_ore",
+        name: "Iron Ore",
+        category: "mineral",
+        rarity: "common",
+        trait1: "Density",
+        trait2: "None",
+        sources: ["gather"],
+        description: "A chunk of iron ore.",
+      },
+      iron_ingot: {
+        id: "iron_ingot",
+        name: "Iron Ingot",
+        category: "component",
+        rarity: "uncommon",
+        trait1: "Density",
+        trait2: "Sharpness",
+        sources: ["craft"],
+        description: "Refined iron.",
+      },
+    });
+
+    const locations = defineLocations<keyof typeof items & string, {
+      iron_mine: {
+        id: "iron_mine";
+        name: "Iron Mine";
+        action: "mine";
+        profession: "miner";
+        requiredTier: 1;
+        materials: ["iron_ore"];
+      };
+    }>({
+      iron_mine: {
+        id: "iron_mine",
+        name: "Iron Mine",
+        action: "mine",
+        profession: "miner",
+        requiredTier: 1,
+        materials: ["iron_ore"],
+      },
+    });
+
+    const pack = defineContentPack({
+      id: "test_pack",
+      items,
+      locations,
+      dropTables: defineDropTables<
+        keyof typeof items & string,
+        keyof typeof locations & string,
+        {
+          iron_mine_drops: {
+            id: "iron_mine_drops";
+            action: "mine";
+            profession: "miner";
+            tier: 1;
+            locationId: "iron_mine";
+            entries: [{ itemId: "iron_ore"; chance: 1; weight: 1; minQty: 1 }];
+          };
+        }
+      >({
+        iron_mine_drops: {
+          id: "iron_mine_drops",
+          action: "mine",
+          profession: "miner",
+          tier: 1,
+          locationId: "iron_mine",
+          entries: [{ itemId: "iron_ore", chance: 1, weight: 1, minQty: 1 }],
+        },
+      }),
+      recipes: defineRecipes<
+        keyof typeof items & string,
+        {
+          smelt_iron: {
+            id: "smelt_iron";
+            name: "Smelt Iron";
+            description: "Smelt iron ore.";
+            type: "crafting";
+            craftingMethod: "transform";
+            itemInputs: [{ itemId: "iron_ore"; quantity: 1 }];
+            itemOutputs: [{ itemId: "iron_ingot"; quantity: 1 }];
+            xpReward: 0;
+            enabled: true;
+          };
+        }
+      >({
+        smelt_iron: {
+          id: "smelt_iron",
+          name: "Smelt Iron",
+          description: "Smelt iron ore.",
+          type: "crafting",
+          craftingMethod: "transform",
+          itemInputs: [{ itemId: "iron_ore", quantity: 1 }],
+          itemOutputs: [{ itemId: "iron_ingot", quantity: 1 }],
+          xpReward: 0,
+          enabled: true,
+        },
+      }),
+    });
+
+    const loaded = materializeContentPack(pack);
+    expect(loaded.items).toHaveLength(2);
+    expect(loaded.items[0]?.__source.file).toBe("typed:test_pack");
+    expect(() => validateLoadedContent(loaded)).not.toThrow();
+  });
+
+  test("materialized pack still rejects invalid cross references at runtime", () => {
+    const pack = defineContentPack({
+      id: "bad_pack",
+      items: defineItems({
+        iron_ore: {
+          id: "iron_ore",
+          name: "Iron Ore",
+          category: "mineral",
+          rarity: "common",
+          trait1: "Density",
+          trait2: "None",
+          sources: ["gather"],
+          description: "A chunk of iron ore.",
+        },
+      }),
+      locations: defineLocations({
+        iron_mine: {
+          id: "iron_mine",
+          name: "Iron Mine",
+          action: "mine",
+          profession: "miner",
+          requiredTier: 1,
+          materials: ["iron_ore"],
+        },
+      }),
+      // Force an invalid fixture through the type gate so runtime validation stays covered.
+      dropTables: {
+        iron_mine_drops: {
+          id: "iron_mine_drops",
+          action: "mine",
+          tier: 1,
+          locationId: "iron_mine",
+          entries: [{ itemId: "missing_item", chance: 1, weight: 1, minQty: 1 }],
+        },
+      } as never,
+      recipes: defineRecipes({}),
+    });
+
+    expect(() => validateLoadedContent(materializeContentPack(pack))).toThrow(ContentValidationError);
+  });
+
+  test("default typed content pack loads through the registry", async () => {
+    const registry = await loadContentRegistry(undefined, { forceReload: true });
+    expect(registry.loadedFrom).toBe("typed:ashenmoor_default");
+    expect(registry.getItem("stone")?.trait1).toBe("Density");
+    expect(registry.getRecipe("stone_to_sharp")).not.toBeNull();
   });
 });
 

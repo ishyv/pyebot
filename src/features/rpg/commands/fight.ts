@@ -17,7 +17,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });

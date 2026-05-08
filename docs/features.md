@@ -2,6 +2,8 @@
 
 Every feature is a self-contained directory under `src/features/`. The framework discovers them through `src/features/manifest.ts`. Look at `src/features/tickets/` for the simplest real example, or `src/features/economy/` for a complex one with bus events.
 
+RPG items, recipes, locations, and drop tables are not feature code. Add them through the typed content pack documented in [RPG Content Authoring](./content-authoring.md). The old files under `src/features/rpg/crafting/` are compatibility shims, not the place to add new content.
+
 ## Adding a feature
 
 You need three things: a command, a feature module, and a manifest entry.
@@ -63,7 +65,7 @@ Export a `matches` function and a handler. The framework routes by calling `matc
 
 ```ts
 // src/features/polls/handlers/vote.ts
-import type { ButtonInteraction } from "discord.js";
+import { MessageFlags, type ButtonInteraction } from "discord.js";
 
 const PREFIX = "poll_vote:";
 
@@ -71,7 +73,7 @@ export function isPollVote(id: string) { return id.startsWith(PREFIX); }
 
 export async function handlePollVote(interaction: ButtonInteraction) {
   const option = interaction.customId.slice(PREFIX.length);
-  await interaction.reply({ content: `Voted: ${option}`, ephemeral: true });
+  await interaction.reply({ content: `Voted: ${option}`, flags: MessageFlags.Ephemeral });
 }
 ```
 
@@ -196,3 +198,42 @@ const reward = ctx.guildConfig.economy.daily.dailyReward;
 ```
 
 Every field uses Zod `.catch()` defaults so missing values never crash. If your feature needs its own config, add a sub-object to `GuildSchema` in `src/db/schemas/guild.ts`.
+
+### Dashboard-editable feature config
+
+Features can also declare their own admin-panel editable config. This keeps the field metadata beside the feature that owns it, while still storing values in the guild document.
+
+```ts
+// src/features/counting/config.ts
+import { ChannelType } from "discord.js";
+import { channelConfigField, defineFeatureConfig } from "@/core/featureConfig";
+
+export const countingFeatureConfig = defineFeatureConfig({
+  fields: {
+    channel: channelConfigField({
+      key: "channel",
+      label: "Counting channel",
+      description: "Channel where the counting game runs.",
+      path: "counting.channelId",
+      required: true,
+      channelTypes: [ChannelType.GuildText],
+    }),
+  },
+});
+```
+
+Then expose it from the feature module:
+
+```ts
+const counting: FeatureModule = {
+  id: "counting",
+  featureGate: "counting",
+  config: countingFeatureConfig,
+  commands: [],
+  events: [{ event: "messageCreate", register: registerMessageCreate }],
+};
+```
+
+The admin dashboard's Feature Config panel renders these fields automatically and writes through `updateGuildPaths`. Runtime code should resolve Discord entities through `resolveConfiguredChannel(...)`; deleted channels, missing values, and wrong channel types return `null` instead of throwing.
+
+Config is still not state. Store volatile game/session state in a repository or feature-owned collection, not in the guild document.

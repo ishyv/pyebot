@@ -25,7 +25,7 @@ export async function handleFightAccept(interaction: ButtonInteraction): Promise
   const sessionId = interaction.customId.slice(FIGHT_ACCEPT_PREFIX.length);
   const accepterId = interaction.user.id;
 
-  await interaction.deferReply({ ephemeral: false });
+  await interaction.deferReply();
 
   const result = await acceptFight(sessionId, accepterId);
 

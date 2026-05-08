@@ -5,6 +5,7 @@
  */
 
 import {
+  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
@@ -12,13 +13,18 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
-import {
-  GEMINI_MODELS,
-  OPENAI_MODELS,
-  DEFAULT_GEMINI_MODEL,
-  DEFAULT_OPENAI_MODEL,
-  clearMemory,
-} from "@/features/ai/service";
+import { clearMemory } from "@/features/ai/service";
+import { aiConfig } from "@/features/ai/config";
+import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+
+// Flatten all model names for the set-model command choices
+const ALL_MODELS = [
+  ...Object.values(aiConfig.providers.openai),
+  ...Object.values(aiConfig.providers.anthropic),
+  ...Object.values(aiConfig.providers.google),
+];
+const DEFAULT_OPENAI_MODEL = aiConfig.providers.openai.low;
+const DEFAULT_GEMINI_MODEL = aiConfig.providers.google.low;
 
 export const data = new SlashCommandBuilder()
   .setName("ai")
@@ -48,7 +54,7 @@ export const data = new SlashCommandBuilder()
           .setDescription("Model name")
           .setRequired(true)
           .addChoices(
-            ...[...GEMINI_MODELS, ...OPENAI_MODELS].map((m) => ({ name: m, value: m })),
+          ...[...ALL_MODELS].slice(0,25).map((m) => ({ name: m, value: m })),
           ),
       ),
   )
@@ -56,6 +62,11 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("clear-memory")
       .setDescription("Clear your personal AI conversation history"),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("panel")
+      .setDescription("Open the AI configuration panel"),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -67,6 +78,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await handleSetModel(interaction);
   } else if (sub === "clear-memory") {
     await handleClearMemory(interaction);
+  } else if (sub === "panel") {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "ai");
   }
 }
 
@@ -80,12 +94,12 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
   if (!isAdmin) {
     await interaction.reply({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Permission Denied").setDescription("Only admins can change the AI provider.")],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const provider = interaction.options.getString("provider", true);
   const defaultModel = provider === "openai" ? DEFAULT_OPENAI_MODEL : DEFAULT_GEMINI_MODEL;
@@ -125,12 +139,12 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
   if (!isAdmin) {
     await interaction.reply({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Permission Denied").setDescription("Only admins can change the AI model.")],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const model = interaction.options.getString("model", true);
 
@@ -162,6 +176,6 @@ async function handleClearMemory(interaction: ChatInputCommandInteraction): Prom
         .setTitle("🧹 Memory Cleared")
         .setDescription("Your AI conversation history has been cleared. Fresh start!"),
     ],
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }

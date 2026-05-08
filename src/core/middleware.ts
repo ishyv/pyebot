@@ -12,7 +12,11 @@
  * without needing to inspect a Result — cleaner call site.
  */
 
-import type { ChatInputCommandInteraction } from "discord.js";
+import {
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type InteractionReplyOptions,
+} from "discord.js";
 import type { MiddlewareFn, CommandContext } from "@/core/feature";
 
 export async function runMiddleware(
@@ -24,11 +28,14 @@ export async function runMiddleware(
     const result = await fn(interaction, ctx);
     if (result.isErr()) {
       const { content, ephemeral = true } = result.error;
+      const response: InteractionReplyOptions = ephemeral
+        ? { content, flags: MessageFlags.Ephemeral }
+        : { content };
       try {
         if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({ content, ephemeral });
+          await interaction.followUp(response);
         } else {
-          await interaction.reply({ content, ephemeral });
+          await interaction.reply(response);
         }
       } catch {
         // best-effort — ignore if we can't reply

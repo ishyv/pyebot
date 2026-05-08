@@ -1,4 +1,5 @@
 import {
+  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
@@ -24,13 +25,13 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
     return;
   }
 
   const targetUser = interaction.options.getUser("user") ?? interaction.user;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const result = await getCases(targetUser.id, interaction.guild.id);
 

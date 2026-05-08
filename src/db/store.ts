@@ -130,16 +130,25 @@ export class MongoStore<T extends Document & { _id: string }> {
   async updatePaths(
     id: string,
     paths: Record<string, unknown>,
-    options: { upsert?: boolean; pipeline?: Document[] } = {},
+    options: { upsert?: boolean; pipeline?: Document[]; unset?: string[] } = {},
   ): Promise<Result<void>> {
     try {
       const col = await this.collection();
       if (options.pipeline) {
         await col.updateOne({ _id: id } as Filter<T>, options.pipeline as any, { upsert: options.upsert });
       } else {
+        const update: Document = {};
+        if (Object.keys(paths).length > 0) {
+          update.$set = { ...paths, updatedAt: new Date() };
+        } else {
+          update.$set = { updatedAt: new Date() };
+        }
+        if (options.unset?.length) {
+          update.$unset = Object.fromEntries(options.unset.map((path) => [path, ""]));
+        }
         await col.updateOne(
           { _id: id } as Filter<T>,
-          { $set: { ...paths, updatedAt: new Date() } as any },
+          update as UpdateFilter<T>,
           { upsert: options.upsert },
         );
       }

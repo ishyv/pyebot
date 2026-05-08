@@ -1,4 +1,5 @@
 import {
+  MessageFlags,
   SlashCommandBuilder,
   PermissionFlagsBits,
   EmbedBuilder,
@@ -24,11 +25,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild || !interaction.channel?.isTextBased()) {
-    await interaction.reply({ content: "This command can only be used in a server text channel.", ephemeral: true });
+    await interaction.reply({ content: "This command can only be used in a server text channel.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const count = interaction.options.getInteger("count", true);
   const filterUser = interaction.options.getUser("user");

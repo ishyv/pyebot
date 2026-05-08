@@ -18,7 +18,7 @@
  * Both paths share the same top-level error handler (best-effort reply).
  */
 
-import type { Interaction } from "discord.js";
+import { MessageFlags, type Interaction } from "discord.js";
 import type { FeatureRegistry } from "@/core/registry";
 import { runMiddleware } from "@/core/middleware";
 import { guildOnly } from "@/middleware/guildOnly";
@@ -37,7 +37,7 @@ export function createDispatcher(registry: FeatureRegistry) {
       if (interaction.isChatInputCommand()) {
         const entry = registry.getCommand(interaction.commandName);
         if (!entry) {
-          await interaction.reply({ content: "Unknown command.", ephemeral: true });
+          await interaction.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
           return;
         }
 
@@ -79,7 +79,15 @@ export function createDispatcher(registry: FeatureRegistry) {
       // -----------------------------------------------------------------
       // Component interactions (buttons, select menus, modals)
       // -----------------------------------------------------------------
-      if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) {
+      if (
+        interaction.isButton()
+        || interaction.isStringSelectMenu()
+        || interaction.isChannelSelectMenu()
+        || interaction.isMentionableSelectMenu()
+        || interaction.isRoleSelectMenu()
+        || interaction.isUserSelectMenu()
+        || interaction.isModalSubmit()
+      ) {
         const customId = interaction.customId;
         const entry = registry.getComponentHandler(customId);
         if (!entry) return; // unknown component — silently ignore
@@ -94,7 +102,7 @@ export function createDispatcher(registry: FeatureRegistry) {
             const enabled = (cfg.features as Record<string, boolean>)[feature.featureGate];
             if (enabled === false) {
               try {
-                await interaction.reply({ content: "This feature is disabled.", ephemeral: true });
+                await interaction.reply({ content: "This feature is disabled.", flags: MessageFlags.Ephemeral });
               } catch {
                 // ignore
               }
@@ -110,7 +118,7 @@ export function createDispatcher(registry: FeatureRegistry) {
       log.error("Unhandled interaction error", err);
       try {
         const i = interaction as { replied?: boolean; deferred?: boolean; reply?: (o: object) => Promise<void>; followUp?: (o: object) => Promise<void> };
-        const msg = { content: "An unexpected error occurred.", ephemeral: true };
+        const msg = { content: "An unexpected error occurred.", flags: MessageFlags.Ephemeral };
         if (i.replied || i.deferred) {
           await i.followUp?.(msg);
         } else {

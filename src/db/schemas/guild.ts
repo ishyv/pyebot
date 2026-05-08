@@ -1,3 +1,15 @@
+/**
+ * Guild document schema and recovery defaults.
+ *
+ * This schema parses persisted Mongo documents from live servers, so most
+ * fields use Zod .catch() defaults to keep one bad or old config slice from
+ * crashing the bot at startup or interaction time. Treat those defaults as
+ * product behavior, not harmless type noise: changing them changes how legacy
+ * or partially written guild documents heal themselves.
+ *
+ * Feature-owned admin metadata lives in core/featureConfig.ts. This file owns
+ * the durable shape and fallback policy only.
+ */
 import { z } from "zod";
 
 // AI defaults (inlined — no external service import needed at schema level)
@@ -42,6 +54,7 @@ export enum Features {
   Suggest = "suggest",
   Economy = "economy",
   Game = "game",
+  Counting = "counting",
 }
 
 export const DEFAULT_GUILD_FEATURES: Readonly<Record<Features, boolean>> = Object.freeze(
@@ -53,24 +66,95 @@ export const DEFAULT_GUILD_FEATURES: Readonly<Record<Features, boolean>> = Objec
 
 export const GuildFeaturesSchema = z.record(z.string(), z.boolean()).catch(() => DEFAULT_GUILD_FEATURES);
 
+export type RoleCapabilityKey = string;
+export type RoleCommandOverride = "inherit" | "allow" | "deny";
+export type LimitWindow = `${number}${"m" | "h" | "d"}`;
+
+export const RoleCommandOverrideSchema = z.enum(["inherit", "allow", "deny"]).catch("inherit");
+export const RoleLimitSchema = z.object({
+  limit: z.number().int().min(0).catch(0),
+  window: z.custom<LimitWindow>((value) =>
+    typeof value === "string" && /^\d+(m|h|d)$/.test(value),
+  ).nullable().optional().catch(null),
+  windowSeconds: z.number().int().min(0).nullable().optional().catch(null),
+});
+export const GuildRoleSchema = z.object({
+  label: z.string().catch("Managed role"),
+  discordRoleId: z.string().nullable().catch(null),
+  reach: z.record(z.string(), RoleCommandOverrideSchema).catch(() => ({})),
+  limits: z.record(z.string(), RoleLimitSchema).catch(() => ({})),
+  updatedBy: z.string().nullable().catch(null),
+  updatedAt: z.string().nullable().catch(null),
+}).passthrough();
+export const GuildRolesSchema = z.record(z.string(), GuildRoleSchema).catch(() => ({}));
+
 export const CoreChannelSchema = z.object({ channelId: z.string() });
 export const ManagedChannelSchema = z.object({ id: z.string(), label: z.string(), channelId: z.string() });
 
+// Keep core channel defaults explicit so admin panels, migrations, and docs can
+// distinguish an unset known slot from an arbitrary managed channel.
+const defaultCoreChannels = () => ({
+  welcome: null,
+  goodbye: null,
+  logs: null,
+  reports: null,
+  suggestions: null,
+  tickets: null,
+  messageLogs: null,
+  voiceLogs: null,
+  ticketLogs: null,
+  ticketCategory: null,
+  pointsLog: null,
+  generalLogs: null,
+  banSanctions: null,
+  staff: null,
+  repRequests: null,
+  offersReview: null,
+  approvedOffers: null,
+});
+
 export const GuildChannelsSchema = z.object({
-  core: z.record(z.string(), CoreChannelSchema.nullable()).catch(() => ({
-    welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null,
-  })),
+  core: z.record(z.string(), CoreChannelSchema.nullable()).catch(() => defaultCoreChannels()),
   managed: z.record(z.string(), ManagedChannelSchema).catch(() => ({})),
   ticketMessageId: z.string().nullable().catch(null),
   ticketHelperRoles: z.array(z.string()).catch(() => []),
   ticketCategoryId: z.string().nullable().catch(null),
 });
 
-export const ForumAutoReplySchema = z.object({ forumIds: z.array(z.string()).catch(() => []) });
+export const ForumAutoReplySchema = z.object({
+  enabled: z.boolean().catch(false),
+  forumIds: z.array(z.string()).catch(() => []),
+});
 export const AiConfigSchema = z.object({
   provider: z.string().catch(DEFAULT_PROVIDER_ID),
   model: z.string().catch(DEFAULT_GEMINI_MODEL),
+  rateLimit: z.object({
+    perUserPerMinute: z.number().int().min(0).catch(8),
+    perGuildPerMinute: z.number().int().min(0).catch(60),
+  }).catch(() => ({ perUserPerMinute: 8, perGuildPerMinute: 60 })),
 });
+
+export const ReputationConfigSchema = z.object({
+  keywords: z.array(z.string()).catch(() => []),
+  detectionEnabled: z.boolean().catch(false),
+  requestChannelId: z.string().nullable().catch(null),
+}).catch(() => ({ keywords: [], detectionEnabled: false, requestChannelId: null }));
+
+export const TopsConfigSchema = z.object({
+  enabled: z.boolean().catch(false),
+  channelId: z.string().nullable().catch(null),
+  intervalHours: z.number().int().min(1).catch(24),
+  topSize: z.number().int().min(1).max(25).catch(10),
+}).catch(() => ({ enabled: false, channelId: null, intervalHours: 24, topSize: 10 }));
+
+export const OffersConfigSchema = z.object({
+  reviewChannelId: z.string().nullable().catch(null),
+  approvedChannelId: z.string().nullable().catch(null),
+}).catch(() => ({ reviewChannelId: null, approvedChannelId: null }));
+
+export const CountingConfigSchema = z.object({
+  channelId: z.string().nullable().catch(null),
+}).catch(() => ({ channelId: null }));
 
 // ─── Automod ─────────────────────────────────────────────────────────────────
 
@@ -192,9 +276,9 @@ export const ModerationConfigSchema = z.object({
 
 export const GuildSchema = z.object({
   _id: z.string(),
-  roles: z.record(z.string(), z.unknown()).catch(() => ({})),
+  roles: GuildRolesSchema,
   channels: GuildChannelsSchema.catch(() => ({
-    core: { welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null },
+    core: defaultCoreChannels(),
     managed: {},
     ticketMessageId: null,
     ticketHelperRoles: [],
@@ -202,19 +286,83 @@ export const GuildSchema = z.object({
   })),
   pendingTickets: z.array(z.string()).catch(() => []),
   features: GuildFeaturesSchema,
-  forumAutoReply: ForumAutoReplySchema.catch(() => ({ forumIds: [] })),
-  ai: AiConfigSchema.catch(() => ({ provider: DEFAULT_PROVIDER_ID, model: DEFAULT_GEMINI_MODEL })),
-  reputation: z.object({ keywords: z.array(z.string()).catch(() => []) }).catch(() => ({ keywords: [] })),
+  forumAutoReply: ForumAutoReplySchema.catch(() => ({ enabled: false, forumIds: [] })),
+  ai: AiConfigSchema.catch(() => ({
+    provider: DEFAULT_PROVIDER_ID,
+    model: DEFAULT_GEMINI_MODEL,
+    rateLimit: { perUserPerMinute: 8, perGuildPerMinute: 60 },
+  })),
+  reputation: ReputationConfigSchema,
+  tops: TopsConfigSchema,
+  offersConfig: OffersConfigSchema,
+  counting: CountingConfigSchema,
   automod: AutomodSchema,
   moderation: ModerationConfigSchema,
   nextCaseId: z.number().int().catch(1),
   economy: z.object({
+    features: z.object({
+      coinflip: z.boolean().catch(true),
+      trivia: z.boolean().catch(true),
+      rob: z.boolean().catch(true),
+      voting: z.boolean().catch(true),
+      crafting: z.boolean().catch(true),
+      store: z.boolean().catch(true),
+    }).catch(() => ({
+      coinflip: true,
+      trivia: true,
+      rob: true,
+      voting: true,
+      crafting: true,
+      store: true,
+    })),
+    tax: z.object({
+      enabled: z.boolean().catch(false),
+      rate: z.number().min(0).max(1).catch(0.05),
+      minimumTaxableAmount: z.number().int().min(0).catch(100),
+      taxSector: EconomySectorEnum.catch(() => "tax" as const),
+    }).catch(() => ({ enabled: false, rate: 0.05, minimumTaxableAmount: 100, taxSector: "tax" as const })),
+    thresholds: z.object({
+      warning: z.number().int().min(0).catch(5_000),
+      alert: z.number().int().min(0).catch(25_000),
+      critical: z.number().int().min(0).catch(100_000),
+    }).catch(() => ({ warning: 5_000, alert: 25_000, critical: 100_000 })),
     daily: DailyConfigSchema.catch(() => ({ dailyReward: 250, dailyCooldownHours: 24, dailyCurrencyId: "coins", dailyFeeRate: 0, dailyFeeSector: "tax" as const, dailyStreakBonus: 5, dailyStreakCap: 10 })),
     work: WorkConfigSchema.catch(() => ({ workRewardBase: 120, workBaseMintReward: 100, workBonusFromWorksMax: 100, workBonusScaleMode: "flat" as const, workCooldownMinutes: 30, workDailyCap: 5, workCurrencyId: "coins", workPaysFromSector: "works" as const, workFailureChance: 0.1 })),
+    progression: z.object({
+      enabled: z.boolean().catch(true),
+      xpAmounts: z.record(z.string(), z.number().int().min(0)).catch(() => ({
+        daily_claim: 60,
+        work_claim: 25,
+        store_buy: 15,
+        store_sell: 10,
+        quest_complete: 120,
+        craft: 10,
+      })),
+      cooldownSeconds: z.record(z.string(), z.number().int().min(0)).catch(() => ({
+        daily_claim: 0,
+        work_claim: 0,
+        store_buy: 15,
+        store_sell: 15,
+        quest_complete: 0,
+        craft: 0,
+      })),
+    }).catch(() => ({
+      enabled: true,
+      xpAmounts: { daily_claim: 60, work_claim: 25, store_buy: 15, store_sell: 10, quest_complete: 120, craft: 10 },
+      cooldownSeconds: { daily_claim: 0, work_claim: 0, store_buy: 15, store_sell: 15, quest_complete: 0, craft: 0 },
+    })),
     sectors: z.object({ global: z.number().catch(0), works: z.number().catch(0), trade: z.number().catch(0), tax: z.number().catch(0) }).optional().catch(() => ({ global: 0, works: 0, trade: 0, tax: 0 })),
   }).catch(() => ({
+    features: { coinflip: true, trivia: true, rob: true, voting: true, crafting: true, store: true },
+    tax: { enabled: false, rate: 0.05, minimumTaxableAmount: 100, taxSector: "tax" as const },
+    thresholds: { warning: 5_000, alert: 25_000, critical: 100_000 },
     daily: { dailyReward: 250, dailyCooldownHours: 24, dailyCurrencyId: "coins", dailyFeeRate: 0, dailyFeeSector: "tax" as const, dailyStreakBonus: 5, dailyStreakCap: 10 },
     work: { workRewardBase: 120, workBaseMintReward: 100, workBonusFromWorksMax: 100, workBonusScaleMode: "flat" as const, workCooldownMinutes: 30, workDailyCap: 5, workCurrencyId: "coins", workPaysFromSector: "works" as const, workFailureChance: 0.1 },
+    progression: {
+      enabled: true,
+      xpAmounts: { daily_claim: 60, work_claim: 25, store_buy: 15, store_sell: 10, quest_complete: 120, craft: 10 },
+      cooldownSeconds: { daily_claim: 0, work_claim: 0, store_buy: 15, store_sell: 15, quest_complete: 0, craft: 0 },
+    },
   })),
   createdAt: z.coerce.date().optional().catch(() => undefined),
   updatedAt: z.coerce.date().optional().catch(() => undefined),
@@ -226,3 +374,8 @@ export type GuildFeaturesRecord = z.infer<typeof GuildFeaturesSchema>;
 export type AiConfigRecord = z.infer<typeof AiConfigSchema>;
 export type ModerationConfig = z.infer<typeof ModerationConfigSchema>;
 export type AutomodConfig = z.infer<typeof AutomodSchema>;
+export type GuildRoleRecord = z.infer<typeof GuildRoleSchema>;
+export type RoleLimitRecord = z.infer<typeof RoleLimitSchema>;
+export type ReputationConfig = z.infer<typeof ReputationConfigSchema>;
+export type TopsConfig = z.infer<typeof TopsConfigSchema>;
+export type CountingConfig = z.infer<typeof CountingConfigSchema>;

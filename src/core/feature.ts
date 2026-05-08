@@ -31,10 +31,15 @@ import type {
   ChatInputCommandInteraction,
   ButtonInteraction,
   StringSelectMenuInteraction,
+  ChannelSelectMenuInteraction,
+  MentionableSelectMenuInteraction,
+  RoleSelectMenuInteraction,
+  UserSelectMenuInteraction,
   ModalSubmitInteraction,
 } from "discord.js";
 import type { Result } from "@/core/result";
 import type { Guild } from "@/db/schemas/guild";
+import type { FeatureConfigDefinition } from "@/core/featureConfig";
 
 // ---------------------------------------------------------------------------
 // Middleware
@@ -86,6 +91,10 @@ export interface FeatureCommand {
 export type ComponentInteraction =
   | ButtonInteraction
   | StringSelectMenuInteraction
+  | ChannelSelectMenuInteraction
+  | MentionableSelectMenuInteraction
+  | RoleSelectMenuInteraction
+  | UserSelectMenuInteraction
   | ModalSubmitInteraction;
 
 export interface ComponentHandler {
@@ -108,6 +117,14 @@ export interface EventRegistration {
 }
 
 // ---------------------------------------------------------------------------
+// Declarative feature metadata
+// ---------------------------------------------------------------------------
+
+export interface FeatureCapabilities {
+  readonly discordIntents?: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
 // Feature module
 // ---------------------------------------------------------------------------
 
@@ -124,6 +141,12 @@ export interface FeatureModule {
    * Omit for features that are always available (e.g. moderation).
    */
   readonly featureGate?: string;
+
+  /** Optional dashboard-editable guild config declared by the feature owner. */
+  readonly config?: FeatureConfigDefinition;
+
+  /** Optional operational requirements that admin tools can surface. */
+  readonly capabilities?: FeatureCapabilities;
 
   readonly commands: readonly FeatureCommand[];
   readonly components?: readonly ComponentHandler[];

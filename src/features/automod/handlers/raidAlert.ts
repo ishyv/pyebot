@@ -3,6 +3,7 @@
  */
 
 import {
+  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -40,7 +41,7 @@ async function disableButtons(interaction: ButtonInteraction): Promise<void> {
 }
 
 export async function handleRaidLockdown(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
 
   if (!interaction.guild) {
@@ -71,7 +72,7 @@ export async function handleRaidLockdown(interaction: ButtonInteraction): Promis
 }
 
 export async function handleRaidDismiss(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
   await interaction.editReply({ content: "Raid alert dismissed." });
 }

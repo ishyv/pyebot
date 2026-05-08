@@ -20,6 +20,7 @@ export const SanctionHistoryEntrySchema = z.object({
   date: z.string().optional().catch(() => new Date().toISOString()),
   caseId: z.number().int().optional().catch(() => undefined),
   moderatorId: z.string().optional().catch(() => undefined),
+  moderatorRoleIds: z.array(z.string()).optional().catch(() => undefined),
 });
 export type SanctionHistoryEntry = z.infer<typeof SanctionHistoryEntrySchema>;
 

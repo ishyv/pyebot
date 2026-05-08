@@ -29,7 +29,6 @@
 // content files. They are NOT session/cooldown state — that lives in src/core/state.ts.
 
 import {
-  DEFAULT_CONTENT_PACKS_DIR,
   loadContentPacks,
   type LoadedContentPacks,
   type SourcedDropTableDef,
@@ -252,13 +251,14 @@ let cachedRegistry: ContentRegistry | null = null;
 let cachedDir: string | null = null;
 
 export async function loadContentRegistry(
-  packDir: string = DEFAULT_CONTENT_PACKS_DIR,
+  packDir?: string,
   options?: { forceReload?: boolean },
 ): Promise<ContentRegistry> {
+  const cacheKey = packDir ?? "typed:default";
   if (
     !options?.forceReload &&
     cachedRegistry &&
-    cachedDir === packDir
+    cachedDir === cacheKey
   ) {
     return cachedRegistry;
   }
@@ -267,12 +267,12 @@ export async function loadContentRegistry(
   validateLoadedContent(packs);
   const registry = new RuntimeContentRegistry(packs);
   cachedRegistry = registry;
-  cachedDir = packDir;
+  cachedDir = cacheKey;
   return registry;
 }
 
 export async function loadContentRegistryOrThrow(): Promise<ContentRegistry> {
-  return loadContentRegistry(DEFAULT_CONTENT_PACKS_DIR, { forceReload: true });
+  return loadContentRegistry(undefined, { forceReload: true });
 }
 
 export function getContentRegistry(): ContentRegistry | null {

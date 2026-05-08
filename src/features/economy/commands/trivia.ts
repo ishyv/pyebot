@@ -1,4 +1,5 @@
 import {
+  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
@@ -17,7 +18,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });

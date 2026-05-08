@@ -1,4 +1,5 @@
 import {
+  MessageFlags,
   SlashCommandBuilder,
   PermissionFlagsBits,
   EmbedBuilder,
@@ -27,7 +28,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild || !interaction.member) {
-    await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -36,7 +37,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const duration = interaction.options.getString("duration") ?? undefined;
   const moderator = await interaction.guild.members.fetch(interaction.user.id);
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const result = await ban(interaction.guild, moderator, target, reason, duration);
 

@@ -1,33 +1,33 @@
 /**
- * AI service — multi-provider text generation (Gemini, OpenAI).
+ * AI service — multi-provider text generation via Vercel AI SDK.
  *
- * Provider/model resolved from guild config (`guild.ai.provider`, `guild.ai.model`).
+ * Implements fallback priority: Anthropic -> OpenAI -> Google
  * Per-user conversation memory kept in the global sessions store.
  * Rate limiting uses a MongoDB `ai_rate_limits` collection.
  */
 
-import { GoogleGenAI, type Content } from "@google/genai";
-import OpenAI from "openai";
-import { getGuild } from "@/db/repositories/guilds";
+import { generateText, type LanguageModel } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createAnthropic } from "@ai-sdk/anthropic";
+
 import { getDb } from "@/core/db";
 import { sessions } from "@/core/state";
 import { createLogger } from "@/core/logger";
 
+import { aiConfig, type ProviderId, type ModelTier } from "./config";
+
 const log = createLogger("ai");
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-export const DEFAULT_PROVIDER = "gemini";
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-export const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
-
-export const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
-export const OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"] as const;
-
-export type ProviderId = "gemini" | "openai";
+export const DEFAULT_PROVIDER = "anthropic";
 
 const BOT_PROMPT =
   "You are a helpful, friendly Discord bot assistant. Keep responses concise and appropriate for chat.";
+
+// Initialize custom providers to map user `.env` variables
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY });
+const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── Memory ───────────────────────────────────────────────────────────────────
 
@@ -113,37 +113,57 @@ export async function checkRateLimit(
   }
 }
 
-// ─── Provider resolution ──────────────────────────────────────────────────────
+// ─── Vercel Model Resolver ───────────────────────────────────────────────────
 
-async function resolveProvider(guildId?: string | null): Promise<{
-  providerId: ProviderId;
-  model: string;
-}> {
-  let providerId: ProviderId = DEFAULT_PROVIDER;
-  let model = DEFAULT_GEMINI_MODEL;
+function getModelInstance(provider: ProviderId, tier: ModelTier): LanguageModel {
+  const modelName = aiConfig.providers[provider][tier];
+  switch (provider) {
+    case "anthropic":
+      return anthropic(modelName);
+    case "openai":
+      return openai(modelName);
+    case "google":
+      return google(modelName);
+    default:
+      throw new Error(`Unsupported provider: ${provider}`);
+  }
+}
 
-  if (guildId) {
-    const res = await getGuild(guildId);
-    if (res.isOk() && res.unwrap()) {
-      const aiConfig = res.unwrap()!.ai;
-      if (aiConfig.provider === "openai" || aiConfig.provider === "gemini") {
-        providerId = aiConfig.provider;
-        model = aiConfig.model;
-      }
+// ─── Unified Multi-Provider Text Generation ──────────────────────────────────
+
+/**
+ * Iterates through the priority list of providers until one successfully generates text.
+ */
+export async function generateResilientText(
+    systemPrompt: string, 
+    userPrompt: string, 
+    tier: ModelTier = "mid",
+): Promise<{ text: string, providerId: ProviderId }> {
+  let lastError: unknown = null;
+
+  for (const provider of aiConfig.priority) {
+    try {
+      const model = getModelInstance(provider, tier);
+      
+      const { text } = await generateText({
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        temperature: 0.9,
+      });
+
+      return { text: text.trim(), providerId: provider };
+    } catch (err) {
+      log.error(`[AI Fallback] Provider ${provider} failed on tier ${tier}. Attempting next...`, err);
+      lastError = err;
     }
   }
 
-  // Validate model is known for provider
-  if (providerId === "gemini" && !(GEMINI_MODELS as readonly string[]).includes(model)) {
-    model = DEFAULT_GEMINI_MODEL;
-  } else if (providerId === "openai" && !(OPENAI_MODELS as readonly string[]).includes(model)) {
-    model = DEFAULT_OPENAI_MODEL;
-  }
-
-  return { providerId, model };
+  // If we reach this point, all providers failed
+  throw new Error(`All providers failed to generate text. Last error: ${lastError}`);
 }
 
-// ─── Generation ───────────────────────────────────────────────────────────────
+// ─── Legacy Chat Wrapper ──────────────────────────────────────────────────────────
 
 export interface GenerateOptions {
   guildId?: string | null;
@@ -158,91 +178,28 @@ export interface GenerateResult {
 }
 
 export async function generateResponse(opts: GenerateOptions): Promise<GenerateResult> {
-  const { providerId, model } = await resolveProvider(opts.guildId);
   const memory = getMemory(opts.userId);
+  
+  // Format memory into a monolithic string for generic Vercel text call 
+  // (In a fuller refactor we would pass CoreMessages array to the Vercel generateText)
+  const conversationContext = memory.map(m => `${m.role === 'model' || m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`).join("\n");
+  
+  const fullPrompt = conversationContext ? `Past Conversation Context:\n${conversationContext}\n\nUser Current Message: ${opts.message}` : `User Current Message: ${opts.message}`;
 
   let text: string;
+  let finalProvider: string = DEFAULT_PROVIDER;
 
   try {
-    if (providerId === "gemini") {
-      text = await callGemini(model, memory, opts.message);
-    } else {
-      text = await callOpenAI(model, memory, opts.message);
-    }
+     const res = await generateResilientText(BOT_PROMPT, fullPrompt, "mid");
+     text = res.text;
+     finalProvider = res.providerId;
   } catch (err) {
-    log.error("AI generation error", err);
-    text = "Sorry, I encountered an error generating a response.";
+     log.error("AI generation error", err);
+     text = "Sorry, I encountered an error generating a response across all providers.";
   }
 
   appendMemory(opts.userId, { role: "user", content: opts.message });
-  appendMemory(opts.userId, { role: "model", content: text });
+  appendMemory(opts.userId, { role: "assistant", content: text });
 
-  return { text, providerId, model };
-}
-
-// ─── Gemini ───────────────────────────────────────────────────────────────────
-
-let _gemini: GoogleGenAI | null = null;
-
-function getGemini(): GoogleGenAI {
-  if (!_gemini) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY not set");
-    _gemini = new GoogleGenAI({ apiKey });
-  }
-  return _gemini;
-}
-
-async function callGemini(
-  model: string,
-  memory: ChatMessage[],
-  message: string,
-): Promise<string> {
-  const contents: Content[] = [
-    { role: "user", parts: [{ text: BOT_PROMPT }] },
-    ...memory.map((m) => ({
-      role: m.role === "assistant" ? "model" : m.role,
-      parts: [{ text: m.content }],
-    })),
-    { role: "user", parts: [{ text: message }] },
-  ];
-
-  const response = await getGemini().models.generateContent({
-    model,
-    contents,
-    config: { maxOutputTokens: 2048, temperature: 0.7 },
-  });
-
-  return response.candidates?.[0]?.content?.parts?.[0]?.text ?? "No response.";
-}
-
-// ─── OpenAI ───────────────────────────────────────────────────────────────────
-
-let _openai: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY not set");
-    _openai = new OpenAI({ apiKey });
-  }
-  return _openai;
-}
-
-async function callOpenAI(
-  model: string,
-  memory: ChatMessage[],
-  message: string,
-): Promise<string> {
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: "system", content: BOT_PROMPT },
-    ...memory.map((m) => ({
-      role: m.role === "model" ? ("assistant" as const) : (m.role as "user" | "assistant"),
-      content: m.content,
-    })),
-    { role: "user", content: message },
-  ];
-
-  const completion = await getOpenAI().chat.completions.create({ model, messages, max_tokens: 2048 });
-  return completion.choices[0]?.message?.content ?? "No response.";
+  return { text, providerId: finalProvider as ProviderId, model: aiConfig.providers[finalProvider as ProviderId].mid };
 }

@@ -5,6 +5,7 @@
  */
 
 import {
+  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
@@ -13,6 +14,7 @@ import {
 } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
 import { getGuild } from "@/db/repositories/guilds";
+import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 
 export const data = new SlashCommandBuilder()
   .setName("automod")
@@ -253,6 +255,11 @@ export const data = new SlashCommandBuilder()
           .setMinValue(60)
           .setMaxValue(604800),
       ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("panel")
+      .setDescription("Open the automod configuration panel"),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -267,10 +274,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   else if (sub === "slowmode") await handleSlowmode(interaction);
   else if (sub === "raid") await handleRaid(interaction);
   else if (sub === "pattern") await handlePattern(interaction);
+  else if (sub === "panel") {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "automod");
+  }
 }
 
 async function handleLinkspam(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const action = interaction.options.getString("action", true);
@@ -309,7 +320,7 @@ async function handleLinkspam(interaction: ChatInputCommandInteraction): Promise
 }
 
 async function handleWhitelist(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const action = interaction.options.getString("action", true);
@@ -355,7 +366,7 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction): Promis
 }
 
 async function handleReportChannel(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const channel = interaction.options.getChannel("channel");
@@ -383,7 +394,7 @@ async function handleReportChannel(interaction: ChatInputCommandInteraction): Pr
 }
 
 async function handleStatus(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const guildResult = await getGuild(guildId);
@@ -427,7 +438,7 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
 }
 
 async function handleCrossChannel(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const action = interaction.options.getString("action", true);
@@ -474,7 +485,7 @@ async function handleCrossChannel(interaction: ChatInputCommandInteraction): Pro
 }
 
 async function handleMentionSpam(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const action = interaction.options.getString("action", true);
@@ -516,7 +527,7 @@ async function handleMentionSpam(interaction: ChatInputCommandInteraction): Prom
 }
 
 async function handleSlowmode(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const action = interaction.options.getString("action", true);
@@ -558,7 +569,7 @@ async function handleSlowmode(interaction: ChatInputCommandInteraction): Promise
 }
 
 async function handleRaid(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const action = interaction.options.getString("action", true);
@@ -602,7 +613,7 @@ async function handleRaid(interaction: ChatInputCommandInteraction): Promise<voi
 }
 
 async function handlePattern(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const action = interaction.options.getString("action", true);

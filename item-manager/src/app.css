@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+@config '../tailwind.config.js';
+
+@import '@hyvnt/hyvui/styles.css';
+
+@theme {
+	--color-bg: var(--bg);
+	--color-bg-elev: var(--bg-elev);
+	--color-text: var(--text);
+	--color-text-soft: var(--text-soft);
+	--color-muted: var(--muted);
+	--color-muted-strong: var(--muted-strong);
+	--color-accent: var(--accent);
+	--color-accent-strong: var(--accent-strong);
+	--color-signal: var(--signal);
+	--color-status-ok: var(--status-ok);
+	--color-status-pend: var(--status-pend);
+	--color-status-warn: var(--status-warn);
+	--color-status-fail: var(--status-fail);
+	--color-line: var(--line);
+	--color-line-strong: var(--line-strong);
+
+	--font-body: var(--font-body);
+	--font-mono: var(--font-mono);
+
+	--shadow-veil: var(--shadow-veil);
+
+	--radius-sm: var(--radius-sm);
+	--radius-md: var(--radius-md);
+}

@@ -1,8 +1,21 @@
+/**
+ * Runtime content schemas and inferred public content types.
+ *
+ * These Zod schemas validate loaded RPG content from typed built-in packs and
+ * legacy JSON/JSON5 packs. Compile-time authoring constraints live in
+ * content/authoring.ts; cross-record checks such as duplicate IDs and unknown
+ * references live in content/validation.ts. Keep this file focused on the
+ * shape of one record at a time.
+ */
 import { z } from "zod";
 
 export const CONTENT_SCHEMA_VERSION = 1 as const;
 
-/** Canonical content IDs (items, recipes, locations, drop tables). */
+/**
+ * Canonical content IDs for items, recipes, locations, and drop tables.
+ * IDs are persisted in inventories and recipe/discovery records, so renames
+ * are data migrations rather than cosmetic edits.
+ */
 export const CONTENT_ID_REGEX = /^[a-z0-9_]+$/;
 
 export const ContentIdSchema = z
@@ -17,6 +30,39 @@ export type Profession = z.infer<typeof ProfessionSchema>;
 
 export const GatherActionSchema = z.enum(["mine", "forest"]);
 export type GatherAction = z.infer<typeof GatherActionSchema>;
+
+export const TraitSchema = z.enum([
+  "Density",
+  "Sharpness",
+  "Organic",
+  "Toxicity",
+  "Magic",
+  "Liquid",
+  "None",
+]);
+export type Trait = z.infer<typeof TraitSchema>;
+
+export const ItemCategorySchema = z.enum([
+  "mineral",
+  "timber",
+  "herb",
+  "animal",
+  "reagent",
+  "medical",
+  "component",
+  "tool",
+  "weapon",
+  "armor",
+  "artifact",
+  "misc",
+]);
+export type ItemCategory = z.infer<typeof ItemCategorySchema>;
+
+export const ItemRaritySchema = z.enum(["common", "uncommon", "rare", "legendary"]);
+export type ItemRarity = z.infer<typeof ItemRaritySchema>;
+
+export const ItemSourceSchema = z.enum(["gather", "expedition", "craft", "drop", "quest", "shop"]);
+export type ItemSource = z.infer<typeof ItemSourceSchema>;
 
 export const ItemStatSchema = z
   .object({
@@ -82,6 +128,11 @@ export const ItemDefSchema = z
   .object({
     id: ContentIdSchema,
     name: z.string().min(1),
+    category: ItemCategorySchema,
+    rarity: ItemRaritySchema,
+    trait1: TraitSchema,
+    trait2: TraitSchema,
+    sources: z.array(ItemSourceSchema).min(1),
     description: z.string().min(1),
     emoji: z.string().optional(),
     maxStack: z.number().int().min(1).optional(),
@@ -127,6 +178,7 @@ export const RecipeDefSchema = z
     name: z.string().min(1),
     description: z.string().min(1),
     type: z.enum(["crafting", "processing"]).default("crafting"),
+    craftingMethod: z.enum(["transform", "mixture"]).optional(),
     itemInputs: z.array(RecipeItemDefSchema).min(1),
     currencyInput: RecipeCurrencyInputDefSchema.optional(),
     itemOutputs: z.array(RecipeItemDefSchema).min(1),

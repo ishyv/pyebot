@@ -17,3 +17,5 @@ coverage/
 docs/superpowers/
 
 .claude
+.superpowers
+.worktrees

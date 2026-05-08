@@ -4,6 +4,7 @@
  */
 
 import {
+  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -32,7 +33,7 @@ async function disableButton(interaction: ButtonInteraction): Promise<void> {
 }
 
 export async function handleVerifyButton(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "Server only." });

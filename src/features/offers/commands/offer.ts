@@ -5,12 +5,14 @@
  */
 
 import {
+  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { createOffer, withdrawOffer, OfferError } from "@/features/offers/service";
+import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 
 export const data = new SlashCommandBuilder()
   .setName("offer")
@@ -39,6 +41,11 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("withdraw")
       .setDescription("Withdraw your active offer"),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("panel")
+      .setDescription("Open the offers configuration panel"),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -46,10 +53,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (sub === "create") await handleCreate(interaction);
   else if (sub === "withdraw") await handleWithdraw(interaction);
+  else if (sub === "panel") {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "offers");
+  }
 }
 
 async function handleCreate(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guild = interaction.guild;
   if (!guild) {
@@ -92,7 +103,7 @@ async function handleCreate(interaction: ChatInputCommandInteraction): Promise<v
 }
 
 async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId;
   if (!guildId) {

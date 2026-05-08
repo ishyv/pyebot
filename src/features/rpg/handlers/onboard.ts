@@ -1,4 +1,4 @@
-import { EmbedBuilder, Colors, type ButtonInteraction } from "discord.js";
+import { Colors, EmbedBuilder, MessageFlags, type ButtonInteraction } from "discord.js";
 import { patchRpgProfile } from "@/db/repositories/rpg";
 import type { StarterKitType } from "@/db/schemas/rpg-profile";
 
@@ -12,11 +12,11 @@ export async function handleOnboard(interaction: ButtonInteraction): Promise<voi
   const profession = interaction.customId.slice(ONBOARD_PREFIX.length) as StarterKitType;
 
   if (profession !== "miner" && profession !== "lumber") {
-    await interaction.reply({ content: "Unknown profession.", ephemeral: true });
+    await interaction.reply({ content: "Unknown profession.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const result = await patchRpgProfile(interaction.user.id, {
     starterKitType: profession,

@@ -7,6 +7,7 @@
  */
 
 import {
+  MessageFlags,
   EmbedBuilder,
   Colors,
   ActionRowBuilder,
@@ -31,11 +32,11 @@ export async function handleCombatMove(interaction: ButtonInteraction): Promise<
   const move = rest.slice(lastColon + 1) as CombatMove;
 
   if (!sessionId || (move !== "attack" && move !== "block")) {
-    await interaction.reply({ content: "Invalid move button.", ephemeral: true });
+    await interaction.reply({ content: "Invalid move button.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const result = await submitMove(sessionId, interaction.user.id, move as "attack" | "block");
 

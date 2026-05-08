@@ -1,4 +1,5 @@
 import {
+  MessageFlags,
   SlashCommandBuilder,
   PermissionFlagsBits,
   EmbedBuilder,
@@ -46,11 +47,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "Server only.", ephemeral: true });
+    await interaction.reply({ content: "Server only.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const sub = interaction.options.getSubcommand();
 
   if (sub === "on") {

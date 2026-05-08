@@ -5,7 +5,7 @@
  * Called from the interactionCreate handler in index.ts.
  */
 
-import { EmbedBuilder, Colors, type ButtonInteraction } from "discord.js";
+import { Colors, EmbedBuilder, MessageFlags, type ButtonInteraction } from "discord.js";
 import { answerTrivia } from "@/features/economy/minigames";
 
 export const TRIVIA_BUTTON_PREFIX = "trivia_answer:";
@@ -22,13 +22,13 @@ export async function handleTriviaAnswer(interaction: ButtonInteraction): Promis
   const sessionKey = parts.slice(0, -1).join(":");
 
   if (isNaN(answerIndex)) {
-    await interaction.reply({ content: "Invalid trivia button.", ephemeral: true });
+    await interaction.reply({ content: "Invalid trivia button.", flags: MessageFlags.Ephemeral });
     return;
   }
 
   // Only the session owner can answer
   if (!sessionKey.startsWith(interaction.user.id)) {
-    await interaction.reply({ content: "This is not your trivia session.", ephemeral: true });
+    await interaction.reply({ content: "This is not your trivia session.", flags: MessageFlags.Ephemeral });
     return;
   }
 

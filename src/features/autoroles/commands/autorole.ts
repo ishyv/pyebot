@@ -7,6 +7,7 @@
  */
 
 import {
+  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
@@ -20,6 +21,7 @@ import {
   setEnabled,
   type AutoroleTrigger,
 } from "@/features/autoroles/service";
+import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 
 export const data = new SlashCommandBuilder()
   .setName("autorole")
@@ -86,6 +88,11 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) =>
         o.setName("name").setDescription("Rule name").setRequired(true),
       ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("panel")
+      .setDescription("Open the autoroles panel"),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -96,10 +103,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   else if (sub === "list") await handleList(interaction);
   else if (sub === "enable") await handleToggle(interaction, true);
   else if (sub === "disable") await handleToggle(interaction, false);
+  else if (sub === "panel") {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "autoroles");
+  }
 }
 
 async function handleCreate(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const name = interaction.options.getString("name", true);
@@ -161,7 +172,7 @@ async function handleCreate(interaction: ChatInputCommandInteraction): Promise<v
 }
 
 async function handleDelete(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const name = interaction.options.getString("name", true);
@@ -188,7 +199,7 @@ async function handleDelete(interaction: ChatInputCommandInteraction): Promise<v
 }
 
 async function handleList(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const result = await listRules(guildId);
@@ -231,7 +242,7 @@ async function handleToggle(
   interaction: ChatInputCommandInteraction,
   enabled: boolean,
 ): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guildId = interaction.guildId!;
   const name = interaction.options.getString("name", true);
