@@ -25,6 +25,7 @@ export interface SlashCommandOptions {
     | FeatureCommand["data"]
     | ((builder: SlashCommandBuilder) => FeatureCommand["data"]);
   readonly middleware?: readonly MiddlewareFn[];
+  readonly response?: FeatureCommand["response"];
 }
 
 export interface ComponentOptions<TParsed = unknown> {
@@ -157,6 +158,7 @@ export function compileFeatureClass<T extends object>(
       execute: async (interaction, ctx) => {
         await invoke(instance, command.methodName, interaction, ctx);
       },
+      response: command.response,
       middleware: [
         ...metadata.classMiddleware,
         ...(command.middleware ?? []),

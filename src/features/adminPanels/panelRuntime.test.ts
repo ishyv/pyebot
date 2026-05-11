@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
+  makePanelCustomId,
+  openPanelFromCommand,
   PANEL_TTL_MS,
   PanelSessionRegistry,
-  makePanelCustomId,
   parsePanelCustomId,
+  withNavigationRows,
 } from "./panelRuntime";
 
 describe("panel runtime", () => {
@@ -33,5 +35,76 @@ describe("panel runtime", () => {
     expect(registry.get(session.id)).toBeNull();
     expect(registry.size()).toBe(0);
   });
-});
 
+  it("keeps panel payloads inside Discord's five action-row limit", () => {
+    const registry = new PanelSessionRegistry();
+    const session = registry.create("user-1", "guild-1", "channels");
+    const rows = [{}, {}, {}, {}, {}] as never[];
+
+    const payload = withNavigationRows(session, { embeds: [], components: rows });
+
+    expect(payload.components).toHaveLength(5);
+  });
+
+  it("uses remaining action-row space for navigation", () => {
+    const registry = new PanelSessionRegistry();
+    const session = registry.create("user-1", "guild-1", "economy");
+    const rows = [{}, {}, {}] as never[];
+
+    const payload = withNavigationRows(session, { embeds: [], components: rows });
+
+    expect(payload.components).toHaveLength(5);
+  });
+
+  it("replies when opening a panel from a fresh command interaction", async () => {
+    const calls: string[] = [];
+    const interaction = {
+      guildId: "guild-1",
+      user: { id: "user-1" },
+      deferred: false,
+      replied: false,
+      async reply() {
+        calls.push("reply");
+      },
+      async editReply() {
+        calls.push("editReply");
+      },
+      async followUp() {
+        calls.push("followUp");
+      },
+    } as never;
+
+    await openPanelFromCommand(interaction, "moderation", async () => ({
+      embeds: [],
+      components: [],
+    }));
+
+    expect(calls).toEqual(["reply"]);
+  });
+
+  it("edits the deferred reply when opening a panel from an acknowledged command", async () => {
+    const calls: string[] = [];
+    const interaction = {
+      guildId: "guild-1",
+      user: { id: "user-1" },
+      deferred: true,
+      replied: false,
+      async reply() {
+        calls.push("reply");
+      },
+      async editReply() {
+        calls.push("editReply");
+      },
+      async followUp() {
+        calls.push("followUp");
+      },
+    } as never;
+
+    await openPanelFromCommand(interaction, "moderation", async () => ({
+      embeds: [],
+      components: [],
+    }));
+
+    expect(calls).toEqual(["editReply"]);
+  });
+});

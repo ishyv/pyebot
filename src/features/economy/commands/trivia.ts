@@ -1,12 +1,11 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   type ChatInputCommandInteraction,
+  Colors,
+  EmbedBuilder,
+  SlashCommandBuilder,
 } from "discord.js";
 import { startTrivia } from "@/features/economy/minigames";
 
@@ -18,7 +17,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply();
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });
@@ -42,7 +41,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const buttons = question.options.map((option, i) =>
     new ButtonBuilder()
       .setCustomId(`trivia_answer:${sessionKey}:${i}`)
-      .setLabel(`${labels[i]}: ${option.length > 75 ? option.slice(0, 75) + "…" : option}`)
+      .setLabel(`${labels[i]}: ${option.length > 75 ? `${option.slice(0, 75)}…` : option}`)
       .setStyle(ButtonStyle.Primary),
   );
 

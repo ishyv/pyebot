@@ -6,7 +6,13 @@
  * Rate limiting uses a MongoDB `ai_rate_limits` collection.
  */
 
-import { generateText, type LanguageModel } from "ai";
+import {
+  generateObject,
+  generateText,
+  type FlexibleSchema,
+  type InferSchema,
+  type LanguageModel,
+} from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -14,6 +20,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { getDb } from "@/core/db";
 import { sessions } from "@/core/state";
 import { createLogger } from "@/core/logger";
+import { ErrResult, OkResult, type Result } from "@/core/result";
 
 import { aiConfig, type ProviderId, type ModelTier } from "./config";
 
@@ -129,6 +136,10 @@ function getModelInstance(provider: ProviderId, tier: ModelTier): LanguageModel 
   }
 }
 
+function getModelName(provider: ProviderId, tier: ModelTier): string {
+  return aiConfig.providers[provider][tier];
+}
+
 // ─── Unified Multi-Provider Text Generation ──────────────────────────────────
 
 /**
@@ -161,6 +172,88 @@ export async function generateResilientText(
 
   // If we reach this point, all providers failed
   throw new Error(`All providers failed to generate text. Last error: ${lastError}`);
+}
+
+// ─── Safe Structured Generation ──────────────────────────────────────────────
+
+export type AiGenerationErrorCode =
+  | "provider_failed"
+  | "all_providers_failed"
+  | "invalid_model";
+
+export class AiGenerationError extends Error {
+  constructor(
+    public readonly code: AiGenerationErrorCode,
+    message: string,
+    public readonly cause?: unknown,
+    public readonly providerId?: ProviderId,
+  ) {
+    super(message);
+    this.name = "AiGenerationError";
+  }
+}
+
+export interface GenerateResilientObjectOptions {
+  readonly tier?: ModelTier;
+  readonly maxOutputTokens?: number;
+  readonly timeout?: number | { totalMs?: number; stepMs?: number };
+  readonly temperature?: number;
+  readonly functionId?: string;
+}
+
+export interface GenerateResilientObjectResult<T> {
+  readonly object: T;
+  readonly providerId: ProviderId;
+  readonly model: string;
+}
+
+export async function generateResilientObject<SCHEMA extends FlexibleSchema<unknown>>(
+  schema: SCHEMA,
+  systemPrompt: string,
+  userPrompt: string,
+  options: GenerateResilientObjectOptions = {},
+): Promise<Result<GenerateResilientObjectResult<InferSchema<SCHEMA>>, AiGenerationError>> {
+  const tier = options.tier ?? "mid";
+  let lastError: AiGenerationError | null = null;
+
+  for (const provider of aiConfig.priority) {
+    const modelName = getModelName(provider, tier);
+    try {
+      const model = getModelInstance(provider, tier);
+      const { object } = await generateObject<SCHEMA, "object", InferSchema<SCHEMA>>({
+        model,
+        schema,
+        output: "object",
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: options.maxOutputTokens,
+        temperature: options.temperature ?? 0.2,
+        timeout: options.timeout,
+        experimental_telemetry: options.functionId
+          ? { isEnabled: false, functionId: options.functionId }
+          : undefined,
+      });
+
+      return OkResult({ object, providerId: provider, model: modelName });
+    } catch (cause) {
+      const error = new AiGenerationError(
+        "provider_failed",
+        `Provider ${provider} failed while generating structured AI output.`,
+        cause,
+        provider,
+      );
+      log.error(`[AI Fallback] Provider ${provider} failed on tier ${tier}. Attempting next...`, cause);
+      lastError = error;
+    }
+  }
+
+  return ErrResult(
+    new AiGenerationError(
+      "all_providers_failed",
+      "All providers failed to generate structured AI output.",
+      lastError,
+    ),
+  );
 }
 
 // ─── Legacy Chat Wrapper ──────────────────────────────────────────────────────────

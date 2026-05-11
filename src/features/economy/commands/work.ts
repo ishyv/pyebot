@@ -1,21 +1,18 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  Colors,
+  EmbedBuilder,
+  SlashCommandBuilder,
 } from "discord.js";
-import { work, WorkError } from "@/features/economy/work";
 import { ensureAccount } from "@/features/economy/account";
 import { getBalance } from "@/features/economy/mutations";
+import { WorkError, work } from "@/features/economy/work";
 import { coins, relativeTs } from "@/utils/fmt";
 
-export const data = new SlashCommandBuilder()
-  .setName("work")
-  .setDescription("Work to earn coins");
+export const data = new SlashCommandBuilder().setName("work").setDescription("Work to earn coins");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply();
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });
@@ -47,11 +44,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (err instanceof WorkError && err.code === "DAILY_CAP_REACHED") {
       const now = new Date();
       // Next reset is at midnight UTC
-      const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+      const tomorrow = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+      );
       const embed = new EmbedBuilder()
         .setColor(Colors.Orange)
         .setTitle("📅 Daily Cap Reached")
-        .setDescription(`You've reached your work limit for today.\n\nResets ${relativeTs(tomorrow.getTime())}`)
+        .setDescription(
+          `You've reached your work limit for today.\n\nResets ${relativeTs(tomorrow.getTime())}`,
+        )
         .setFooter({ text: "💡 /daily • /coinflip • /balance" });
       await interaction.editReply({ embeds: [embed] });
       return;

@@ -19,36 +19,47 @@
  */
 
 import { MessageFlags, type Interaction } from "discord.js";
-import type { FeatureRegistry } from "@/core/registry";
-import { runMiddleware } from "@/core/middleware";
-import { guildOnly } from "@/middleware/guildOnly";
-import { featureGateMw } from "@/middleware/featureGate";
-import { getGuild } from "@/db/repositories/guilds";
+import {
+  createInteractionResponder,
+  type InteractionResponder,
+} from "@/core/interactionResponder";
 import { createLogger } from "@/core/logger";
+import { runMiddleware } from "@/core/middleware";
+import type { FeatureRegistry } from "@/core/registry";
+import { getGuild } from "@/db/repositories/guilds";
+import { featureGateMw } from "@/middleware/featureGate";
+import { guildOnly } from "@/middleware/guildOnly";
 
 const log = createLogger("dispatcher");
 
 export function createDispatcher(registry: FeatureRegistry) {
   return async function dispatch(interaction: Interaction): Promise<void> {
+    let responder: InteractionResponder | null = null;
+    let errorContext: Record<string, string> = {};
     try {
       // -----------------------------------------------------------------
       // Slash commands
       // -----------------------------------------------------------------
       if (interaction.isChatInputCommand()) {
+        responder = createInteractionResponder(interaction);
         const entry = registry.getCommand(interaction.commandName);
         if (!entry) {
-          await interaction.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
+          await responder.send({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
           return;
         }
 
         const { feature, command } = entry;
+        errorContext = {
+          commandName: interaction.commandName,
+          featureId: feature.id,
+          guildId: interaction.guildId ?? "",
+          userId: interaction.user.id,
+        };
 
         // Fetch guild config once; commands use ctx.guildConfig instead of calling getGuild()
         const guildId = interaction.guildId ?? "";
         const guildResult = await getGuild(guildId);
-        const guildConfig = guildResult.isOk() && guildResult.unwrap()
-          ? guildResult.unwrap()!
-          : null;
+        const guildConfig = guildResult.isOk() ? guildResult.unwrap() : null;
 
         // If we can't fetch guild config, guildOnly will short-circuit anyway for guild commands
         // Pass a fallback schema default for DM commands (rare)
@@ -61,7 +72,19 @@ export function createDispatcher(registry: FeatureRegistry) {
           commandName: interaction.commandName,
           featureId: feature.id,
           guildConfig: resolvedConfig,
+          respond: responder,
         };
+
+        if (command.response?.defer === "immediate") {
+          const result = await responder.defer({ visibility: command.response.visibility });
+          if (result.isErr()) {
+            log.warn("Failed to defer interaction before command execution", {
+              ...errorContext,
+              kind: result.error.kind,
+            });
+            return;
+          }
+        }
 
         const pipeline = [
           guildOnly(),
@@ -97,8 +120,8 @@ export function createDispatcher(registry: FeatureRegistry) {
         // Feature gate for components
         if (feature.featureGate && interaction.guildId) {
           const guildResult = await getGuild(interaction.guildId);
-          if (guildResult.isOk() && guildResult.unwrap()) {
-            const cfg = guildResult.unwrap()!;
+          const cfg = guildResult.isOk() ? guildResult.unwrap() : null;
+          if (cfg) {
             const enabled = (cfg.features as Record<string, boolean>)[feature.featureGate];
             if (enabled === false) {
               try {
@@ -115,17 +138,15 @@ export function createDispatcher(registry: FeatureRegistry) {
         return;
       }
     } catch (err) {
-      log.error("Unhandled interaction error", err);
-      try {
-        const i = interaction as { replied?: boolean; deferred?: boolean; reply?: (o: object) => Promise<void>; followUp?: (o: object) => Promise<void> };
-        const msg = { content: "An unexpected error occurred.", flags: MessageFlags.Ephemeral };
-        if (i.replied || i.deferred) {
-          await i.followUp?.(msg);
-        } else {
-          await i.reply?.(msg);
-        }
-      } catch {
-        // best-effort — ignore if we can't reply
+      log.error("Unhandled interaction error", { ...errorContext, err });
+      const replyResult = await (responder ?? createInteractionResponder(interaction)).fail({
+        content: "An unexpected error occurred.",
+      });
+      if (replyResult.isErr()) {
+        log.warn("Failed to send interaction error response", {
+          ...errorContext,
+          kind: replyResult.error.kind,
+        });
       }
     }
   };

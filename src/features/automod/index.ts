@@ -1,24 +1,33 @@
 import type { ButtonInteraction } from "discord.js";
 import { Button, Event, Feature, Job, SlashCommand } from "@/framework";
 import * as automodCmd from "./commands/automod";
-import { register as registerMessageCreate } from "./handlers/messageCreate";
 import { pruneCrossChannelSpam } from "./crossChannelSpam";
-import { pruneMentionSpam } from "./mentionSpam";
-import { pruneSlowmodeMessages } from "./slowmode";
-import { registerRaidDetection, pruneRaidDetectionHistory } from "./raidDetection";
+import { register as registerMessageCreate } from "./handlers/messageCreate";
 import {
-  isSpamTimeout, handleSpamTimeout,
-  isSpamBan, handleSpamBan,
-  isSpamDismiss, handleSpamDismiss,
-} from "./handlers/spamAlert";
-import {
-  isRaidLockdown, handleRaidLockdown,
-  isRaidDismiss, handleRaidDismiss,
+  handleRaidDismiss,
+  handleRaidLockdown,
+  isRaidDismiss,
+  isRaidLockdown,
 } from "./handlers/raidAlert";
+import {
+  handleSpamBan,
+  handleSpamDismiss,
+  handleSpamTimeout,
+  isSpamBan,
+  isSpamDismiss,
+  isSpamTimeout,
+} from "./handlers/spamAlert";
+import { pruneMentionSpam } from "./mentionSpam";
+import { pruneRaidDetectionHistory, registerRaidDetection } from "./raidDetection";
+import { pruneSlowmodeMessages } from "./slowmode";
 
-@Feature({ id: "automod", gate: "automod", intents: ["Guilds", "GuildMessages", "MessageContent", "GuildMembers"] })
+@Feature({ id: "automod", intents: ["Guilds", "GuildMessages", "MessageContent", "GuildMembers"] })
 export default class AutomodFeature {
-  @SlashCommand({ name: automodCmd.data.name, description: "Configure automod", data: automodCmd.data })
+  @SlashCommand({
+    name: automodCmd.data.name,
+    description: "Configure automod",
+    data: automodCmd.data,
+  })
   async automod(...args: Parameters<typeof automodCmd.execute>): Promise<void> {
     await automodCmd.execute(...args);
   }
@@ -48,7 +57,11 @@ export default class AutomodFeature {
     await handleRaidDismiss(interaction);
   }
 
-  @Event({ name: "messageCreate", intents: ["GuildMessages", "MessageContent"], register: registerMessageCreate })
+  @Event({
+    name: "messageCreate",
+    intents: ["GuildMessages", "MessageContent"],
+    register: registerMessageCreate,
+  })
   registerMessages(): void {}
 
   @Event({ name: "guildMemberAdd", intents: ["GuildMembers"], register: registerRaidDetection })

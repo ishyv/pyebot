@@ -12,6 +12,7 @@ import type {
   ChatInputCommandInteraction,
   InteractionReplyOptions,
   Message,
+  MessageActionRowComponentBuilder,
   MessageCreateOptions,
   MessageEditOptions,
 } from "discord.js";
@@ -36,8 +37,16 @@ export const PANEL_DEFINITIONS = [
   { id: "home", label: "Dashboard", description: "Server-wide status and shortcuts" },
   { id: "channels", label: "Channels", description: "Core channels and managed channel map" },
   { id: "features", label: "Features", description: "Guild feature flags" },
-  { id: "feature-config", label: "Feature Config", description: "Feature-owned configurable fields" },
-  { id: "moderation", label: "Moderation", description: "Logs, escalation, quarantine, verification" },
+  {
+    id: "feature-config",
+    label: "Feature Config",
+    description: "Feature-owned configurable fields",
+  },
+  {
+    id: "moderation",
+    label: "Moderation",
+    description: "Logs, escalation, quarantine, verification",
+  },
   { id: "automod", label: "Automod", description: "Spam, raid, slowmode, patterns" },
   { id: "roles", label: "Roles", description: "Moderation permissions, limits, performance" },
   { id: "autoroles", label: "Autoroles", description: "Automatic role rules" },
@@ -79,8 +88,10 @@ export interface PanelCustomId {
 
 export interface PanelPayload {
   embeds: EmbedBuilder[];
-  components: ActionRowBuilder<any>[];
+  components: PanelActionRow[];
 }
+
+export type PanelActionRow = ActionRowBuilder<MessageActionRowComponentBuilder>;
 
 function randomId(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -180,7 +191,7 @@ export function panelEmbed(params: {
   return embed;
 }
 
-export function navigationRows(session: PanelState): ActionRowBuilder<any>[] {
+export function navigationRows(session: PanelState): PanelActionRow[] {
   const nav = new StringSelectMenuBuilder()
     .setCustomId(makePanelCustomId(session, session.panelId, "nav"))
     .setPlaceholder("Jump to a panel")
@@ -210,12 +221,43 @@ export function navigationRows(session: PanelState): ActionRowBuilder<any>[] {
   ];
 }
 
+export function withNavigationRows(
+  session: PanelState,
+  payload: PanelPayload,
+  maxRows = 5,
+): PanelPayload {
+  const bodyRows = payload.components.slice(0, maxRows);
+  const remainingRows = Math.max(0, maxRows - bodyRows.length);
+  return {
+    ...payload,
+    components: [...bodyRows, ...navigationRows(session).slice(0, remainingRows)],
+  };
+}
+
 export function commandPanelReply(payload: PanelPayload): InteractionReplyOptions {
   return {
     embeds: payload.embeds,
     components: payload.components,
     flags: MessageFlags.Ephemeral,
   };
+}
+
+export async function respondToPanelCommand(
+  interaction: ChatInputCommandInteraction,
+  payload: InteractionReplyOptions,
+): Promise<void> {
+  if (interaction.deferred) {
+    const { flags: _flags, ...editPayload } = payload;
+    await interaction.editReply(editPayload);
+    return;
+  }
+
+  if (interaction.replied) {
+    await interaction.followUp(payload);
+    return;
+  }
+
+  await interaction.reply(payload);
 }
 
 export async function updatePanelMessage(
@@ -262,11 +304,14 @@ export async function openPanelFromCommand(
   render: (session: PanelState) => Promise<PanelPayload>,
 ): Promise<void> {
   if (!interaction.guildId) {
-    await interaction.reply({ content: "This panel can only be used in a server.", flags: MessageFlags.Ephemeral });
+    await respondToPanelCommand(interaction, {
+      content: "This panel can only be used in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
   const session = panelSessions.create(interaction.user.id, interaction.guildId, panelId);
   const payload = await render(session);
-  await interaction.reply(commandPanelReply(payload));
+  await respondToPanelCommand(interaction, commandPanelReply(payload));
 }

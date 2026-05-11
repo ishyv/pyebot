@@ -17,6 +17,7 @@ import {
   type MessageActionRowComponentBuilder,
 } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { guardModerationComponentAction } from "@/features/moderation/authorization";
 
 const log = createLogger("automod:spam-alert");
 
@@ -57,6 +58,7 @@ async function disableButtons(interaction: ButtonInteraction): Promise<void> {
 // ─── Timeout ─────────────────────────────────────────────────────────────────
 
 export async function handleSpamTimeout(interaction: ButtonInteraction): Promise<void> {
+  if (!(await guardModerationComponentAction(interaction, "TIMEOUT"))) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
 
@@ -79,6 +81,7 @@ export async function handleSpamTimeout(interaction: ButtonInteraction): Promise
 // ─── Ban ─────────────────────────────────────────────────────────────────────
 
 export async function handleSpamBan(interaction: ButtonInteraction): Promise<void> {
+  if (!(await guardModerationComponentAction(interaction, "BAN"))) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
 
@@ -103,6 +106,7 @@ export async function handleSpamBan(interaction: ButtonInteraction): Promise<voi
 // ─── Dismiss ─────────────────────────────────────────────────────────────────
 
 export async function handleSpamDismiss(interaction: ButtonInteraction): Promise<void> {
+  if (!(await guardModerationComponentAction(interaction, "WARN"))) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
   await interaction.editReply({ content: "Alert dismissed. No further action taken." });

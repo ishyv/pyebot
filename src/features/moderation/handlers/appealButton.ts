@@ -23,6 +23,7 @@ import {
 } from "discord.js";
 import { getGuild } from "@/db/repositories/guilds";
 import { createLogger } from "@/core/logger";
+import { guardModerationComponentAction } from "@/features/moderation/authorization";
 
 const log = createLogger("moderation:appeals");
 
@@ -131,6 +132,7 @@ export async function handleAppealButton(interaction: ButtonInteraction): Promis
 // ─── Step 2a: Mod approves appeal ────────────────────────────────────────────
 
 export async function handleAppealApprove(interaction: ButtonInteraction): Promise<void> {
+  if (!(await guardModerationComponentAction(interaction, "UNBAN"))) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableAppealButtons(interaction, "Approved");
 
@@ -159,6 +161,7 @@ export async function handleAppealApprove(interaction: ButtonInteraction): Promi
 // ─── Step 2b: Mod denies appeal ───────────────────────────────────────────────
 
 export async function handleAppealDeny(interaction: ButtonInteraction): Promise<void> {
+  if (!(await guardModerationComponentAction(interaction, "WARN"))) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableAppealButtons(interaction, "Denied");
 

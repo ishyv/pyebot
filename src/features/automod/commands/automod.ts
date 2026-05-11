@@ -5,15 +5,14 @@
  */
 
 import {
-  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { updateGuildPaths } from "@/db/repositories/guilds";
-import { getGuild } from "@/db/repositories/guilds";
+import type { CommandContext } from "@/core/feature";
+import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 
 export const data = new SlashCommandBuilder()
@@ -262,28 +261,28 @@ export const data = new SlashCommandBuilder()
       .setDescription("Open the automod configuration panel"),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
-  if (sub === "linkspam") await handleLinkspam(interaction);
-  else if (sub === "whitelist") await handleWhitelist(interaction);
-  else if (sub === "report-channel") await handleReportChannel(interaction);
-  else if (sub === "status") await handleStatus(interaction);
-  else if (sub === "crosschannel") await handleCrossChannel(interaction);
-  else if (sub === "mentionspam") await handleMentionSpam(interaction);
-  else if (sub === "slowmode") await handleSlowmode(interaction);
-  else if (sub === "raid") await handleRaid(interaction);
-  else if (sub === "pattern") await handlePattern(interaction);
+  if (sub === "linkspam") await handleLinkspam(interaction, ctx);
+  else if (sub === "whitelist") await handleWhitelist(interaction, ctx);
+  else if (sub === "report-channel") await handleReportChannel(interaction, ctx);
+  else if (sub === "status") await handleStatus(interaction, ctx);
+  else if (sub === "crosschannel") await handleCrossChannel(interaction, ctx);
+  else if (sub === "mentionspam") await handleMentionSpam(interaction, ctx);
+  else if (sub === "slowmode") await handleSlowmode(interaction, ctx);
+  else if (sub === "raid") await handleRaid(interaction, ctx);
+  else if (sub === "pattern") await handlePattern(interaction, ctx);
   else if (sub === "panel") {
     if (!(await assertPanelPermission(interaction))) return;
     await openAdminPanel(interaction, "automod");
   }
 }
 
-async function handleLinkspam(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleLinkspam(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const action = interaction.options.getString("action", true);
   const enabled = action === "enable";
 
@@ -297,10 +296,10 @@ async function handleLinkspam(interaction: ChatInputCommandInteraction): Promise
   if (windowSeconds !== null) paths["automod.linkSpam.windowSeconds"] = windowSeconds;
   if (response !== null) paths["automod.linkSpam.action"] = response;
 
-  const result = await updateGuildPaths(guildId, paths);
+  const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await interaction.editReply({
+    await ctx.respond.fail({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
     });
     return;
@@ -316,19 +315,19 @@ async function handleLinkspam(interaction: ChatInputCommandInteraction): Promise
   if (windowSeconds !== null) embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
   if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
 
-  await interaction.editReply({ embeds: [embed] });
+  await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleWhitelist(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleWhitelist(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const action = interaction.options.getString("action", true);
   const domain = interaction.options.getString("domain", true).toLowerCase().trim();
 
   const guildResult = await getGuild(guildId);
   if (guildResult.isErr()) {
-    await interaction.editReply({ content: "Failed to load guild config." });
+    await ctx.respond.send({ content: "Failed to load guild config." });
     return;
   }
 
@@ -337,24 +336,29 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction): Promis
   let updated: string[];
   if (action === "add") {
     if (current.includes(domain)) {
-      await interaction.editReply({ content: `\`${domain}\` is already whitelisted.` });
+      await ctx.respond.send({ content: `\`${domain}\` is already whitelisted.` });
       return;
     }
     updated = [...current, domain];
   } else {
     updated = current.filter((d) => d !== domain);
     if (updated.length === current.length) {
-      await interaction.editReply({ content: `\`${domain}\` is not in the whitelist.` });
+      await ctx.respond.send({ content: `\`${domain}\` is not in the whitelist.` });
       return;
     }
   }
 
-  await updateGuildPaths(guildId, {
+  const result = await updateGuildPaths(guildId, {
     "automod.domainWhitelist.enabled": true,
     "automod.domainWhitelist.domains": updated,
-  });
+  }, { upsert: true });
 
-  await interaction.editReply({
+  if (result.isErr()) {
+    await ctx.respond.fail({ content: "Could not update domain whitelist." });
+    return;
+  }
+
+  await ctx.respond.send({
     embeds: [
       new EmbedBuilder()
         .setColor(action === "add" ? Colors.Green : Colors.Orange)
@@ -365,25 +369,25 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction): Promis
   });
 }
 
-async function handleReportChannel(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleReportChannel(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const channel = interaction.options.getChannel("channel");
   const channelId = channel?.id ?? null;
 
   const result = await updateGuildPaths(guildId, {
     "automod.linkSpam.reportChannelId": channelId,
-  });
+  }, { upsert: true });
 
   if (result.isErr()) {
-    await interaction.editReply({
+    await ctx.respond.fail({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update report channel.")],
     });
     return;
   }
 
-  await interaction.editReply({
+  await ctx.respond.send({
     embeds: [
       new EmbedBuilder()
         .setColor(Colors.Blue)
@@ -393,18 +397,19 @@ async function handleReportChannel(interaction: ChatInputCommandInteraction): Pr
   });
 }
 
-async function handleStatus(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleStatus(_interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const guildResult = await getGuild(guildId);
 
-  if (guildResult.isErr() || !guildResult.unwrap()) {
-    await interaction.editReply({ content: "Failed to load config." });
+  const guild = guildResult.isOk() ? guildResult.unwrap() : null;
+  if (!guild) {
+    await ctx.respond.send({ content: "Failed to load config." });
     return;
   }
 
-  const automod = guildResult.unwrap()!.automod;
+  const automod = guild.automod;
   const ls = automod.linkSpam;
   const dw = automod.domainWhitelist;
   const cs = automod.crossChannelSpam;
@@ -434,13 +439,13 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
     ...(cp.length > 0 ? cp.map((p) => `  • \`${p.name}\` (\`${p.pattern}\`) → ${p.action}`) : []),
   ];
 
-  await interaction.editReply({ content: lines.join("\n") });
+  await ctx.respond.send({ content: lines.join("\n") });
 }
 
-async function handleCrossChannel(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleCrossChannel(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const action = interaction.options.getString("action", true);
   const enabled = action === "enable";
 
@@ -458,10 +463,10 @@ async function handleCrossChannel(interaction: ChatInputCommandInteraction): Pro
   if (autoTimeout !== null) paths["automod.crossChannelSpam.autoTimeout"] = autoTimeout;
   if (timeoutSeconds !== null) paths["automod.crossChannelSpam.timeoutSeconds"] = timeoutSeconds;
 
-  const result = await updateGuildPaths(guildId, paths);
+  const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await interaction.editReply({
+    await ctx.respond.fail({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
     });
     return;
@@ -481,13 +486,13 @@ async function handleCrossChannel(interaction: ChatInputCommandInteraction): Pro
     embed.addFields({ name: "Report Channel", value: reportChannel ? `<#${reportChannel.id}>` : "cleared", inline: true });
   }
 
-  await interaction.editReply({ embeds: [embed] });
+  await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleMentionSpam(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleMentionSpam(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const action = interaction.options.getString("action", true);
   const enabled = action === "enable";
 
@@ -503,10 +508,10 @@ async function handleMentionSpam(interaction: ChatInputCommandInteraction): Prom
   if (response !== null) paths["automod.mentionSpam.action"] = response;
   if (timeoutSeconds !== null) paths["automod.mentionSpam.timeoutSeconds"] = timeoutSeconds;
 
-  const result = await updateGuildPaths(guildId, paths);
+  const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await interaction.editReply({
+    await ctx.respond.fail({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
     });
     return;
@@ -523,13 +528,13 @@ async function handleMentionSpam(interaction: ChatInputCommandInteraction): Prom
   if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
   if (timeoutSeconds !== null) embed.addFields({ name: "Timeout Duration", value: `${timeoutSeconds}s`, inline: true });
 
-  await interaction.editReply({ embeds: [embed] });
+  await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleSlowmode(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleSlowmode(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const action = interaction.options.getString("action", true);
   const enabled = action === "enable";
 
@@ -545,10 +550,10 @@ async function handleSlowmode(interaction: ChatInputCommandInteraction): Promise
   if (slowmodeSeconds !== null) paths["automod.slowmode.slowmodeSeconds"] = slowmodeSeconds;
   if (releaseAfter !== null) paths["automod.slowmode.releaseAfterSeconds"] = releaseAfter;
 
-  const result = await updateGuildPaths(guildId, paths);
+  const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await interaction.editReply({
+    await ctx.respond.fail({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
     });
     return;
@@ -565,13 +570,13 @@ async function handleSlowmode(interaction: ChatInputCommandInteraction): Promise
   if (slowmodeSeconds !== null) embed.addFields({ name: "Slowmode Rate", value: `${slowmodeSeconds}s`, inline: true });
   if (releaseAfter !== null) embed.addFields({ name: "Release After", value: `${releaseAfter}s`, inline: true });
 
-  await interaction.editReply({ embeds: [embed] });
+  await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleRaid(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleRaid(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const action = interaction.options.getString("action", true);
   const enabled = action === "enable";
 
@@ -587,10 +592,10 @@ async function handleRaid(interaction: ChatInputCommandInteraction): Promise<voi
   if (response !== null) paths["automod.raidDetection.action"] = response;
   if (reportChannel !== undefined) paths["automod.raidDetection.reportChannelId"] = reportChannel?.id ?? null;
 
-  const result = await updateGuildPaths(guildId, paths);
+  const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await interaction.editReply({
+    await ctx.respond.fail({
       embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
     });
     return;
@@ -609,53 +614,59 @@ async function handleRaid(interaction: ChatInputCommandInteraction): Promise<voi
     embed.addFields({ name: "Report Channel", value: reportChannel ? `<#${reportChannel.id}>` : "cleared", inline: true });
   }
 
-  await interaction.editReply({ embeds: [embed] });
+  await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handlePattern(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handlePattern(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guildId = interaction.guildId!;
+  const guildId = ctx.guildId;
   const action = interaction.options.getString("action", true);
 
   if (action === "list") {
     const guildResult = await getGuild(guildId);
-    if (guildResult.isErr() || !guildResult.unwrap()) {
-      await interaction.editReply({ content: "Failed to load config." });
+    const guild = guildResult.isOk() ? guildResult.unwrap() : null;
+    if (!guild) {
+      await ctx.respond.send({ content: "Failed to load config." });
       return;
     }
-    const patterns = guildResult.unwrap()!.automod.customPatterns ?? [];
+    const patterns = guild.automod.customPatterns ?? [];
     if (patterns.length === 0) {
-      await interaction.editReply({ content: "No custom patterns configured." });
+      await ctx.respond.send({ content: "No custom patterns configured." });
       return;
     }
     const lines = patterns.map((p, i) => `**${i + 1}. ${p.name}** — \`/${p.pattern}/${p.flags}\` → \`${p.action}\``);
-    await interaction.editReply({ content: lines.join("\n") });
+    await ctx.respond.send({ content: lines.join("\n") });
     return;
   }
 
   const name = interaction.options.getString("name");
   if (!name) {
-    await interaction.editReply({ content: "A pattern name is required." });
+    await ctx.respond.send({ content: "A pattern name is required." });
     return;
   }
 
   if (action === "remove") {
     const guildResult = await getGuild(guildId);
-    if (guildResult.isErr() || !guildResult.unwrap()) {
-      await interaction.editReply({ content: "Failed to load config." });
+    const guild = guildResult.isOk() ? guildResult.unwrap() : null;
+    if (!guild) {
+      await ctx.respond.send({ content: "Failed to load config." });
       return;
     }
-    const patterns = guildResult.unwrap()!.automod.customPatterns ?? [];
+    const patterns = guild.automod.customPatterns ?? [];
     const updated = patterns.filter((p) => p.name !== name);
     if (updated.length === patterns.length) {
-      await interaction.editReply({ content: `No pattern named \`${name}\` found.` });
+      await ctx.respond.send({ content: `No pattern named \`${name}\` found.` });
       return;
     }
-    await updateGuildPaths(guildId, { "automod.customPatterns": updated });
+    const result = await updateGuildPaths(guildId, { "automod.customPatterns": updated }, { upsert: true });
+    if (result.isErr()) {
+      await ctx.respond.fail({ content: "Could not remove custom pattern." });
+      return;
+    }
     const { invalidatePatternCache } = await import("@/features/automod/service");
     invalidatePatternCache(guildId);
-    await interaction.editReply({
+    await ctx.respond.send({
       embeds: [
         new EmbedBuilder()
           .setColor(Colors.Orange)
@@ -669,7 +680,7 @@ async function handlePattern(interaction: ChatInputCommandInteraction): Promise<
   // add
   const regex = interaction.options.getString("regex");
   if (!regex) {
-    await interaction.editReply({ content: "A regex pattern is required when adding." });
+    await ctx.respond.send({ content: "A regex pattern is required when adding." });
     return;
   }
 
@@ -681,28 +692,33 @@ async function handlePattern(interaction: ChatInputCommandInteraction): Promise<
   try {
     new RegExp(regex, flags);
   } catch {
-    await interaction.editReply({ content: `Invalid regex: \`/${regex}/${flags}\`` });
+    await ctx.respond.send({ content: `Invalid regex: \`/${regex}/${flags}\`` });
     return;
   }
 
   const guildResult = await getGuild(guildId);
-  if (guildResult.isErr() || !guildResult.unwrap()) {
-    await interaction.editReply({ content: "Failed to load config." });
+  const guild = guildResult.isOk() ? guildResult.unwrap() : null;
+  if (!guild) {
+    await ctx.respond.send({ content: "Failed to load config." });
     return;
   }
 
-  const patterns = guildResult.unwrap()!.automod.customPatterns ?? [];
+  const patterns = guild.automod.customPatterns ?? [];
   if (patterns.some((p) => p.name === name)) {
-    await interaction.editReply({ content: `A pattern named \`${name}\` already exists. Remove it first.` });
+    await ctx.respond.send({ content: `A pattern named \`${name}\` already exists. Remove it first.` });
     return;
   }
 
   const updated = [...patterns, { name, pattern: regex, flags, action: response, timeoutSeconds }];
-  await updateGuildPaths(guildId, { "automod.customPatterns": updated });
+  const result = await updateGuildPaths(guildId, { "automod.customPatterns": updated }, { upsert: true });
+  if (result.isErr()) {
+    await ctx.respond.fail({ content: "Could not add custom pattern." });
+    return;
+  }
   const { invalidatePatternCache } = await import("@/features/automod/service");
   invalidatePatternCache(guildId);
 
-  await interaction.editReply({
+  await ctx.respond.send({
     embeds: [
       new EmbedBuilder()
         .setColor(Colors.Green)

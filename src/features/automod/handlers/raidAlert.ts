@@ -13,6 +13,7 @@ import {
   type MessageActionRowComponentBuilder,
 } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { guardModerationComponentAction } from "@/features/moderation/authorization";
 
 const log = createLogger("automod:raid-alert");
 
@@ -41,6 +42,7 @@ async function disableButtons(interaction: ButtonInteraction): Promise<void> {
 }
 
 export async function handleRaidLockdown(interaction: ButtonInteraction): Promise<void> {
+  if (!(await guardModerationComponentAction(interaction, "LOCKDOWN"))) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
 
@@ -72,6 +74,7 @@ export async function handleRaidLockdown(interaction: ButtonInteraction): Promis
 }
 
 export async function handleRaidDismiss(interaction: ButtonInteraction): Promise<void> {
+  if (!(await guardModerationComponentAction(interaction, "WARN"))) return;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await disableButtons(interaction);
   await interaction.editReply({ content: "Raid alert dismissed." });

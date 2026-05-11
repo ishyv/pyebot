@@ -6,7 +6,7 @@
  * to avoid Bun module mock cross-contamination with mutations.test.ts.
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { OkResult } from "@/core/result";
 import type { User } from "@/db/schemas/user";
 
@@ -20,8 +20,12 @@ const mockSetCooldown = mock((_userId: string, _key: string, _ms: number) => {})
 
 const sessionStore = new Map<string, unknown>();
 const mockSessionsGet = mock((key: string) => sessionStore.get(key));
-const mockSessionsSet = mock((key: string, value: unknown) => { sessionStore.set(key, value); });
-const mockSessionsDelete = mock((key: string) => { sessionStore.delete(key); });
+const mockSessionsSet = mock((key: string, value: unknown) => {
+  sessionStore.set(key, value);
+});
+const mockSessionsDelete = mock((key: string) => {
+  sessionStore.delete(key);
+});
 
 mock.module("@/core/state", () => ({
   cooldowns: {
@@ -45,7 +49,16 @@ const NOW = new Date("2026-01-01T00:00:00.000Z");
 
 function makeAccountResult(userId: string, status: "ok" | "blocked" | "banned" = "ok") {
   return OkResult({
-    account: { userId, status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0, dailyStreak: 0, lastDailyAt: null },
+    account: {
+      userId,
+      status,
+      createdAt: NOW,
+      updatedAt: NOW,
+      lastActivityAt: NOW,
+      version: 0,
+      dailyStreak: 0,
+      lastDailyAt: null,
+    },
     isNew: false,
   });
 }
@@ -80,8 +93,8 @@ function makeUser(currency: Record<string, number> = { coins: 200 }): User {
 
 const mockGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
 const mockEnsure = mock(async (_id: string) => OkResult(makeUser()));
-const mockUpdatePaths = mock(
-  async (_id: string, _paths: Record<string, unknown>) => OkResult(undefined as void),
+const mockUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
+  OkResult(undefined as undefined),
 );
 
 mock.module("@/db/repositories/users", () => ({
@@ -90,6 +103,9 @@ mock.module("@/db/repositories/users", () => ({
     ensure: mockEnsure,
     updatePaths: mockUpdatePaths,
   },
+  getUser: mockGet,
+  ensureUser: mockEnsure,
+  updateUserPaths: mockUpdatePaths,
 }));
 
 // ---------------------------------------------------------------------------
@@ -118,8 +134,12 @@ function resetAll() {
 
   // Restore session store behavior after reset
   mockSessionsGet.mockImplementation((key: string) => sessionStore.get(key));
-  mockSessionsSet.mockImplementation((key: string, value: unknown) => { sessionStore.set(key, value); });
-  mockSessionsDelete.mockImplementation((key: string) => { sessionStore.delete(key); });
+  mockSessionsSet.mockImplementation((key: string, value: unknown) => {
+    sessionStore.set(key, value);
+  });
+  mockSessionsDelete.mockImplementation((key: string) => {
+    sessionStore.delete(key);
+  });
 
   // Safe defaults
   mockIsOnCooldown.mockImplementation(() => false);
@@ -129,7 +149,7 @@ function resetAll() {
   mockIsAccountActive.mockImplementation((status: string) => status === "ok");
   mockGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
   mockEnsure.mockImplementation(async () => OkResult(makeUser()));
-  mockUpdatePaths.mockImplementation(async () => OkResult(undefined as void));
+  mockUpdatePaths.mockImplementation(async () => OkResult(undefined as undefined));
 }
 
 // ---------------------------------------------------------------------------

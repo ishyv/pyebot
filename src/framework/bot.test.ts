@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createBot, Feature, MemoryStorageAdapter, SlashCommand } from "@/framework";
+import { isRetriableDiscordStartupError } from "./bot";
 
 describe("createBot", () => {
   test("builds a registry from decorated classes without requiring Mongo", () => {
@@ -29,5 +30,14 @@ describe("createBot", () => {
         registerCommands: false,
       }),
     ).toThrow("Feature source at index 0 must be a decorated class.");
+  });
+
+  test("classifies Discord gateway 5xx startup errors as retriable", () => {
+    expect(
+      isRetriableDiscordStartupError({ status: 504, method: "GET", url: "/gateway/bot" }),
+    ).toBe(true);
+    expect(
+      isRetriableDiscordStartupError({ status: 401, method: "GET", url: "/gateway/bot" }),
+    ).toBe(false);
   });
 });

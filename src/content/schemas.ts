@@ -6,7 +6,7 @@
  * checks such as duplicate IDs and unknown references live in
  * content/validation.ts. Keep this file focused on one record at a time.
  */
-import { z } from "zod";
+import * as z from "zod";
 
 export const CONTENT_SCHEMA_VERSION = 1 as const;
 

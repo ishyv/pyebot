@@ -2,6 +2,7 @@ import type { Client } from "discord.js";
 import type { ButtonInteraction } from "discord.js";
 import { Button, Event, Feature, Job, SlashCommand } from "@/framework";
 import * as banCmd from "./commands/ban";
+import * as modCmd from "./commands/mod";
 import * as kickCmd from "./commands/kick";
 import * as muteCmd from "./commands/mute";
 import * as warnCmd from "./commands/warn";
@@ -45,6 +46,11 @@ async function sweepTempBans(client: Client): Promise<void> {
 
 @Feature({ id: "moderation", intents: ["Guilds", "GuildMembers", "GuildModeration"] })
 export default class ModerationFeature {
+  @SlashCommand({ name: modCmd.data.name, description: "Moderation help", data: modCmd.data })
+  async mod(...args: Parameters<typeof modCmd.execute>): Promise<void> {
+    await modCmd.execute(...args);
+  }
+
   @SlashCommand({ name: banCmd.data.name, description: "Ban a user", data: banCmd.data })
   async ban(...args: Parameters<typeof banCmd.execute>): Promise<void> {
     await banCmd.execute(...args);

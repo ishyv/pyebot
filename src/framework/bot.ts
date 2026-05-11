@@ -11,6 +11,9 @@ import type { StorageAdapter } from "@/framework/storage";
 
 const log = createLogger("framework:bot");
 
+const DEFAULT_LOGIN_RETRY_ATTEMPTS = 5;
+const DEFAULT_LOGIN_RETRY_DELAY_MS = 2_000;
+
 export interface CreateBotOptions {
   readonly name: string;
   readonly token?: string;
@@ -21,6 +24,8 @@ export interface CreateBotOptions {
   readonly loadContent?: boolean;
   readonly registerCommands?: boolean;
   readonly connectMongo?: boolean;
+  readonly loginRetryAttempts?: number;
+  readonly loginRetryDelayMs?: number;
 }
 
 export interface BotApplication {
@@ -93,7 +98,15 @@ export function createBot(options: CreateBotOptions): BotApplication {
         }
       });
 
-      await client.login(token);
+      try {
+        await loginWithRetry(client, token, {
+          attempts: options.loginRetryAttempts ?? DEFAULT_LOGIN_RETRY_ATTEMPTS,
+          baseDelayMs: options.loginRetryDelayMs ?? DEFAULT_LOGIN_RETRY_DELAY_MS,
+        });
+      } catch (error) {
+        started = false;
+        throw error;
+      }
     },
     async stop() {
       for (const feature of [...registry.allFeatures()].reverse()) {
@@ -109,6 +122,49 @@ export function createBot(options: CreateBotOptions): BotApplication {
       started = false;
     },
   };
+}
+
+interface LoginRetryOptions {
+  readonly attempts: number;
+  readonly baseDelayMs: number;
+}
+
+async function loginWithRetry(
+  client: Pick<Client, "login">,
+  token: string,
+  options: LoginRetryOptions,
+): Promise<void> {
+  const attempts = Math.max(1, options.attempts);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await client.login(token);
+      return;
+    } catch (error) {
+      if (attempt >= attempts || !isRetriableDiscordStartupError(error)) {
+        throw error;
+      }
+
+      const delayMs = options.baseDelayMs * 2 ** (attempt - 1);
+      log.warn(
+        `Discord login failed with a transient gateway error; retrying in ${delayMs}ms (${attempt}/${attempts})`,
+        error,
+      );
+      await sleep(delayMs);
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function isRetriableDiscordStartupError(error: unknown): boolean {
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : NaN;
+
+  return status === 429 || (status >= 500 && status <= 599);
 }
 
 function shouldLoadContent(options: CreateBotOptions): boolean {

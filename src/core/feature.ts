@@ -20,6 +20,7 @@ import type {
 import type { Result } from "@/core/result";
 import type { Guild } from "@/db/schemas/guild";
 import type { FeatureConfigDefinition } from "@/core/featureConfig";
+import type { InteractionResponder, InteractionVisibility } from "@/core/interactionResponder";
 
 // ---------------------------------------------------------------------------
 // Middleware
@@ -36,6 +37,8 @@ export interface CommandContext {
   readonly featureId: string;
   /** Guild document fetched once per interaction; use this instead of calling getGuild() in commands. */
   readonly guildConfig: Guild;
+  /** Framework-owned Discord interaction response lifecycle. */
+  readonly respond: InteractionResponder;
 }
 
 /**
@@ -57,6 +60,10 @@ export interface FeatureCommand {
   /** Slash command data with .name and .toJSON(). */
   readonly data: { name: string; toJSON(): unknown };
   readonly execute: (interaction: ChatInputCommandInteraction, ctx: CommandContext) => Promise<void>;
+  readonly response?: {
+    readonly defer?: "immediate" | "none";
+    readonly visibility: InteractionVisibility;
+  };
   /**
    * Command-specific middleware (cooldowns, permission checks).
    * Runs AFTER the framework-level guildOnly and featureGate middleware.
