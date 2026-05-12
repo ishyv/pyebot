@@ -51,16 +51,16 @@ export async function handleOnboard(interaction: ButtonInteraction): Promise<voi
 
   const gatherHint =
     profession === "miner"
-      ? "You start with a **starter pickaxe** — use `/gather-mine` to pick a location and begin."
-      : "You start with a **starter axe** — use `/gather-cutdown` to pick a location and begin.";
+      ? "You start with a **starter pickaxe** — use `/expedition` to enter the mine and begin gathering."
+      : "You start with a **starter axe** — use `/expedition` to enter the forest and begin gathering.";
 
   const embed = new EmbedBuilder()
     .setColor(Colors.Green)
     .setTitle(`${label} Path Chosen!`)
     .setDescription(
       profession === "miner"
-        ? "You've chosen the **Miner Path**! Browse available locations with `/gather-locations` and pick your first spot."
-        : "You've chosen the **Lumber Path**! Browse available locations with `/gather-locations` and pick your first spot.",
+        ? "You've chosen the **Miner Path**! Use `/expedition` to enter the mine and start gathering ore."
+        : "You've chosen the **Lumber Path**! Use `/expedition` to enter the forest and start cutting wood.",
     )
     .addFields(
       { name: "❤️ HP", value: "100/100", inline: true },

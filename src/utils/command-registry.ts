@@ -11,25 +11,13 @@ export const REGISTRY = {
   "rpg-profile": {
     category: "rpg",
     description: "View your RPG stats, profession, and equipped items",
-    hints: ["/gather-locations", "/fight", "/rpg-quest list"],
+    hints: ["/expedition", "/fight", "/rpg-quest list"],
   },
-  "gather-locations": {
+  "expedition": {
     category: "rpg",
-    description: "Browse gathering spots available to your profession and tool tier",
-    hints: ["/gather-mine", "/gather-cutdown", "/craft"],
-    args: [{ name: "type", description: "mine or forest — defaults to your profession's type" }],
-  },
-  "gather-mine": {
-    category: "rpg",
-    description: "Pick a mine location and gather resources (requires equipped pickaxe)",
-    hints: ["/process", "/inventory", "/gather-locations"],
-    requires: "pickaxe in weapon slot",
-  },
-  "gather-cutdown": {
-    category: "rpg",
-    description: "Pick a forest location and cut down trees (requires equipped axe)",
-    hints: ["/process", "/inventory", "/gather-locations"],
-    requires: "axe in weapon slot",
+    description: "Enter a mine or forest expedition — gather resources and venture deeper for rarer materials",
+    hints: ["/inventory", "/process", "/craft"],
+    requires: "pickaxe or axe in weapon slot",
   },
   "process": {
     category: "rpg",
@@ -42,8 +30,8 @@ export const REGISTRY = {
   },
   "craft": {
     category: "rpg",
-    description: "Craft tools from ingots — upgrades unlock higher-tier locations",
-    hints: ["/equip", "/inventory", "/gather-locations"],
+    description: "Craft tools from ingots — upgrades unlock deeper expedition levels",
+    hints: ["/equip", "/inventory", "/expedition"],
     args: [
       { name: "item", description: "Item to craft (e.g. stone_pickaxe, copper_axe)" },
       { name: "quantity", description: "How many to craft (default: 1)" },
@@ -52,7 +40,7 @@ export const REGISTRY = {
   "equip": {
     category: "rpg",
     description: "Equip a tool from your inventory into your weapon slot",
-    hints: ["/gather-locations", "/rpg-profile"],
+    hints: ["/expedition", "/rpg-profile"],
   },
   "fight": {
     category: "rpg",
@@ -63,7 +51,7 @@ export const REGISTRY = {
   "rpg-quest": {
     category: "rpg",
     description: "Browse, accept, and claim RPG quests",
-    hints: ["/rpg-profile", "/gather-locations", "/inventory"],
+    hints: ["/rpg-profile", "/expedition", "/inventory"],
   },
   // ── Economy ──────────────────────────────────────────────────────────────
   "balance": {

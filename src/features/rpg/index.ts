@@ -3,8 +3,6 @@ import { Button, Feature, Job, SlashCommand } from "@/framework";
 
 // Commands
 import * as fightCmd from "./commands/fight";
-import * as gatherMineCmd from "./commands/gather-mine";
-import * as gatherCutdownCmd from "./commands/gather-cutdown";
 import * as processCmd from "./commands/process";
 import * as rpgProfileCmd from "./commands/profile";
 import * as rpgQuestCmd from "./commands/quest";
@@ -17,7 +15,7 @@ import * as craftCmd from "./commands/craft";
 import { isFightAcceptButton, handleFightAccept } from "./handlers/fightAccept";
 import { isFightMoveButton, handleCombatMove } from "./handlers/combatMove";
 import { isOnboardButton, handleOnboard } from "./handlers/onboard";
-import { isExpeditionButton, handleExpeditionButton } from "./handlers/expeditionHandlers";
+import { isExpeditionButton, handleExpeditionButton } from "./handlers/expedition";
 
 import { expirePendingFights } from "./handlers/fightExpiry";
 
@@ -26,16 +24,6 @@ export default class RpgFeature {
   @SlashCommand({ name: fightCmd.data.name, description: "Start a fight", data: fightCmd.data })
   async fight(...args: Parameters<typeof fightCmd.execute>): Promise<void> {
     await fightCmd.execute(...args);
-  }
-
-  @SlashCommand({ name: gatherMineCmd.data.name, description: "Mine materials", data: gatherMineCmd.data })
-  async gatherMine(...args: Parameters<typeof gatherMineCmd.execute>): Promise<void> {
-    await gatherMineCmd.execute(...args);
-  }
-
-  @SlashCommand({ name: gatherCutdownCmd.data.name, description: "Cut wood", data: gatherCutdownCmd.data })
-  async gatherCutdown(...args: Parameters<typeof gatherCutdownCmd.execute>): Promise<void> {
-    await gatherCutdownCmd.execute(...args);
   }
 
   @SlashCommand({ name: processCmd.data.name, description: "Process materials", data: processCmd.data })
@@ -83,7 +71,7 @@ export default class RpgFeature {
     await handleOnboard(interaction);
   }
 
-  @Button<ButtonInteraction>({ prefix: "expedition_", matches: isExpeditionButton })
+  @Button<ButtonInteraction>({ prefix: "expedition:", matches: isExpeditionButton })
   async expeditionButton(interaction: ButtonInteraction): Promise<void> {
     await handleExpeditionButton(interaction);
   }

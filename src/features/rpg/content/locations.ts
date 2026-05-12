@@ -1,10 +1,9 @@
 /**
  * Static gathering locations.
  *
- * Source of truth for /gather-mine, /gather-cutdown, and /gather-locations.
+ * Source of truth for /expedition gathering locations.
  * `LocationId = keyof typeof LOCATIONS` is the trusted ID type that domain
- * functions like `gatherAtLocation` accept; raw Discord strings must pass
- * through `parseLocationId` / `parseLocationForAction` first.
+ * functions like `gatherAtLocation` accept.
  */
 
 import type { GatherAction } from "./actions";

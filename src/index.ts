@@ -48,9 +48,7 @@ import * as inventoryCmd from "@/features/economy/commands/inventory";
 // Command imports (RPG)
 // ---------------------------------------------------------------------------
 import * as fightCmd from "@/features/rpg/commands/fight";
-import * as gatherMineCmd from "@/features/rpg/commands/gather-mine";
-import * as gatherCutdownCmd from "@/features/rpg/commands/gather-cutdown";
-import * as gatherLocationsCmd from "@/features/rpg/commands/gather-locations";
+import * as expeditionCmd from "@/features/rpg/commands/expedition";
 import * as processCmd from "@/features/rpg/commands/process";
 import * as craftCmd from "@/features/rpg/commands/craft";
 import * as equipCmd from "@/features/rpg/commands/equip";
@@ -129,9 +127,9 @@ import {
   handleOnboard,
 } from "@/features/rpg/handlers/onboard";
 import {
-  isGatherButton,
-  handleGatherButton,
-} from "@/features/rpg/handlers/gather";
+  isExpeditionButton,
+  handleExpeditionButton,
+} from "@/features/rpg/handlers/expedition";
 import {
   isEquipSelect,
   handleEquipSelect,
@@ -155,8 +153,7 @@ const ALL_COMMANDS: CommandModule[] = [
   marketListCmd, marketBuyCmd, marketBrowseCmd, marketCancelCmd,
   questListCmd, questAcceptCmd, questClaimCmd, inventoryCmd,
   // rpg
-  fightCmd, gatherMineCmd, gatherCutdownCmd, gatherLocationsCmd,
-  processCmd, craftCmd, equipCmd, rpgProfileCmd, rpgQuestCmd,
+  fightCmd, expeditionCmd, processCmd, craftCmd, equipCmd, rpgProfileCmd, rpgQuestCmd,
   // moderation
   banCmd, kickCmd, muteCmd, warnCmd, casesCmd,
   // tickets
@@ -235,8 +232,8 @@ async function bootstrap(): Promise<void> {
           await handleOfferReview(btn);
         } else if (isOnboardButton(cid)) {
           await handleOnboard(btn);
-        } else if (isGatherButton(cid)) {
-          await handleGatherButton(btn);
+        } else if (isExpeditionButton(cid)) {
+          await handleExpeditionButton(btn);
         }
         // unknown buttons are silently ignored
       }

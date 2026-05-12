@@ -44,7 +44,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setFooter(footer);
 
   if (items.length === 0) {
-    embed.setDescription("Empty — start gathering with `/gather-mine` or `/gather-cutdown`.");
+    embed.setDescription("Empty — use `/expedition` to start gathering materials.");
     await interaction.editReply({ embeds: [embed] });
     return;
   }
