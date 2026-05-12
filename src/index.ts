@@ -4,13 +4,12 @@
  * Order:
  * 1. Load env
  * 2. Connect MongoDB
- * 3. Load content packs
- * 4. Build command map from all feature command files
- * 5. Create Discord.js client
- * 6. Register interactionCreate → command dispatch + component handlers
- * 7. Register fight expiry interval
- * 8. Login
- * 9. On ready → upload slash commands via REST
+ * 3. Build command map from all feature command files
+ * 4. Create Discord.js client
+ * 5. Register interactionCreate → command dispatch + component handlers
+ * 6. Register fight expiry interval
+ * 7. Login
+ * 8. On ready → upload slash commands via REST
  */
 
 import "dotenv/config";
@@ -26,7 +25,6 @@ import {
 import { createClient } from "@/core/client";
 import { getDb, disconnectDb } from "@/core/db";
 import { createLogger } from "@/core/logger";
-import { loadContentRegistry } from "@/content/registry";
 
 // ---------------------------------------------------------------------------
 // Command imports (economy)
@@ -186,18 +184,7 @@ async function bootstrap(): Promise<void> {
   await getDb();
   log.info("MongoDB connected.");
 
-  // 2. Content packs (optional — gracefully skip if no pack dir)
-  const contentDir = process.env.CONTENT_PACKS_DIR;
-  if (contentDir) {
-    const reg = await loadContentRegistry(contentDir);
-    if (reg) {
-      log.info(`Content registry loaded from ${reg.loadedFrom}`);
-    }
-  } else {
-    log.info("CONTENT_PACKS_DIR not set — running without content packs.");
-  }
-
-  // 3. Discord client
+  // 2. Discord client
   const client = createClient();
 
   // 4. Command + component routing

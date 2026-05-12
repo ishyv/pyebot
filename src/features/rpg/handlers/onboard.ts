@@ -2,6 +2,7 @@ import { EmbedBuilder, Colors, type ButtonInteraction } from "discord.js";
 import { patchRpgProfile } from "@/db/repositories/rpg";
 import type { StarterKitType } from "@/db/schemas/rpg-profile";
 import type { EquippedItem } from "@/db/schemas/rpg-profile";
+import { TOOLS } from "@/features/rpg/content/tools";
 
 export const ONBOARD_PREFIX = "rpg:onboard:";
 
@@ -10,8 +11,8 @@ export function isOnboardButton(customId: string): boolean {
 }
 
 const STARTER_TOOLS: Record<StarterKitType, EquippedItem> = {
-  miner: { instanceId: "starter", itemId: "starter_pickaxe", durability: 50 },
-  lumber: { instanceId: "starter", itemId: "starter_axe", durability: 50 },
+  miner: { instanceId: "starter", itemId: "starter_pickaxe", durability: TOOLS.starter_pickaxe.startingDurability },
+  lumber: { instanceId: "starter", itemId: "starter_axe", durability: TOOLS.starter_axe.startingDurability },
 };
 
 export async function handleOnboard(interaction: ButtonInteraction): Promise<void> {

@@ -7,7 +7,8 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { listLocations, getEquippedToolTier } from "@/features/rpg/gathering";
+import { getEquippedToolTier } from "@/features/rpg/gathering";
+import { locationsForAction } from "@/features/rpg/content/locations";
 import { getUser } from "@/db/repositories/users";
 import { getHints } from "@/utils/command-registry";
 
@@ -25,7 +26,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const userId = interaction.user.id;
 
-  // Verify user has an RPG profile
   const userRes = await getUser(userId);
   if (userRes.isErr()) {
     await interaction.editReply({ content: "Something went wrong. Please try again." });
@@ -39,7 +39,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const userTier = await getEquippedToolTier(userId);
-  const locations = listLocations("forest");
+  const locations = locationsForAction("forest");
 
   const embed = new EmbedBuilder()
     .setColor(Colors.DarkGreen)
@@ -56,7 +56,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     )
     .setFooter({ text: getHints("gather-cutdown") });
 
-  // Build one row of buttons (max 5 per row; we have 4 forest locations)
   const buttons = locations.map((loc) => {
     const unlocked = loc.requiredTier <= userTier;
     return new ButtonBuilder()

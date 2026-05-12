@@ -5,7 +5,8 @@ import {
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
 } from "discord.js";
-import { craft, RECIPES } from "@/features/rpg/crafting";
+import { craft } from "@/features/rpg/crafting";
+import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
 import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
@@ -29,7 +30,7 @@ export const data = new SlashCommandBuilder()
 
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
-  const choices = Object.keys(RECIPES)
+  const choices = Object.keys(CRAFTING_RECIPES)
     .filter((key) => key.toLowerCase().includes(focused))
     .map((key) => ({ name: key, value: key }))
     .slice(0, 25);

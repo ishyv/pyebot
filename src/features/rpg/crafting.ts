@@ -1,23 +1,23 @@
 /**
  * RPG Crafting Service.
  *
- * Purpose: Recipe-based item crafting — consume materials from inventory,
- * produce a crafted item.
+ * Consumes materials from inventory, produces a crafted item. The recipe
+ * catalog lives in `content/recipes.ts`; here we narrow the requested item ID,
+ * check inventory, and apply the deduction + grant in one atomic update.
  *
- * Architecture: Plain exported async functions — no classes (except CraftingError).
- * Dependencies: users repository (inventory reads/writes via updateUserPaths).
- *
- * Flow:
- *   craft → look up recipe → fetch user → check materials → deduct + grant item
- *
- * Invariants:
- * - Inventory items are stored as numeric quantities at `inventory.<itemId>`.
- * - Materials are deducted atomically via updateUserPaths dot-notation.
- * - Quantity must be >= 1.
+ * Inventory items are stored as numeric quantities at `inventory.<itemId>`.
  */
 
 import { OkResult, ErrResult, type Result } from "@/core/result";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
+import {
+  CRAFTING_RECIPES,
+  parseCraftingRecipeId,
+  type CraftingRecipeId,
+} from "@/features/rpg/content/recipes";
+
+// Re-export for callers that need to enumerate or autocomplete recipes.
+export { CRAFTING_RECIPES, type CraftingRecipeId };
 
 // ---------------------------------------------------------------------------
 // Error
@@ -40,24 +40,11 @@ export class CraftingError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Recipes
-// ---------------------------------------------------------------------------
-
-export const RECIPES: Record<string, { requires: Record<string, number> }> = {
-  stone_pickaxe:  { requires: { stone: 3 } },
-  copper_pickaxe: { requires: { copper_ingot: 3 } },
-  iron_pickaxe:   { requires: { iron_ingot: 3 } },
-  stone_axe:      { requires: { oak_plank: 3 } },
-  copper_axe:     { requires: { copper_ingot: 3 } },
-  iron_axe:       { requires: { iron_ingot: 3 } },
-};
-
-// ---------------------------------------------------------------------------
 // Result type
 // ---------------------------------------------------------------------------
 
 export interface CraftingResult {
-  itemId: string;
+  itemId: CraftingRecipeId;
   quantity: number;
   materialsConsumed: Record<string, number>;
 }
@@ -75,13 +62,12 @@ export async function craft(
     return ErrResult(new CraftingError("RECIPE_NOT_FOUND", "Quantity must be >= 1"));
   }
 
-  // 1. Look up recipe
-  const recipe = RECIPES[itemId];
-  if (!recipe) {
+  const recipeId = parseCraftingRecipeId(itemId);
+  if (!recipeId) {
     return ErrResult(new CraftingError("RECIPE_NOT_FOUND", `No recipe for ${itemId}`));
   }
+  const recipe = CRAFTING_RECIPES[recipeId];
 
-  // 2. Fetch user
   const userRes = await getUser(userId);
   if (userRes.isErr()) {
     return ErrResult(new CraftingError("USER_NOT_FOUND", `User ${userId} not found`));
@@ -91,16 +77,14 @@ export async function craft(
     return ErrResult(new CraftingError("USER_NOT_FOUND", `User ${userId} not found`));
   }
 
-  // 3. Get inventory (top-level inventory field on User)
+  // Coerce inventory values to numbers (Mongo can return mixed types from old rows).
   const inventory: Record<string, number> = {};
-  const rawInventory = user.inventory ?? {};
-  for (const [k, v] of Object.entries(rawInventory)) {
+  for (const [k, v] of Object.entries(user.inventory ?? {})) {
     inventory[k] = typeof v === "number" ? v : 0;
   }
 
-  // 4. Check materials
   for (const [material, required] of Object.entries(recipe.requires)) {
-    const needed = required * quantity;
+    const needed = (required ?? 0) * quantity;
     const have = inventory[material] ?? 0;
     if (have < needed) {
       return ErrResult(
@@ -112,23 +96,21 @@ export async function craft(
     }
   }
 
-  // 5. Build path updates: deduct ingredients, add crafted item
   const paths: Record<string, number> = {};
   const materialsConsumed: Record<string, number> = {};
 
   for (const [material, required] of Object.entries(recipe.requires)) {
-    const needed = required * quantity;
+    const needed = (required ?? 0) * quantity;
     paths[`inventory.${material}`] = (inventory[material] ?? 0) - needed;
     materialsConsumed[material] = needed;
   }
 
-  paths[`inventory.${itemId}`] = (inventory[itemId] ?? 0) + quantity;
+  paths[`inventory.${recipeId}`] = (inventory[recipeId] ?? 0) + quantity;
 
   const updateRes = await updateUserPaths(userId, paths);
   if (updateRes.isErr()) {
     return ErrResult(new CraftingError("UPDATE_FAILED", "Failed to update inventory"));
   }
 
-  // 6. Return success
-  return OkResult({ itemId, quantity, materialsConsumed });
+  return OkResult({ itemId: recipeId, quantity, materialsConsumed });
 }

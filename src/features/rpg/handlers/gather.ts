@@ -1,16 +1,25 @@
 /**
  * Gather button handler.
  *
- * Custom ID format: `gather:<action>:<locationId>`
- * where <action> is "mine" or "forest".
+ * Routes clicks on the location buttons shown by /gather-mine and /gather-cutdown.
+ * Custom-ID format: `gather:<action>:<locationId>`.
  *
- * Called when a user selects a location from the picker shown by
- * /gather-mine or /gather-cutdown.
+ * Parsing is the runtime boundary: the raw Discord string is narrowed once
+ * here into typed `GatherAction` + `LocationId`. Domain code (`gatherAtLocation`)
+ * receives only trusted values.
  */
 
 import { EmbedBuilder, Colors, type ButtonInteraction } from "discord.js";
-import { mine, cutdown } from "@/features/rpg/gathering";
+import { gatherAtLocation } from "@/features/rpg/gathering";
 import { getHints } from "@/utils/command-registry";
+import {
+  parseGatherAction,
+  type GatherAction,
+} from "@/features/rpg/content/actions";
+import {
+  parseLocationForAction,
+  type LocationId,
+} from "@/features/rpg/content/locations";
 
 const PREFIX = "gather:";
 
@@ -18,17 +27,21 @@ export function isGatherButton(customId: string): boolean {
   return customId.startsWith(PREFIX);
 }
 
-/** Parse `gather:<action>:<locationId>` → `{ action, locationId }` */
-function parseGatherButton(customId: string): { action: "mine" | "forest"; locationId: string } | null {
+/** Narrow `gather:<action>:<locationId>` → typed action + location, or null if either is unknown. */
+function parseGatherCustomId(
+  customId: string,
+): { action: GatherAction; locationId: LocationId } | null {
   const parts = customId.slice(PREFIX.length).split(":");
   if (parts.length !== 2) return null;
-  const [action, locationId] = parts as [string, string];
-  if (action !== "mine" && action !== "forest") return null;
+  const action = parseGatherAction(parts[0]);
+  if (!action) return null;
+  const locationId = parseLocationForAction(parts[1], action);
+  if (!locationId) return null;
   return { action, locationId };
 }
 
 export async function handleGatherButton(interaction: ButtonInteraction): Promise<void> {
-  const parsed = parseGatherButton(interaction.customId);
+  const parsed = parseGatherCustomId(interaction.customId);
   if (!parsed) return;
 
   await interaction.deferReply({ ephemeral: true });
@@ -36,40 +49,33 @@ export async function handleGatherButton(interaction: ButtonInteraction): Promis
   const userId = interaction.user.id;
   const { action, locationId } = parsed;
 
-  const result = action === "mine"
-    ? await mine(userId, locationId)
-    : await cutdown(userId, locationId);
+  const result = await gatherAtLocation(userId, action, locationId);
 
   if (result.isErr()) {
     const err = result.error;
+    const isMine = action === "mine";
     let description: string;
 
-    if (action === "mine") {
-      if (err.code === "NO_TOOL_EQUIPPED") {
-        description = "You need a pickaxe equipped. Use `/equip starter_pickaxe` to get started.";
-      } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
-        description = "🔒 You need a higher-tier pickaxe to mine here. Craft one with `/craft <pickaxe>`.";
-      } else if (err.code === "LOCATION_NOT_FOUND") {
-        description = "Unknown location. Use `/gather-mine` to see available spots.";
-      } else {
-        description = err.message;
-      }
+    if (err.code === "NO_TOOL_EQUIPPED") {
+      description = isMine
+        ? "You need a pickaxe equipped. Use `/equip starter_pickaxe` to get started."
+        : "You need an axe equipped. Use `/equip starter_axe` to get started.";
+    } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
+      description = isMine
+        ? "🔒 You need a higher-tier pickaxe to mine here. Craft one with `/craft <pickaxe>`."
+        : "🔒 You need a higher-tier axe to cut here. Craft one with `/craft <axe>`.";
+    } else if (err.code === "LOCATION_NOT_FOUND") {
+      description = isMine
+        ? "Unknown location. Use `/gather-mine` to see available spots."
+        : "Unknown location. Use `/gather-cutdown` to see available spots.";
     } else {
-      if (err.code === "NO_TOOL_EQUIPPED") {
-        description = "You need an axe equipped. Use `/equip starter_axe` to get started.";
-      } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
-        description = "🔒 You need a higher-tier axe to cut here. Craft one with `/craft <axe>`.";
-      } else if (err.code === "LOCATION_NOT_FOUND") {
-        description = "Unknown location. Use `/gather-cutdown` to see available spots.";
-      } else {
-        description = err.message;
-      }
+      description = err.message;
     }
 
     const errorEmbed = new EmbedBuilder()
       .setColor(Colors.Red)
       .setDescription(description)
-      .setFooter({ text: getHints(action === "mine" ? "gather-mine" : "gather-cutdown") });
+      .setFooter({ text: getHints(isMine ? "gather-mine" : "gather-cutdown") });
 
     await interaction.editReply({ embeds: [errorEmbed] });
     return;

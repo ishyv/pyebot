@@ -1,5 +1,5 @@
 /**
- * Tests for the crafting service (craft function, RECIPES).
+ * Tests for the crafting service (craft function, CRAFTING_RECIPES).
  * Mocks @/db/repositories/users — no real DB required.
  */
 
@@ -7,6 +7,7 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { OkResult, ErrResult, Err } from "@/core/result";
 import type { User } from "@/db/schemas/user";
 import type { CraftingError as CraftingErrorType, CraftingResult } from "./crafting";
+import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test
@@ -26,7 +27,7 @@ mock.module("@/db/repositories/users", () => ({
 // Import SUT after mocks
 // ---------------------------------------------------------------------------
 
-const { craft, RECIPES } = await import("./crafting");
+const { craft } = await import("./crafting");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,11 +55,11 @@ function resetMocks() {
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe("RECIPES", () => {
+describe("CRAFTING_RECIPES", () => {
   it("exports a non-empty recipes map", () => {
-    expect(Object.keys(RECIPES).length).toBeGreaterThan(0);
-    expect(RECIPES.stone_pickaxe).toBeDefined();
-    expect(RECIPES.stone_pickaxe.requires).toEqual({ stone: 3 });
+    expect(Object.keys(CRAFTING_RECIPES).length).toBeGreaterThan(0);
+    expect(CRAFTING_RECIPES.stone_pickaxe).toBeDefined();
+    expect(CRAFTING_RECIPES.stone_pickaxe.requires).toEqual({ stone: 3 });
   });
 });
 

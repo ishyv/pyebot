@@ -1,6 +1,6 @@
 /**
  * Tests for getEquippedToolTier and TOOL_TIER_FALLBACK in gathering.ts.
- * Mocks @/db/repositories/users and @/content/registry — no real DB required.
+ * Mocks @/db/repositories/users — no real DB required.
  */
 
 import { describe, expect, test, mock, beforeEach } from "bun:test";
@@ -19,12 +19,6 @@ mock.module("@/db/repositories/users", () => ({
   updateUserPaths: mock(async () => OkResult(undefined as void)),
 }));
 
-// No content registry loaded by default
-mock.module("@/content/registry", () => ({
-  getContentRegistry: () => null,
-  resetContentRegistryForTests: () => {},
-}));
-
 // Also mock the rpg repository (transitively imported by gathering.ts)
 mock.module("@/db/repositories/rpg", () => ({
   ensureRpgProfile: mock(async () => ErrResult(new Error("not used"))),
@@ -36,6 +30,8 @@ mock.module("@/db/repositories/rpg", () => ({
 // ---------------------------------------------------------------------------
 
 import { getEquippedToolTier, TOOL_TIER_FALLBACK } from "./gathering";
+import { toolTier, parseToolId } from "@/features/rpg/content/tools";
+import { parseLocationForAction, parseLocationId } from "@/features/rpg/content/locations";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -87,7 +83,67 @@ function makeUserNoRpg(): User {
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Pure boundary helpers — no mocks needed
+// ---------------------------------------------------------------------------
+
+describe("toolTier (pure)", () => {
+  test("known tool returns its tier", () => {
+    expect(toolTier("starter_pickaxe")).toBe(1);
+    expect(toolTier("stone_pickaxe")).toBe(2);
+    expect(toolTier("copper_axe")).toBe(3);
+    expect(toolTier("iron_pickaxe")).toBe(4);
+  });
+
+  test("unknown tool returns TOOL_TIER_FALLBACK", () => {
+    expect(toolTier("dragon_pickaxe")).toBe(TOOL_TIER_FALLBACK);
+    expect(toolTier(null)).toBe(TOOL_TIER_FALLBACK);
+    expect(toolTier(undefined)).toBe(TOOL_TIER_FALLBACK);
+    expect(toolTier("")).toBe(TOOL_TIER_FALLBACK);
+  });
+});
+
+describe("parseToolId", () => {
+  test("returns id for known tools", () => {
+    expect(parseToolId("stone_pickaxe")).toBe("stone_pickaxe");
+  });
+
+  test("returns null for unknown / empty", () => {
+    expect(parseToolId("dragon_pickaxe")).toBeNull();
+    expect(parseToolId(null)).toBeNull();
+    expect(parseToolId(undefined)).toBeNull();
+  });
+});
+
+describe("parseLocationId", () => {
+  test("returns id for known locations", () => {
+    expect(parseLocationId("stone_mine")).toBe("stone_mine");
+    expect(parseLocationId("oak_forest")).toBe("oak_forest");
+  });
+
+  test("returns null for unknown / empty", () => {
+    expect(parseLocationId("atlantis")).toBeNull();
+    expect(parseLocationId(undefined)).toBeNull();
+  });
+});
+
+describe("parseLocationForAction", () => {
+  test("accepts a location matching its action", () => {
+    expect(parseLocationForAction("stone_mine", "mine")).toBe("stone_mine");
+    expect(parseLocationForAction("oak_forest", "forest")).toBe("oak_forest");
+  });
+
+  test("rejects a location whose action doesn't match", () => {
+    expect(parseLocationForAction("stone_mine", "forest")).toBeNull();
+    expect(parseLocationForAction("oak_forest", "mine")).toBeNull();
+  });
+
+  test("rejects unknown ids", () => {
+    expect(parseLocationForAction("atlantis", "mine")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getEquippedToolTier — async DB-reading wrapper
 // ---------------------------------------------------------------------------
 
 describe("TOOL_TIER_FALLBACK", () => {
@@ -119,7 +175,7 @@ describe("getEquippedToolTier", () => {
     expect(tier).toBe(TOOL_TIER_FALLBACK);
   });
 
-  test("loadout.weapon = { itemId: 'stone_pickaxe', ... } → returns 2", async () => {
+  test("loadout.weapon = stone_pickaxe → returns 2", async () => {
     mockGetUser.mockImplementation(async () =>
       OkResult<User | null>(makeUser({ instanceId: "inst-1", itemId: "stone_pickaxe", durability: 50 })),
     );
@@ -127,7 +183,7 @@ describe("getEquippedToolTier", () => {
     expect(tier).toBe(2);
   });
 
-  test("loadout.weapon = { itemId: 'copper_axe', ... } → returns 3", async () => {
+  test("loadout.weapon = copper_axe → returns 3", async () => {
     mockGetUser.mockImplementation(async () =>
       OkResult<User | null>(makeUser({ instanceId: "inst-2", itemId: "copper_axe", durability: 30 })),
     );
@@ -135,7 +191,7 @@ describe("getEquippedToolTier", () => {
     expect(tier).toBe(3);
   });
 
-  test("loadout.weapon = { itemId: 'unknown_item' } → returns TOOL_TIER_FALLBACK", async () => {
+  test("loadout.weapon = unknown_item → returns TOOL_TIER_FALLBACK", async () => {
     mockGetUser.mockImplementation(async () =>
       OkResult<User | null>(makeUser({ instanceId: "inst-3", itemId: "unknown_item", durability: 10 })),
     );

@@ -4,10 +4,15 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { listLocations, getEquippedToolTier } from "@/features/rpg/gathering";
+import { getEquippedToolTier } from "@/features/rpg/gathering";
+import { locationsForAction } from "@/features/rpg/content/locations";
+import {
+  defaultActionForProfession,
+  parseGatherAction,
+  type GatherAction,
+} from "@/features/rpg/content/actions";
 import { getUser } from "@/db/repositories/users";
 import { getHints } from "@/utils/command-registry";
-import type { GatherAction } from "@/content/schemas";
 
 export const data = new SlashCommandBuilder()
   .setName("gather-locations")
@@ -33,7 +38,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const userId = interaction.user.id;
 
-  // Fetch user and RPG profile
   const userRes = await getUser(userId);
   if (userRes.isErr()) {
     await interaction.editReply({ content: "Something went wrong. Please try again." });
@@ -41,40 +45,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
   const rpgProfile = userRes.unwrap()?.rpgProfile;
 
-  if (!rpgProfile) {
+  if (!rpgProfile?.starterKitType) {
     await interaction.editReply({
       content: "Use `/rpg-profile` to pick your profession first.",
     });
     return;
   }
 
-  const profession = rpgProfile.starterKitType;
+  // Type arg → user's profession default → "mine" if profession is somehow unknown.
+  const typeArg = parseGatherAction(interaction.options.getString("type"));
+  const locationType: GatherAction =
+    typeArg ?? defaultActionForProfession(rpgProfile.starterKitType);
 
-  if (!profession) {
-    await interaction.editReply({
-      content: "Use `/rpg-profile` to pick your profession first.",
-    });
-    return;
-  }
-
-  // Determine location type from argument or profession
-  const rawTypeArg = interaction.options.getString("type");
-  const typeArg: GatherAction | null =
-    rawTypeArg === "mine" || rawTypeArg === "forest" ? rawTypeArg : null;
-  let locationType: GatherAction;
-  if (typeArg) {
-    locationType = typeArg;
-  } else if (profession === "miner") {
-    locationType = "mine";
-  } else if (profession === "lumber") {
-    locationType = "forest";
-  } else {
-    locationType = "mine";
-  }
-
-  // Get user's equipped tool tier and locations
   const userTier = await getEquippedToolTier(userId);
-  const locations = listLocations(locationType);
+  const locations = locationsForAction(locationType);
 
   const typeLabel = locationType === "mine" ? "Mine" : "Forest";
   const tierLabel = `Tier ${userTier} tool`;
@@ -83,9 +67,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const yieldsText = loc.materials.length > 0 ? loc.materials.join(", ") : loc.id;
     if (loc.requiredTier <= userTier) {
       return `✅ **${loc.name}** (T${loc.requiredTier}) — yields \`${yieldsText}\``;
-    } else {
-      return `🔒 **${loc.name}** (T${loc.requiredTier}) — requires Tier ${loc.requiredTier} tool`;
     }
+    return `🔒 **${loc.name}** (T${loc.requiredTier}) — requires Tier ${loc.requiredTier} tool`;
   });
 
   const description =

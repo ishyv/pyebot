@@ -9,16 +9,12 @@ import { EmbedBuilder, Colors, type StringSelectMenuInteraction } from "discord.
 import { getUser } from "@/db/repositories/users";
 import { patchRpgProfile } from "@/db/repositories/rpg";
 import { getHints } from "@/utils/command-registry";
-import { RECIPES } from "@/features/rpg/crafting";
+import { TOOLS } from "@/features/rpg/content/tools";
 
 export const EQUIP_CUSTOM_ID = "equip:select";
 
 /** All item IDs that can be equipped into the weapon slot. */
-export const EQUIPABLE_TOOLS = new Set([
-  ...Object.keys(RECIPES),
-  "starter_pickaxe",
-  "starter_axe",
-]);
+export const EQUIPABLE_TOOLS: ReadonlySet<string> = new Set(Object.keys(TOOLS));
 
 export function isEquipSelect(customId: string): boolean {
   return customId === EQUIP_CUSTOM_ID;
@@ -88,10 +84,11 @@ export async function handleEquipSelect(interaction: StringSelectMenuInteraction
     necklace: null,
   };
 
+  const startingDurability = TOOLS[itemId as keyof typeof TOOLS]?.startingDurability ?? 100;
   const patchRes = await patchRpgProfile(userId, {
     loadout: {
       ...currentLoadout,
-      weapon: { instanceId: crypto.randomUUID(), itemId, durability: 100 },
+      weapon: { instanceId: crypto.randomUUID(), itemId, durability: startingDurability },
     },
   });
 
