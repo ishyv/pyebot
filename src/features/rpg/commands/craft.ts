@@ -1,115 +1,90 @@
 import {
   SlashCommandBuilder,
   EmbedBuilder,
+  Colors,
   type ChatInputCommandInteraction,
+  type AutocompleteInteraction,
 } from "discord.js";
-import { getContentRegistry } from "@/content/registry";
-import { DEFAULT_CONTENT_PACK } from "@/content/packs/default";
-import { craftItems } from "@/features/rpg/crafting/crafting-engine";
-
-// Build dynamic choices — Discord limit is 25
-const contentItems = Object.values(DEFAULT_CONTENT_PACK.items);
-const choices = contentItems
-  .filter((item) => {
-    const sources = item.sources as readonly string[];
-    return sources.includes("gather") || sources.includes("craft");
-  })
-  .slice(0, 25)
-  .map(item => ({ name: item.name, value: item.id }));
-
-function getCraftItemDef(id: string) {
-  return getContentRegistry()?.getItem(id) ?? null;
-}
-
-const DISCOVERY_QUOTES = [
-  "You are the first soul to ever synthesize this compound.",
-  "No record of this formula exists. You have written history.",
-  "The Lodge scribes will hear of this.",
-  "First discovery. The recipe has been etched into the collective memory.",
-  "The Accord's analysts would pay handsomely to know what you just made.",
-];
-
-const METHOD_FLAVOUR: Record<string, string> = {
-  transform: "You exert force, heat, or skill. The item changes its nature.",
-  mixture: "You combine the materials carefully. A new form emerges.",
-  alchemy: "The Crucible hums, traits merging in the white-hot heat of the synthesis.",
-};
+import { craft } from "@/features/rpg/crafting";
+import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
+import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("craft")
-  .setDescription("Transform 1 item or mix 2-3 items into something new.")
+  .setDescription("Craft an item using materials from your inventory")
   .addStringOption((opt) =>
-    opt.setName("item1").setDescription("Primary ingredient").setRequired(true).addChoices(...choices)
+    opt
+      .setName("item")
+      .setDescription("The item ID to craft (e.g. stone_pickaxe)")
+      .setRequired(true)
+      .setAutocomplete(true),
   )
-  .addStringOption((opt) =>
-    opt.setName("item2").setDescription("Optional second ingredient").setRequired(false).addChoices(...choices)
-  )
-  .addStringOption((opt) =>
-    opt.setName("item3").setDescription("Optional third ingredient").setRequired(false).addChoices(...choices)
+  .addIntegerOption((opt) =>
+    opt
+      .setName("quantity")
+      .setDescription("How many to craft (default: 1)")
+      .setRequired(false)
+      .setMinValue(1)
+      .setMaxValue(99),
   );
 
+export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+  const focused = interaction.options.getFocused().toLowerCase();
+  const choices = Object.keys(CRAFTING_RECIPES)
+    .filter((key) => key.toLowerCase().includes(focused))
+    .map((key) => ({ name: key, value: key }))
+    .slice(0, 25);
+  await interaction.respond(choices);
+}
+
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });
     return;
   }
 
-  const i1 = interaction.options.getString("item1", true);
-  const i2 = interaction.options.getString("item2");
-  const i3 = interaction.options.getString("item3");
+  const itemId = interaction.options.getString("item", true);
+  const quantity = interaction.options.getInteger("quantity") ?? 1;
+  const userId = interaction.user.id;
 
-  const inputs = [i1];
-  if (i2) inputs.push(i2);
-  if (i3) inputs.push(i3);
-
-  const result = await craftItems(interaction.user.id, inputs);
+  const result = await craft(userId, itemId, quantity);
 
   if (result.isErr()) {
-    const error = result.error;
-    const embed = new EmbedBuilder()
-      .setColor(0x3a1a1a)
-      .setTitle("⚒️ Crafting Unsuccessful")
-      .setDescription(`**${error.message}**\n\nThe materials remain, but they do not yield to your efforts.`)
-      .setFooter({ text: "Ashenmoor · The Workshop" });
-    await interaction.editReply({ embeds: [embed] });
+    const err = result.error;
+    let description: string;
+
+    if (err.code === "RECIPE_NOT_FOUND") {
+      description = `No recipe for \`${itemId}\`. Use \`/help craft\` to see craftable items.`;
+    } else if (err.code === "INSUFFICIENT_MATERIALS") {
+      description = err.message;
+    } else if (err.code === "UPDATE_FAILED") {
+      description = "Something went wrong saving your inventory. Please try again.";
+    } else {
+      description = err.message;
+    }
+
+    const errorEmbed = new EmbedBuilder()
+      .setColor(Colors.Red)
+      .setDescription(description)
+      .setFooter({ text: getHints("craft") });
+    await interaction.editReply({ embeds: [errorEmbed] });
     return;
   }
 
-  const { outputId, outputName, qty, method, isNewDiscovery } = result.unwrap();
-  const outDef = getCraftItemDef(outputId);
-  const isVolatile = outputId.includes("volatile") || outputName.toLowerCase().includes("ash");
+  const { materialsConsumed } = result.unwrap();
 
-  const ingredientLine = inputs
-    .map(id => `**${getCraftItemDef(id)?.name ?? id}**`)
-    .join(" · ");
-
-  let discoveryBlock = "";
-  if (isNewDiscovery && !isVolatile) {
-    const quote = DISCOVERY_QUOTES[Math.floor(Math.random() * DISCOVERY_QUOTES.length)];
-    discoveryBlock = `\n\n━━━━━━━━━━━━━━━━━━━━\n✦ **FIRST DISCOVERY** ✦\n*${quote}*`;
-  }
-
-  // Choose colour based on outcome
-  let color: number;
-  if (isVolatile) color = 0x2a2a2a;
-  else if (isNewDiscovery) color = 0xc89b3c; // gold
-  else if (method === "transform") color = 0x5c3b2e; // rustic brown
-  else color = 0x5c3566; // muted purple
-
-  const methodText = METHOD_FLAVOUR[method] ?? "Materials merge.";
-  const rarityLine = outDef ? `— *${outDef.rarity}*` : "";
+  const materialsText = Object.entries(materialsConsumed)
+    .map(([material, amount]) => `${amount}x ${material}`)
+    .join("\n");
 
   const embed = new EmbedBuilder()
-    .setColor(color)
-    .setTitle(isVolatile ? "⚒️ Failed Synthesis" : "⚒️ Crafting Complete")
-    .setDescription(
-      isVolatile
-        ? `${ingredientLine}\n\n*The traits fought and nothing won. Volatile Ash is what remains.*\n\n**Result: 1x Volatile Ash**`
-        : `${ingredientLine}\n\n*${methodText}*\n\n**Result: ${qty}x ${outputName}** ${rarityLine}${discoveryBlock}`
-    )
-    .setFooter({ text: `Ashenmoor · ${interaction.user.username}` });
+    .setColor(Colors.Gold)
+    .setTitle("Crafted!")
+    .setDescription(`You crafted ${quantity}x \`${itemId}\``)
+    .addFields({ name: "Materials Used", value: materialsText || "None" })
+    .setFooter({ text: getHints("craft") });
 
   await interaction.editReply({ embeds: [embed] });
 }

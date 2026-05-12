@@ -6,6 +6,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { process } from "@/features/rpg/processing";
+import { getHints } from "@/utils/command-registry";
 
 export const data = new SlashCommandBuilder()
   .setName("process")
@@ -36,7 +37,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const result = await process(userId, material, quantity);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    const err = result.error;
+    const errorEmbed = new EmbedBuilder()
+      .setColor(Colors.Red)
+      .setDescription(err.message)
+      .setFooter({ text: getHints("process") });
+    await interaction.editReply({ embeds: [errorEmbed] });
     return;
   }
 
@@ -65,7 +71,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         value: `${batchesSucceeded}/${batchesAttempted} succeeded`,
         inline: true,
       },
-    );
+    )
+    .setFooter({ text: getHints("process") });
 
   if (feePaid > 0) {
     embed.addFields({ name: "Fee Paid", value: `${feePaid} coins`, inline: true });

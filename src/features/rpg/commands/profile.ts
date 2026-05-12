@@ -1,26 +1,24 @@
 import {
-  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { ensureRpgProfile, getRpgProfile } from "@/db/repositories/rpg";
-import type { RpgProfileData } from "@/db/schemas/rpg-profile";
-import { progressBar, coins } from "@/utils/fmt";
-import { getUser } from "@/db/repositories/users";
+import { getRpgProfile } from "@/db/repositories/rpg";
+import { ONBOARD_PREFIX } from "@/features/rpg/handlers/onboard";
 
 export const data = new SlashCommandBuilder()
   .setName("rpg-profile")
-  .setDescription("View your Ashenmoor dossier.")
+  .setDescription("View an RPG profile")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to view (defaults to you)").setRequired(false),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });
@@ -28,159 +26,58 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const target = interaction.options.getUser("user") ?? interaction.user;
-  const isSelf = target.id === interaction.user.id;
+  const result = await getRpgProfile(target.id);
 
-  if (isSelf) {
-    const result = await ensureRpgProfile(target.id);
+  if (result.isErr()) {
+    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    return;
+  }
 
-    if (result.isErr()) {
-      await interaction.editReply({ content: `Error: ${result.error.message}` });
+  const profile = result.unwrap();
+
+  if (!profile) {
+    // Only show onboarding for the user's own profile
+    if (target.id !== interaction.user.id) {
+      await interaction.editReply({ content: "That user hasn't started their RPG journey yet." });
       return;
     }
 
-    const profile = result.unwrap();
-
-    // New profile with no profession → show onboarding
-    if (!profile.starterKitType) {
-      const embed = new EmbedBuilder()
-        .setColor(0x1a1a2e)
-        .setTitle("⚔️ Welcome to Ashenmoor")
-        .setDescription(
-          "*The gate warden looks you over. New face. He stamps a fresh ledger sheet.*\n\n" +
-          "**Choose your path.** This determines your starting tools, your gathering access, and the first chapter of what you owe the world.\n\n" +
-          "*You cannot change this later.*"
-        )
-        .addFields(
-          {
-            name: "⛏️ Miner",
-            value: "Descend into the Deep Mines. Extract iron, copper, stone, and the occasional ruby. The work is dark, cold, and consistent — until it isn't.",
-            inline: true,
-          },
-          {
-            name: "🪓 Lumber",
-            value: "Work the edges of the Whispering Woods. Oak, spruce, rare ironwood. The trees are aware of you. This is not a metaphor.",
-            inline: true,
-          },
-        )
-        .setFooter({ text: "Ashenmoor · Choose wisely — paths don't reset" });
-
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId("rpg:onboard:miner")
-          .setLabel("⛏️ Miner Path")
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId("rpg:onboard:lumber")
-          .setLabel("🪓 Lumber Path")
-          .setStyle(ButtonStyle.Secondary),
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Blurple)
+      .setTitle("⚔️ Choose Your Path")
+      .setDescription(
+        "Welcome to the RPG! Pick a profession to get started.\n\n" +
+        "**⛏️ Miner** — Mine ore, smelt ingots, craft pickaxes.\n" +
+        "**🪓 Lumberjack** — Chop wood, process planks, craft axes.",
       );
 
-      await interaction.editReply({ embeds: [embed], components: [row] });
-      return;
-    }
-
-    // Load balance for display
-    const userRes = await getUser(target.id);
-    const balance = userRes.isOk() ? ((userRes.unwrap()?.currency?.coins ?? 0) as number) : 0;
-    
-    await interaction.editReply({ embeds: [buildProfileEmbed(target.username, profile, balance)] });
-  } else {
-    const result = await getRpgProfile(target.id);
-
-    if (result.isErr()) {
-      await interaction.editReply({ content: `Error: ${result.error.message}` });
-      return;
-    }
-
-    const profile = result.unwrap();
-
-    if (!profile) {
-      await interaction.editReply({
-        embeds: [new EmbedBuilder()
-          .setColor(0x2a2a2a)
-          .setTitle("No Record Found")
-          .setDescription(`**${target.username}** has no dossier in the Ashenmoor ledger.\n\nThey haven't started their journey — or they never made it back.`)
-          .setFooter({ text: "Ashenmoor · Registry" })]
-      });
-      return;
-    }
-
-    await interaction.editReply({ embeds: [buildProfileEmbed(target.username, profile, null)] });
-  }
-}
-
-function hpBarStr(current: number, max: number, length = 10): string {
-  const filled = Math.round((current / max) * length);
-  const empty = length - filled;
-  const color = current > 60 ? "🟩" : current > 25 ? "🟨" : "🟥";
-  return `${color} \`${"█".repeat(filled)}${"░".repeat(empty)}\` ${current}/${max}`;
-}
-
-function buildProfileEmbed(username: string, profile: RpgProfileData, balance: number | null): EmbedBuilder {
-  const winRate =
-    profile.wins + profile.losses > 0
-      ? Math.round((profile.wins / (profile.wins + profile.losses)) * 100)
-      : 0;
-
-  const pathLabel =
-    profile.starterKitType === "miner"
-      ? "⛏️ Miner"
-      : profile.starterKitType === "lumber"
-        ? "🪓 Lumber"
-        : "—";
-
-  const status = profile.isFighting
-    ? "⚔️ In Combat"
-    : profile.activeExpeditionId
-    ? "🌲 On Expedition"
-    : "🟢 Available";
-
-  const color = profile.isFighting ? 0x8b0000 : profile.hpCurrent <= 0 ? 0x2a2a2a : 0x1a2a1a;
-
-  const embed = new EmbedBuilder()
-    .setColor(color)
-    .setTitle(`📋 ${username} — Ashenmoor Dossier`)
-    .setDescription(
-      profile.hpCurrent <= 0
-        ? "*This drifter is currently dead. They need healing before they can act.*"
-        : `*${pathLabel} · ${status}*`
-    )
-    .addFields(
-      {
-        name: "Vitals",
-        value:
-          `**HP** ${hpBarStr(profile.hpCurrent, 100)}\n` +
-          (balance !== null ? `**Balance** ${coins(balance)}` : ""),
-        inline: false,
-      },
-      {
-        name: "Combat Record",
-        value: `${profile.wins}W / ${profile.losses}L — **${winRate}% win rate**`,
-        inline: true,
-      },
-      {
-        name: "Stash",
-        value: `${profile.stashSize ?? 20} slots max`,
-        inline: true,
-      },
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${ONBOARD_PREFIX}miner`)
+        .setLabel("⛏️ Miner")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`${ONBOARD_PREFIX}lumber`)
+        .setLabel("🪓 Lumberjack")
+        .setStyle(ButtonStyle.Success),
     );
 
-  // Equipment
-  const equippedEntries = Object.entries(profile.loadout).filter(([, v]) => v !== null);
-  if (equippedEntries.length > 0) {
-    const equipLines = equippedEntries.map(([slot, item]) => {
-      if (item && typeof item === "object" && "durability" in item) {
-        const bar = progressBar(item.durability, 100, 6);
-        return `\`${slot.padEnd(7)}\` ${item.itemId.replace(/_/g, " ")} ${bar}`;
-      }
-      return `\`${slot.padEnd(7)}\` ${typeof item === "string" ? item : "equipped"}`;
-    });
-    embed.addFields({ name: "Equipped", value: equipLines.join("\n") });
-  } else {
-    embed.addFields({ name: "Equipped", value: "*Nothing equipped. Vulnerable.*" });
+    await interaction.editReply({ embeds: [embed], components: [row] });
+    return;
   }
 
-  embed.setFooter({ text: "Ashenmoor · Dossier · /hideout status for economy details" });
+  const embed = new EmbedBuilder()
+    .setColor(Colors.Blurple)
+    .setTitle(`${target.username}'s RPG Profile`)
+    .addFields(
+      { name: "HP", value: `${profile.hpCurrent}`, inline: true },
+      { name: "Wins", value: `${profile.wins}`, inline: true },
+      { name: "Losses", value: `${profile.losses}`, inline: true },
+    );
 
-  return embed;
+  if (profile.starterKitType) {
+    embed.addFields({ name: "Profession", value: profile.starterKitType, inline: true });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
 }
