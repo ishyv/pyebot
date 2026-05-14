@@ -17,6 +17,8 @@ coverage/
 
 # Superpowers specs, plans, and design docs
 docs/superpowers/
+docs/ai
+
 
 .claude
 .superpowers
@@ -26,3 +28,8 @@ webapp
 
 CLAUDE.md
 AGENTS.md
+
+
+# Ignore all JSON files in the root directory
+history.json
+tasks.json
