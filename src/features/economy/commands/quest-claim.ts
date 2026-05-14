@@ -5,6 +5,7 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import type { Ctx } from "@/framework/types";
 import { claimRewards } from "@/features/economy/quests";
 
 export const data = new SlashCommandBuilder()
@@ -14,7 +15,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("quest_id").setDescription("Quest ID to claim rewards for").setRequired(true),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -25,7 +26,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const questId = interaction.options.getString("quest_id", true);
   const userId = interaction.user.id;
 
-  const result = await claimRewards(userId, questId);
+  const result = await claimRewards(ctx, userId, questId);
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Error: ${result.error.message}` });

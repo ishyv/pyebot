@@ -4,8 +4,9 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { getUser } from "@/db/repositories/users";
-import { getHints } from "@/utils/command-registry";
+import type { Ctx } from "@/framework/types";
+import { UserInventory } from "@/components/user-inventory";
+import { RpgProfile } from "@/components/rpg-profile";
 
 export const data = new SlashCommandBuilder()
   .setName("inventory")
@@ -14,7 +15,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("user").setDescription("User to view (defaults to you)").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -23,34 +24,32 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const target = interaction.options.getUser("user") ?? interaction.user;
-  const result = await getUser(target.id);
+  const [inv, profile] = await Promise.all([
+    ctx.get(target.id, UserInventory),
+    ctx.get(target.id, RpgProfile),
+  ]);
 
-  if (result.isErr()) {
-    await interaction.editReply({ content: "Something went wrong. Please try again." });
-    return;
+  const slots = inv?.slots ?? {};
+
+  // Flatten slots to [itemId, quantity] pairs for display
+  const items: [string, number][] = [];
+  for (const [itemId, slot] of Object.entries(slots)) {
+    const qty = "qty" in slot ? slot.qty : slot.instances.length;
+    if (qty > 0) items.push([itemId, qty]);
   }
-
-  const user = result.unwrap();
-  const inventory = user?.inventory ?? {};
-  const footer = { text: getHints("inventory") };
-
-  const items = Object.entries(inventory).filter(
-    ([, qty]) => typeof qty === "number" && (qty as number) > 0,
-  ) as [string, number][];
 
   const embed = new EmbedBuilder()
     .setColor(Colors.DarkGold)
-    .setTitle(`${target.username}'s Inventory`)
-    .setFooter(footer);
+    .setTitle(`${target.username}'s Inventory`);
 
   if (items.length === 0) {
-    embed.setDescription("Empty — use `/expedition` to start gathering materials.");
+    embed.setDescription("Empty — start gathering with `/gather-mine` or `/gather-cutdown`.");
     await interaction.editReply({ embeds: [embed] });
     return;
   }
 
   // Determine equipped weapon so we can mark it
-  const weapon = user?.rpgProfile?.loadout?.weapon;
+  const weapon = profile?.loadout?.weapon;
   const equippedItemId =
     weapon && typeof weapon === "object" && "itemId" in weapon
       ? weapon.itemId
@@ -58,7 +57,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         ? weapon
         : null;
 
-  // Group items into raw materials, processed materials, and tools
   const RAW = ["stone", "copper_ore", "iron_ore", "silver_ore", "oak_wood", "spruce_wood", "palm_wood", "pine_wood"];
   const PROCESSED = ["stone_block", "copper_ingot", "iron_ingot", "silver_ingot", "oak_plank", "spruce_plank", "palm_plank", "pine_plank"];
 

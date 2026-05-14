@@ -1,102 +1,81 @@
 /**
  * Tests for currency mutations service.
- * Mocks the db layer and account module — no real MongoDB required.
+ * Uses an in-memory Ctx stub — no real MongoDB required.
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
-import { OkResult } from "@/core/result";
-import type { User } from "@/db/schemas/user";
+import { describe, expect, it } from "bun:test";
+import type { Ctx } from "@/framework/types";
+import { UserCurrency } from "@/components/user-currency";
+import { EconomyAccount } from "@/components/economy-account";
+import { getBalance, adjustBalance, transfer, MutationError } from "./mutations";
 
 // ---------------------------------------------------------------------------
-// Shared fake user factory
+// In-memory Ctx stub
 // ---------------------------------------------------------------------------
 
-function makeUser(overrides: Partial<User> = {}): User {
+type WalletMap = Map<string, { balances: Record<string, number> }>;
+type AccountMap = Map<string, { status: string; createdAt: Date; updatedAt: Date; lastActivityAt: Date; version: number }>;
+
+function makeCtx(opts: {
+  wallets?: Record<string, Record<string, number>>;
+  accounts?: Record<string, "ok" | "blocked" | "banned">;
+} = {}): Ctx {
+  const wallets: WalletMap = new Map(
+    Object.entries(opts.wallets ?? {}).map(([id, b]) => [id, { balances: b }]),
+  );
+  const accounts: AccountMap = new Map(
+    Object.entries(opts.accounts ?? {}).map(([id, status]) => [
+      id,
+      { status, createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0 },
+    ]),
+  );
+
+  function getWallet(id: string) { return wallets.get(id) ?? null; }
+  function ensureWallet(id: string) {
+    if (!wallets.has(id)) wallets.set(id, { balances: {} });
+    return wallets.get(id)!;
+  }
+  function getAccount(id: string) { return accounts.get(id) ?? null; }
+  function ensureAccountDoc(id: string) {
+    if (!accounts.has(id)) {
+      accounts.set(id, { status: "ok", createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0 });
+    }
+    return accounts.get(id)!;
+  }
+
   return {
-    _id: "user-1",
-    warns: [],
-    sanction_history: {},
-    openTickets: [],
-    currency: {},
-    inventory: {},
-    mod_notes: {},
-    quarantine_roles: {},
-    economyAccount: undefined,
-    rpgProfile: undefined,
-    ...overrides,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Mock userStore BEFORE importing mutations module
-// ---------------------------------------------------------------------------
-
-const mockGet = mock(async (_id: string) => OkResult<User | null>(null));
-const mockEnsure = mock(async (_id: string) => OkResult(makeUser()));
-const mockUpdatePaths = mock(
-  async (
-    _id: string,
-    _paths: Record<string, unknown>,
-    _opts?: { upsert?: boolean },
-  ) => OkResult(undefined as void),
-);
-
-mock.module("@/db/repositories/users", () => ({
-  userStore: {
-    get: mockGet,
-    ensure: mockEnsure,
-    updatePaths: mockUpdatePaths,
-  },
-}));
-
-// ---------------------------------------------------------------------------
-// Mock account module BEFORE importing mutations module
-// ---------------------------------------------------------------------------
-
-const NOW = new Date("2026-01-01T00:00:00.000Z");
-
-function makeAccountResult(userId: string, status: "ok" | "blocked" | "banned" = "ok") {
-  return OkResult({
-    account: {
-      userId,
-      status,
-      createdAt: NOW,
-      updatedAt: NOW,
-      lastActivityAt: NOW,
-      version: 0,
+    async get(id: string, component: unknown) {
+      if (component === UserCurrency) return getWallet(id) as any;
+      if (component === EconomyAccount) return getAccount(id) as any;
+      return null;
     },
-    isNew: false,
-  });
-}
-
-const mockEnsureAccount = mock(async (userId: string) => makeAccountResult(userId));
-const mockIsAccountActive = mock((status: string) => status === "ok");
-
-mock.module("@/features/economy/account", () => ({
-  ensureAccount: mockEnsureAccount,
-  isAccountActive: mockIsAccountActive,
-}));
-
-// Import AFTER mocking
-const { getBalance, adjustBalance, transfer, MutationError } = await import("./mutations");
-
-// ---------------------------------------------------------------------------
-// Reset helpers
-// ---------------------------------------------------------------------------
-
-function resetMocks() {
-  mockGet.mockReset();
-  mockEnsure.mockReset();
-  mockUpdatePaths.mockReset();
-  mockEnsureAccount.mockReset();
-  mockIsAccountActive.mockReset();
-
-  // Safe defaults
-  mockGet.mockResolvedValue(OkResult<User | null>(null));
-  mockEnsure.mockResolvedValue(OkResult(makeUser()));
-  mockUpdatePaths.mockResolvedValue(OkResult(undefined as void));
-  mockEnsureAccount.mockImplementation(async (userId: string) => makeAccountResult(userId));
-  mockIsAccountActive.mockImplementation((status: string) => status === "ok");
+    async ensure(id: string, component: unknown) {
+      if (component === UserCurrency) return ensureWallet(id) as any;
+      if (component === EconomyAccount) return ensureAccountDoc(id) as any;
+      throw new Error("Unknown component in test ctx");
+    },
+    async patch(id: string, component: unknown, patchOrFn: unknown) {
+      if (component === UserCurrency) {
+        const current = ensureWallet(id);
+        const delta = typeof patchOrFn === "function" ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current) : patchOrFn as Partial<typeof current>;
+        if (delta.balances) current.balances = delta.balances;
+      } else if (component === EconomyAccount) {
+        const current = ensureAccountDoc(id);
+        const delta = typeof patchOrFn === "function" ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current) : patchOrFn as Partial<typeof current>;
+        Object.assign(current, delta);
+      }
+    },
+    async set() {},
+    async delete() {},
+    async query() { return []; },
+    async emit() {},
+    client: null as any,
+    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as any,
+    cooldowns: null as any,
+    locks: null as any,
+    sessions: null as any,
+    interaction: null,
+  } as unknown as Ctx;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,32 +83,19 @@ function resetMocks() {
 // ---------------------------------------------------------------------------
 
 describe("getBalance", () => {
-  beforeEach(resetMocks);
-
-  test("returns 0 for unknown user (user not found)", async () => {
-    mockGet.mockResolvedValue(OkResult<User | null>(null));
-
-    const result = await getBalance("unknown-user", "coins");
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toBe(0);
+  it("returns 0 for unknown user (no wallet)", async () => {
+    const ctx = makeCtx();
+    expect(await getBalance(ctx, "unknown", "coins")).toBe(0);
   });
 
-  test("returns 0 when user exists but currency not set", async () => {
-    mockGet.mockResolvedValue(OkResult<User | null>(makeUser({ _id: "user-1", currency: {} })));
-
-    const result = await getBalance("user-1", "coins");
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toBe(0);
+  it("returns 0 when wallet exists but currency not set", async () => {
+    const ctx = makeCtx({ wallets: { "user-1": {} } });
+    expect(await getBalance(ctx, "user-1", "coins")).toBe(0);
   });
 
-  test("returns correct balance when currency exists", async () => {
-    mockGet.mockResolvedValue(
-      OkResult<User | null>(makeUser({ _id: "user-1", currency: { coins: 150 } })),
-    );
-
-    const result = await getBalance("user-1", "coins");
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap()).toBe(150);
+  it("returns correct balance when currency exists", async () => {
+    const ctx = makeCtx({ wallets: { "user-1": { coins: 150 } } });
+    expect(await getBalance(ctx, "user-1", "coins")).toBe(150);
   });
 });
 
@@ -138,70 +104,52 @@ describe("getBalance", () => {
 // ---------------------------------------------------------------------------
 
 describe("adjustBalance", () => {
-  beforeEach(resetMocks);
-
-  test("increases balance by positive delta", async () => {
-    mockEnsure.mockResolvedValue(
-      OkResult(makeUser({ _id: "user-1", currency: { coins: 100 } })),
-    );
-
-    const result = await adjustBalance("user-1", "coins", 50);
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().newBalance).toBe(150);
-    expect(mockUpdatePaths).toHaveBeenCalledWith("user-1", { "currency.coins": 150 });
+  it("credits balance by positive delta", async () => {
+    const ctx = makeCtx({ wallets: { "user-1": { coins: 100 } } });
+    const result = await adjustBalance(ctx, "user-1", "coins", 50);
+    expect(result).toBe(150);
+    expect(await getBalance(ctx, "user-1", "coins")).toBe(150);
   });
 
-  test("decreases balance by negative delta", async () => {
-    mockEnsure.mockResolvedValue(
-      OkResult(makeUser({ _id: "user-1", currency: { coins: 200 } })),
-    );
-
-    const result = await adjustBalance("user-1", "coins", -80);
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().newBalance).toBe(120);
-    expect(mockUpdatePaths).toHaveBeenCalledWith("user-1", { "currency.coins": 120 });
+  it("debits balance by negative delta", async () => {
+    const ctx = makeCtx({ wallets: { "user-1": { coins: 200 } } });
+    const result = await adjustBalance(ctx, "user-1", "coins", -80);
+    expect(result).toBe(120);
+    expect(await getBalance(ctx, "user-1", "coins")).toBe(120);
   });
 
-  test("rejects when result would go negative (allowDebt: false by default)", async () => {
-    mockEnsure.mockResolvedValue(
-      OkResult(makeUser({ _id: "user-1", currency: { coins: 30 } })),
-    );
-
-    const result = await adjustBalance("user-1", "coins", -50);
-    expect(result.isErr()).toBe(true);
-    const error = result.error as InstanceType<typeof MutationError>;
-    expect(error).toBeInstanceOf(MutationError);
-    expect(error.code).toBe("INSUFFICIENT_FUNDS");
-    expect(mockUpdatePaths).not.toHaveBeenCalled();
+  it("throws INSUFFICIENT_FUNDS when result would go negative (default)", async () => {
+    const ctx = makeCtx({ wallets: { "user-1": { coins: 30 } } });
+    await expect(adjustBalance(ctx, "user-1", "coins", -50)).rejects.toMatchObject({
+      name: "MutationError",
+      code: "INSUFFICIENT_FUNDS",
+    });
   });
 
-  test("allows negative result when allowDebt: true", async () => {
-    mockEnsure.mockResolvedValue(
-      OkResult(makeUser({ _id: "user-1", currency: { coins: 30 } })),
-    );
-
-    // With allowDebt: true, the INSUFFICIENT_FUNDS check is skipped and the balance
-    // is stored as-is (negative). This allows mod-applied deductions beyond current balance.
-    const result = await adjustBalance("user-1", "coins", -50, { allowDebt: true });
-    expect(result.isOk()).toBe(true);
-    // 30 - 50 = -20 (stored as debt)
-    expect(result.unwrap().newBalance).toBe(-20);
+  it("allows negative balance with allowDebt: true", async () => {
+    const ctx = makeCtx({ wallets: { "user-1": { coins: 30 } } });
+    const result = await adjustBalance(ctx, "user-1", "coins", -50, { allowDebt: true });
+    expect(result).toBe(-20);
   });
 
-  test("rejects invalid currency ID", async () => {
-    const result = await adjustBalance("user-1", "INVALID!", 10);
-    expect(result.isErr()).toBe(true);
-    const error = result.error as InstanceType<typeof MutationError>;
-    expect(error).toBeInstanceOf(MutationError);
-    expect(error.code).toBe("INVALID_CURRENCY");
+  it("throws INVALID_AMOUNT on zero delta", async () => {
+    const ctx = makeCtx();
+    await expect(adjustBalance(ctx, "user-1", "coins", 0)).rejects.toMatchObject({
+      code: "INVALID_AMOUNT",
+    });
   });
 
-  test("rejects zero delta", async () => {
-    const result = await adjustBalance("user-1", "coins", 0);
-    expect(result.isErr()).toBe(true);
-    const error = result.error as InstanceType<typeof MutationError>;
-    expect(error).toBeInstanceOf(MutationError);
-    expect(error.code).toBe("INVALID_AMOUNT");
+  it("throws INVALID_CURRENCY for malformed ID", async () => {
+    const ctx = makeCtx();
+    await expect(adjustBalance(ctx, "user-1", "INVALID!", 10)).rejects.toMatchObject({
+      code: "INVALID_CURRENCY",
+    });
+  });
+
+  it("creates wallet if user has none", async () => {
+    const ctx = makeCtx();
+    const result = await adjustBalance(ctx, "new-user", "coins", 100);
+    expect(result).toBe(100);
   });
 });
 
@@ -210,57 +158,54 @@ describe("adjustBalance", () => {
 // ---------------------------------------------------------------------------
 
 describe("transfer", () => {
-  beforeEach(resetMocks);
-
-  test("succeeds with correct debit and credit", async () => {
-    // sender has 200 coins, recipient has 50
-    mockGet
-      .mockResolvedValueOnce(OkResult<User | null>(makeUser({ _id: "sender", currency: { coins: 200 } })))
-      .mockResolvedValueOnce(OkResult<User | null>(makeUser({ _id: "recipient", currency: { coins: 50 } })));
-    // ensure calls for adjustBalance
-    mockEnsure
-      .mockResolvedValueOnce(OkResult(makeUser({ _id: "sender", currency: { coins: 200 } })))
-      .mockResolvedValueOnce(OkResult(makeUser({ _id: "recipient", currency: { coins: 50 } })));
-
-    const result = await transfer("sender", "recipient", "coins", 100);
-    expect(result.isOk()).toBe(true);
-    const { senderBalance, recipientBalance } = result.unwrap();
+  it("debits sender and credits recipient", async () => {
+    const ctx = makeCtx({
+      wallets: { sender: { coins: 200 }, recipient: { coins: 50 } },
+    });
+    const { senderBalance, recipientBalance } = await transfer(ctx, "sender", "recipient", "coins", 100);
     expect(senderBalance).toBe(100);
     expect(recipientBalance).toBe(150);
   });
 
-  test("rejects self-transfer", async () => {
-    const result = await transfer("user-1", "user-1", "coins", 50);
-    expect(result.isErr()).toBe(true);
-    const error = result.error as InstanceType<typeof MutationError>;
-    expect(error).toBeInstanceOf(MutationError);
-    expect(error.code).toBe("SELF_TRANSFER");
+  it("throws SELF_TRANSFER", async () => {
+    const ctx = makeCtx();
+    await expect(transfer(ctx, "user-1", "user-1", "coins", 50)).rejects.toMatchObject({
+      code: "SELF_TRANSFER",
+    });
   });
 
-  test("rejects when sender has insufficient funds", async () => {
-    // sender has only 10 coins
-    mockGet.mockResolvedValue(
-      OkResult<User | null>(makeUser({ _id: "sender", currency: { coins: 10 } })),
-    );
-
-    const result = await transfer("sender", "recipient", "coins", 100);
-    expect(result.isErr()).toBe(true);
-    const error = result.error as InstanceType<typeof MutationError>;
-    expect(error).toBeInstanceOf(MutationError);
-    expect(error.code).toBe("INSUFFICIENT_FUNDS");
+  it("throws INVALID_AMOUNT for zero amount", async () => {
+    const ctx = makeCtx();
+    await expect(transfer(ctx, "a", "b", "coins", 0)).rejects.toMatchObject({
+      code: "INVALID_AMOUNT",
+    });
   });
 
-  test("rejects invalid amount (zero)", async () => {
-    const result = await transfer("sender", "recipient", "coins", 0);
-    expect(result.isErr()).toBe(true);
-    const error = result.error as InstanceType<typeof MutationError>;
-    expect(error.code).toBe("INVALID_AMOUNT");
+  it("throws INVALID_CURRENCY", async () => {
+    const ctx = makeCtx();
+    await expect(transfer(ctx, "a", "b", "INVALID!", 50)).rejects.toMatchObject({
+      code: "INVALID_CURRENCY",
+    });
   });
 
-  test("rejects invalid currency ID", async () => {
-    const result = await transfer("sender", "recipient", "INVALID!", 50);
-    expect(result.isErr()).toBe(true);
-    const error = result.error as InstanceType<typeof MutationError>;
-    expect(error.code).toBe("INVALID_CURRENCY");
+  it("throws INSUFFICIENT_FUNDS when sender has too little", async () => {
+    const ctx = makeCtx({ wallets: { sender: { coins: 10 } } });
+    await expect(transfer(ctx, "sender", "recipient", "coins", 100)).rejects.toMatchObject({
+      code: "INSUFFICIENT_FUNDS",
+    });
+  });
+
+  it("throws ACCOUNT_INACTIVE for blocked sender", async () => {
+    const ctx = makeCtx({
+      wallets: { sender: { coins: 500 } },
+      accounts: { sender: "blocked" },
+    });
+    await expect(transfer(ctx, "sender", "recipient", "coins", 100)).rejects.toMatchObject({
+      code: "ACCOUNT_INACTIVE",
+    });
+  });
+
+  it("exports MutationError class", () => {
+    expect(new MutationError("INVALID_AMOUNT", "test")).toBeInstanceOf(MutationError);
   });
 });

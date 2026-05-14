@@ -21,6 +21,8 @@ export const SanctionHistoryEntrySchema = z.object({
   caseId: z.number().int().optional().catch(() => undefined),
   moderatorId: z.string().optional().catch(() => undefined),
   moderatorRoleIds: z.array(z.string()).optional().catch(() => undefined),
+  source: z.enum(["manual", "automod", "appeal", "escalation", "system"]).optional().catch(() => undefined),
+  evidenceSummary: z.string().optional().catch(() => undefined),
 });
 export type SanctionHistoryEntry = z.infer<typeof SanctionHistoryEntrySchema>;
 

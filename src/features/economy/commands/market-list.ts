@@ -5,6 +5,7 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import type { Ctx } from "@/framework/types";
 import { createListing } from "@/features/economy/market";
 
 export const data = new SlashCommandBuilder()
@@ -24,7 +25,7 @@ export const data = new SlashCommandBuilder()
       .setMinValue(1),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -38,7 +39,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const sellerId = interaction.user.id;
   const guildId = interaction.guild.id;
 
-  const result = await createListing(sellerId, guildId, itemId, quantity, price);
+  const result = await createListing(ctx, sellerId, guildId, itemId, quantity, price);
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Error: ${result.error.message}` });

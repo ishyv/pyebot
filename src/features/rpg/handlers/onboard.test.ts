@@ -34,11 +34,12 @@ function makeProfile(overrides: Partial<RpgProfileData> = {}): RpgProfileData {
     activeFightId: null,
     starterKitType: null,
     starterKitClaimedAt: null,
+    stashSize: 20,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     version: 0,
     ...overrides,
-  };
+  } as RpgProfileData;
 }
 
 const mockPatchRpgProfile = mock(

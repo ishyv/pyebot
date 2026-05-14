@@ -43,9 +43,7 @@ function toDeterministicRecipe(recipe: SourcedRecipeDef): DeterministicRecipe {
       id: recipe.itemOutputs[0]?.itemId ?? "",
       qty: recipe.itemOutputs[0]?.quantity ?? 1,
     },
-    method:
-      recipe.craftingMethod ??
-      (recipe.itemInputs.length === 1 ? "transform" : "mixture"),
+    method: recipe.itemInputs.length === 1 ? "transform" : "mixture",
   };
 }
 

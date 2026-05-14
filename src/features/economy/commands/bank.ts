@@ -5,9 +5,10 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import type { Ctx } from "@/framework/types";
 import { ensureAccount } from "@/features/economy/account";
 import { getBalance, getBankBalance, deposit, withdraw, MutationError } from "@/features/economy/mutations";
-import { userStore } from "@/db/repositories/users";
+import { UserCurrency } from "@/components/user-currency";
 import { coins } from "@/utils/fmt";
 
 export const data = new SlashCommandBuilder()
@@ -39,7 +40,7 @@ export const data = new SlashCommandBuilder()
       ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -48,29 +49,21 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const sub = interaction.options.getSubcommand();
-
-  if (sub === "balance") await handleBalance(interaction);
-  else if (sub === "deposit") await handleDeposit(interaction);
-  else if (sub === "withdraw") await handleWithdraw(interaction);
+  if (sub === "balance") await handleBalance(interaction, ctx);
+  else if (sub === "deposit") await handleDeposit(interaction, ctx);
+  else if (sub === "withdraw") await handleWithdraw(interaction, ctx);
 }
 
-async function handleBalance(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleBalance(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const userId = interaction.user.id;
+  await ensureAccount(ctx, userId);
 
-  await ensureAccount(userId);
+  const wallet = await ctx.get(userId, UserCurrency);
+  const balances = wallet?.balances ?? {};
+  const bankBalances = wallet?.bankBalances ?? {};
 
-  const userRes = await userStore.get(userId);
-  if (userRes.isErr()) {
-    await interaction.editReply({ content: `Error: ${userRes.error.message}` });
-    return;
-  }
-
-  const user = userRes.unwrap();
-  const currency = user?.currency ?? {};
-  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> })?.bank ?? {};
-
-  const allKeys = new Set([...Object.keys(currency), ...Object.keys(bank)]);
-  const entries = [...allKeys].filter((k) => (currency[k] ?? 0) > 0 || (bank[k] ?? 0) > 0);
+  const allKeys = new Set([...Object.keys(balances), ...Object.keys(bankBalances)]);
+  const entries = [...allKeys].filter((k) => (balances[k] ?? 0) > 0 || (bankBalances[k] ?? 0) > 0);
 
   const embed = new EmbedBuilder()
     .setColor(Colors.Blue)
@@ -81,12 +74,11 @@ async function handleBalance(interaction: ChatInputCommandInteraction): Promise<
     embed.setDescription("No currencies yet. Use `/work` or `/daily` to earn some coins!");
   } else {
     for (const k of entries) {
-      const hand = currency[k] ?? 0;
-      const inBank = bank[k] ?? 0;
-      const total = hand + inBank;
+      const hand = balances[k] ?? 0;
+      const inBank = bankBalances[k] ?? 0;
       embed.addFields({
         name: k,
-        value: `💰 In Hand: ${coins(hand, k)}\n🏦 In Bank: ${coins(inBank, k)}\n📊 Total: ${coins(total, k)}`,
+        value: `💰 In Hand: ${coins(hand, k)}\n🏦 In Bank: ${coins(inBank, k)}\n📊 Total: ${coins(hand + inBank, k)}`,
         inline: true,
       });
     }
@@ -95,102 +87,70 @@ async function handleBalance(interaction: ChatInputCommandInteraction): Promise<
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function handleDeposit(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleDeposit(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const userId = interaction.user.id;
   const amount = interaction.options.getInteger("amount", true);
   const currencyId = interaction.options.getString("currency") ?? "coins";
 
-  const beforeHand = (await getBalance(userId, currencyId)).isOk()
-    ? (await getBalance(userId, currencyId)).unwrap()!
-    : 0;
-  const beforeBank = (await getBankBalance(userId, currencyId)).isOk()
-    ? (await getBankBalance(userId, currencyId)).unwrap()!
-    : 0;
+  const [beforeHand, beforeBank] = await Promise.all([
+    getBalance(ctx, userId, currencyId),
+    getBankBalance(ctx, userId, currencyId),
+  ]);
 
-  const result = await deposit(userId, currencyId, amount);
+  try {
+    const { handBalance, bankBalance } = await deposit(ctx, userId, currencyId, amount);
 
-  if (result.isErr()) {
-    const errEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setTitle("❌ Deposit Failed")
-      .setDescription(
-        result.error instanceof MutationError && result.error.code === "INSUFFICIENT_FUNDS"
-          ? `You only have **${coins(beforeHand, currencyId)}** in hand.`
-          : result.error.message,
-      );
-    await interaction.editReply({ embeds: [errEmbed] });
-    return;
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Green)
+      .setTitle("🏦 Deposit Successful")
+      .addFields(
+        { name: "Deposited", value: coins(amount, currencyId), inline: false },
+        { name: "💰 In Hand", value: `${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}`, inline: true },
+        { name: "🏦 In Bank", value: `${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}`, inline: true },
+      )
+      .setFooter({ text: "💡 Bank funds are safe from /rob" });
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    const desc = err instanceof MutationError && err.code === "INSUFFICIENT_FUNDS"
+      ? `You only have **${coins(beforeHand, currencyId)}** in hand.`
+      : err instanceof Error ? err.message : "An error occurred.";
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Deposit Failed").setDescription(desc)],
+    });
   }
-
-  const { handBalance, bankBalance } = result.unwrap();
-
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle("🏦 Deposit Successful")
-    .addFields(
-      { name: "Deposited", value: coins(amount, currencyId), inline: false },
-      {
-        name: "💰 In Hand",
-        value: `${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}`,
-        inline: true,
-      },
-      {
-        name: "🏦 In Bank",
-        value: `${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}`,
-        inline: true,
-      },
-    )
-    .setFooter({ text: "💡 Bank funds are safe from /rob" });
-
-  await interaction.editReply({ embeds: [embed] });
 }
 
-async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const userId = interaction.user.id;
   const amount = interaction.options.getInteger("amount", true);
   const currencyId = interaction.options.getString("currency") ?? "coins";
 
-  const beforeHand = (await getBalance(userId, currencyId)).isOk()
-    ? (await getBalance(userId, currencyId)).unwrap()!
-    : 0;
-  const beforeBank = (await getBankBalance(userId, currencyId)).isOk()
-    ? (await getBankBalance(userId, currencyId)).unwrap()!
-    : 0;
+  const [beforeHand, beforeBank] = await Promise.all([
+    getBalance(ctx, userId, currencyId),
+    getBankBalance(ctx, userId, currencyId),
+  ]);
 
-  const result = await withdraw(userId, currencyId, amount);
+  try {
+    const { handBalance, bankBalance } = await withdraw(ctx, userId, currencyId, amount);
 
-  if (result.isErr()) {
-    const errEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setTitle("❌ Withdrawal Failed")
-      .setDescription(
-        result.error instanceof MutationError && result.error.code === "INSUFFICIENT_FUNDS"
-          ? `You only have **${coins(beforeBank, currencyId)}** in your bank.`
-          : result.error.message,
-      );
-    await interaction.editReply({ embeds: [errEmbed] });
-    return;
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Green)
+      .setTitle("💰 Withdrawal Successful")
+      .addFields(
+        { name: "Withdrawn", value: coins(amount, currencyId), inline: false },
+        { name: "💰 In Hand", value: `${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}`, inline: true },
+        { name: "🏦 In Bank", value: `${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}`, inline: true },
+      )
+      .setFooter({ text: "💡 /bank balance • /bank deposit" });
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    const desc = err instanceof MutationError && err.code === "INSUFFICIENT_FUNDS"
+      ? `You only have **${coins(beforeBank, currencyId)}** in your bank.`
+      : err instanceof Error ? err.message : "An error occurred.";
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Withdrawal Failed").setDescription(desc)],
+    });
   }
-
-  const { handBalance, bankBalance } = result.unwrap();
-
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle("💰 Withdrawal Successful")
-    .addFields(
-      { name: "Withdrawn", value: coins(amount, currencyId), inline: false },
-      {
-        name: "💰 In Hand",
-        value: `${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}`,
-        inline: true,
-      },
-      {
-        name: "🏦 In Bank",
-        value: `${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}`,
-        inline: true,
-      },
-    )
-    .setFooter({ text: "💡 /bank balance • /bank deposit" });
-
-  await interaction.editReply({ embeds: [embed] });
 }

@@ -4,7 +4,8 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { transfer, getBalance } from "@/features/economy/mutations";
+import type { Ctx } from "@/framework/types";
+import { transfer, getBalance, MutationError } from "@/features/economy/mutations";
 import { coins } from "@/utils/fmt";
 
 export const data = new SlashCommandBuilder()
@@ -23,7 +24,7 @@ export const data = new SlashCommandBuilder()
       .setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply();
 
   if (!interaction.guild) {
@@ -36,44 +37,36 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const currencyId = interaction.options.getString("currency") ?? "coins";
   const senderId = interaction.user.id;
 
-  // Record sender balance before
-  const beforeRes = await getBalance(senderId, currencyId);
-  const beforeBalance = beforeRes.isOk() ? beforeRes.unwrap() : 0;
+  const beforeBalance = await getBalance(ctx, senderId, currencyId);
 
-  const result = await transfer(senderId, recipient.id, currencyId, amount);
+  try {
+    const { senderBalance, recipientBalance } = await transfer(ctx, senderId, recipient.id, currencyId, amount);
 
-  if (result.isErr()) {
+    const embed = new EmbedBuilder()
+      .setColor(Colors.Blue)
+      .setTitle("💸 Transfer Sent")
+      .addFields(
+        {
+          name: "💰 Your Balance",
+          value: `${coins(beforeBalance, currencyId)} → ${coins(senderBalance, currencyId)}`,
+          inline: true,
+        },
+        { name: "📤 Sent", value: coins(amount, currencyId), inline: true },
+        {
+          name: "📥 Recipient",
+          value: `<@${recipient.id}> now has ${coins(recipientBalance, currencyId)}`,
+          inline: false,
+        },
+      )
+      .setFooter({ text: "💡 /balance • /bank" });
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    const msg = err instanceof MutationError ? err.message : "An error occurred.";
     const errEmbed = new EmbedBuilder()
       .setColor(Colors.Red)
       .setTitle("❌ Transfer Failed")
-      .setDescription(result.error.message);
+      .setDescription(msg);
     await interaction.editReply({ embeds: [errEmbed] });
-    return;
   }
-
-  const { senderBalance, recipientBalance } = result.unwrap();
-
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle("💸 Transfer Sent")
-    .addFields(
-      {
-        name: "💰 Your Balance",
-        value: `${coins(beforeBalance, currencyId)} → ${coins(senderBalance, currencyId)}`,
-        inline: true,
-      },
-      {
-        name: "📤 Sent",
-        value: coins(amount, currencyId),
-        inline: true,
-      },
-      {
-        name: "📥 Recipient",
-        value: `<@${recipient.id}> now has ${coins(recipientBalance, currencyId)}`,
-        inline: false,
-      },
-    )
-    .setFooter({ text: "💡 /balance • /bank" });
-
-  await interaction.editReply({ embeds: [embed] });
 }

@@ -1,276 +1,63 @@
 /**
- * Bootstrap — explicit, top-to-bottom readable.
+ * Minimal bootstrap. The contents of this file are intentionally tiny:
+ * the framework does the work, this file is just the glue between
+ * "Discord events" and "framework dispatch".
+ *
+ * Everything interesting lives in `src/framework/*`. Adding a feature
+ * never touches this file.
  *
  * Order:
- * 1. Load env
- * 2. Connect MongoDB
- * 3. Build command map from all feature command files
- * 4. Create Discord.js client
- * 5. Register interactionCreate → command dispatch + component handlers
- * 6. Register fight expiry interval
- * 7. Login
- * 8. On ready → upload slash commands via REST
+ *   1. Load env.
+ *   2. Connect MongoDB (via World.create).
+ *   3. Optionally load content packs.
+ *   4. Bootstrap the framework — scans features, builds command map,
+ *      builds router, generates /features, wires the event bus.
+ *   5. Register `interactionCreate` → framework dispatch.
+ *   6. Forward Discord events that features want via the bus.
+ *   7. Log in. On ready, push slash command definitions via REST.
  */
 
 import "dotenv/config";
-
-import {
-  REST,
-  Routes,
-  type ChatInputCommandInteraction,
-  type AutocompleteInteraction,
-  type ButtonInteraction,
-  type StringSelectMenuInteraction,
-} from "discord.js";
+import { REST, Routes } from "discord.js";
 import { createClient } from "@/core/client";
-import { getDb, disconnectDb } from "@/core/db";
+import { disconnectDb } from "@/core/db";
 import { createLogger } from "@/core/logger";
-
-// ---------------------------------------------------------------------------
-// Command imports (economy)
-// ---------------------------------------------------------------------------
-import * as balanceCmd from "@/features/economy/commands/balance";
-import * as transferCmd from "@/features/economy/commands/transfer";
-import * as workCmd from "@/features/economy/commands/work";
-import * as coinflipCmd from "@/features/economy/commands/coinflip";
-import * as triviaCmd from "@/features/economy/commands/trivia";
-import * as robCmd from "@/features/economy/commands/rob";
-import * as marketListCmd from "@/features/economy/commands/market-list";
-import * as marketBuyCmd from "@/features/economy/commands/market-buy";
-import * as marketBrowseCmd from "@/features/economy/commands/market-browse";
-import * as marketCancelCmd from "@/features/economy/commands/market-cancel";
-import * as questListCmd from "@/features/economy/commands/quest-list";
-import * as questAcceptCmd from "@/features/economy/commands/quest-accept";
-import * as questClaimCmd from "@/features/economy/commands/quest-claim";
-import * as inventoryCmd from "@/features/economy/commands/inventory";
-
-// ---------------------------------------------------------------------------
-// Command imports (RPG)
-// ---------------------------------------------------------------------------
-import * as fightCmd from "@/features/rpg/commands/fight";
-import * as expeditionCmd from "@/features/rpg/commands/expedition";
-import * as processCmd from "@/features/rpg/commands/process";
-import * as craftCmd from "@/features/rpg/commands/craft";
-import * as equipCmd from "@/features/rpg/commands/equip";
-import * as rpgProfileCmd from "@/features/rpg/commands/profile";
-import * as rpgQuestCmd from "@/features/rpg/commands/quest";
-
-// ---------------------------------------------------------------------------
-// Command imports (utility)
-// ---------------------------------------------------------------------------
-import * as helpCmd from "@/features/utility/commands/help";
-
-// ---------------------------------------------------------------------------
-// Command imports (moderation)
-// ---------------------------------------------------------------------------
-import * as banCmd from "@/features/moderation/commands/ban";
-import * as kickCmd from "@/features/moderation/commands/kick";
-import * as muteCmd from "@/features/moderation/commands/mute";
-import * as warnCmd from "@/features/moderation/commands/warn";
-import * as casesCmd from "@/features/moderation/commands/cases";
-
-// ---------------------------------------------------------------------------
-// Command imports (tickets)
-// ---------------------------------------------------------------------------
-import * as ticketCmd from "@/features/tickets/commands/ticket";
-
-// ---------------------------------------------------------------------------
-// Command imports (autoroles)
-// ---------------------------------------------------------------------------
-import * as autoroleCmd from "@/features/autoroles/commands/autorole";
-
-// ---------------------------------------------------------------------------
-// Command imports (AI)
-// ---------------------------------------------------------------------------
-import * as aiCmd from "@/features/ai/commands/ai";
-
-// ---------------------------------------------------------------------------
-// Command imports (offers)
-// ---------------------------------------------------------------------------
-import * as offerCmd from "@/features/offers/commands/offer";
-
-// ---------------------------------------------------------------------------
-// Command imports (automod)
-// ---------------------------------------------------------------------------
-import * as automodCmd from "@/features/automod/commands/automod";
-
-// ---------------------------------------------------------------------------
-// Component / button handlers
-// ---------------------------------------------------------------------------
-import {
-  isTriviaButton,
-  handleTriviaAnswer,
-} from "@/features/economy/handlers/triviaAnswer";
-import {
-  isFightAcceptButton,
-  handleFightAccept,
-} from "@/features/rpg/handlers/fightAccept";
-import {
-  isFightMoveButton,
-  handleCombatMove,
-} from "@/features/rpg/handlers/combatMove";
-import { register as registerFightExpiry } from "@/features/rpg/handlers/fightExpiry";
-import {
-  isTicketCloseButton,
-  handleTicketClose,
-} from "@/features/tickets/handlers/close";
-import { register as registerAutoroleJoin } from "@/features/autoroles/handlers/guildMemberAdd";
-import { register as registerAutoroleReact } from "@/features/autoroles/handlers/messageReactionAdd";
-import { register as registerAiMessageCreate } from "@/features/ai/handlers/messageCreate";
-import { register as registerAutomodMessageCreate } from "@/features/automod/handlers/messageCreate";
-import {
-  isOfferReviewButton,
-  handleOfferReview,
-} from "@/features/offers/handlers/review";
-import {
-  isOnboardButton,
-  handleOnboard,
-} from "@/features/rpg/handlers/onboard";
-import {
-  isExpeditionButton,
-  handleExpeditionButton,
-} from "@/features/rpg/handlers/expedition";
-import {
-  isEquipSelect,
-  handleEquipSelect,
-} from "@/features/rpg/handlers/equip";
-
-// ---------------------------------------------------------------------------
-// Bootstrap
-// ---------------------------------------------------------------------------
+import { loadContentRegistry } from "@/content/registry";
+import { bootstrapFramework } from "@/framework/bootstrap";
+import { MemberJoined } from "@/events/member-joined";
 
 const log = createLogger("bootstrap");
-
-type CommandModule = {
-  data: { name: string; toJSON(): unknown };
-  execute(interaction: ChatInputCommandInteraction): Promise<void>;
-  autocomplete?(interaction: AutocompleteInteraction): Promise<void>;
-};
-
-const ALL_COMMANDS: CommandModule[] = [
-  // economy
-  balanceCmd, transferCmd, workCmd, coinflipCmd, triviaCmd, robCmd,
-  marketListCmd, marketBuyCmd, marketBrowseCmd, marketCancelCmd,
-  questListCmd, questAcceptCmd, questClaimCmd, inventoryCmd,
-  // rpg
-  fightCmd, expeditionCmd, processCmd, craftCmd, equipCmd, rpgProfileCmd, rpgQuestCmd,
-  // moderation
-  banCmd, kickCmd, muteCmd, warnCmd, casesCmd,
-  // tickets
-  ticketCmd,
-  // autoroles
-  autoroleCmd,
-  // ai
-  aiCmd,
-  // offers
-  offerCmd,
-  // automod
-  automodCmd,
-  // utility
-  helpCmd,
-];
-
-const commandMap = new Map<string, CommandModule>(
-  ALL_COMMANDS.map((cmd) => [cmd.data.name, cmd]),
-);
 
 async function bootstrap(): Promise<void> {
   log.info("Starting tx-v2...");
 
-  // 1. MongoDB
-  await getDb();
-  log.info("MongoDB connected.");
+  // Content packs are optional — gracefully skip if no pack dir.
+  const contentDir = process.env.CONTENT_PACKS_DIR;
+  if (contentDir) {
+    const reg = await loadContentRegistry(contentDir);
+    if (reg) log.info(`Content registry loaded from ${reg.loadedFrom}`);
+  } else {
+    log.info("CONTENT_PACKS_DIR not set — running without content packs.");
+  }
 
-  // 2. Discord client
   const client = createClient();
+  const { dispatch, commands, world } = await bootstrapFramework(client);
 
-  // 4. Command + component routing
-  client.on("interactionCreate", async (interaction) => {
+  client.on("interactionCreate", (interaction) => {
+    void dispatch(interaction);
+  });
+
+  // Forward a small set of Discord events into the framework event bus so
+  // features can react via @On(MemberJoined) etc. without registering a
+  // Discord listener themselves.
+  client.on("guildMemberAdd", async (member) => {
     try {
-      if (interaction.isChatInputCommand()) {
-        const cmd = commandMap.get(interaction.commandName);
-        if (cmd) {
-          await cmd.execute(interaction as ChatInputCommandInteraction);
-        } else {
-          await (interaction as ChatInputCommandInteraction).reply({
-            content: "Unknown command.",
-            ephemeral: true,
-          });
-        }
-        return;
-      }
-
-      if (interaction.isStringSelectMenu()) {
-        const menu = interaction as StringSelectMenuInteraction;
-        if (isEquipSelect(menu.customId)) {
-          await handleEquipSelect(menu);
-        }
-        return;
-      }
-
-      if (interaction.isAutocomplete()) {
-        const cmd = commandMap.get(interaction.commandName);
-        if (cmd?.autocomplete) {
-          await cmd.autocomplete(interaction as AutocompleteInteraction);
-        }
-        return;
-      }
-
-      if (interaction.isButton()) {
-        const btn = interaction as ButtonInteraction;
-        const cid = btn.customId;
-
-        if (isTriviaButton(cid)) {
-          await handleTriviaAnswer(btn);
-        } else if (isFightAcceptButton(cid)) {
-          await handleFightAccept(btn);
-        } else if (isFightMoveButton(cid)) {
-          await handleCombatMove(btn);
-        } else if (isTicketCloseButton(cid)) {
-          await handleTicketClose(btn);
-        } else if (isOfferReviewButton(cid)) {
-          await handleOfferReview(btn);
-        } else if (isOnboardButton(cid)) {
-          await handleOnboard(btn);
-        } else if (isExpeditionButton(cid)) {
-          await handleExpeditionButton(btn);
-        }
-        // unknown buttons are silently ignored
-      }
+      await world.bus.emit(new MemberJoined(member.id, member.guild.id), world.forInteraction(null, "framework"));
     } catch (err) {
-      log.error("Unhandled interaction error", err);
-      try {
-        const i = interaction as ChatInputCommandInteraction;
-        const msg = { content: "An unexpected error occurred.", ephemeral: true };
-        if (i.replied || i.deferred) {
-          await i.followUp(msg);
-        } else {
-          await i.reply(msg);
-        }
-      } catch {
-        // best-effort — ignore if we can't reply
-      }
+      log.error("Failed to forward guildMemberAdd", err);
     }
   });
 
-  // 5. Fight session expiry
-  registerFightExpiry();
-  log.info("Fight expiry interval registered.");
-
-  // 6. Autorole event handlers
-  registerAutoroleJoin(client);
-  registerAutoroleReact(client);
-  log.info("Autorole handlers registered.");
-
-  // 7. AI messageCreate handler
-  registerAiMessageCreate(client);
-  log.info("AI messageCreate handler registered.");
-
-  // 8. Automod messageCreate handler
-  registerAutomodMessageCreate(client);
-  log.info("Automod messageCreate handler registered.");
-
-  // 6. Shutdown handling
   const shutdown = async () => {
     log.info("Shutting down...");
     await client.destroy();
@@ -280,22 +67,19 @@ async function bootstrap(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // 7. Login
   const token = process.env.TOKEN;
   if (!token) throw new Error("TOKEN environment variable is not set.");
   await client.login(token);
 
-  // 8. On ready — upload slash commands via REST
   client.once("ready", async (c) => {
-    log.info(`Logged in as ${c.user.tag}`);
+    log.info(`Logged in as ${c.user.tag} (${commands.length} commands loaded)`);
 
     const clientId = process.env.CLIENT_ID ?? c.user.id;
-    const guildId = process.env.GUILD_ID; // set for dev guild-scoped deployment
+    const guildId = process.env.GUILD_ID;
 
     try {
       const rest = new REST().setToken(token);
-      const body = ALL_COMMANDS.map((cmd) => cmd.data.toJSON());
-
+      const body = commands.map((cmd) => cmd.data.toJSON());
       if (guildId) {
         await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
         log.info(`Registered ${body.length} guild commands (guild: ${guildId})`);

@@ -5,6 +5,7 @@ import {
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
 } from "discord.js";
+import type { Ctx } from "@/framework/types";
 import {
   REGISTRY,
   CATEGORIES,
@@ -25,7 +26,7 @@ export const data = new SlashCommandBuilder()
       .setAutocomplete(true),
   );
 
-export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+export async function autocomplete(interaction: AutocompleteInteraction, _ctx: Ctx): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
 
   const categoryKeys = Object.keys(CATEGORIES) as CategoryKey[];
@@ -39,7 +40,7 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   await interaction.respond(choices);
 }
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   const topic = interaction.options.getString("topic");

@@ -113,6 +113,36 @@ const {
 // Reset helpers
 // ---------------------------------------------------------------------------
 
+function makeCtx() {
+  const wallets: Record<string, Record<string, number>> = {};
+  return {
+    cooldowns: { isOnCooldown: () => false, getRemainingMs: () => 0, set: () => {} },
+    sessions: { get: () => undefined, set: () => {}, delete: () => {}, has: () => false },
+    locks: { tryAcquire: () => true, release: () => {}, isHeld: () => false },
+    client: {} as never,
+    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
+    interaction: null,
+    emit: async () => {},
+    get: async (id: string) => {
+      const bal = wallets[id];
+      return bal ? { balances: bal, bankBalances: {} } as never : null;
+    },
+    ensure: async (id: string) => {
+      if (!wallets[id]) wallets[id] = { coins: 1000 };
+      return { balances: wallets[id], bankBalances: {} } as never;
+    },
+    patch: async (id: string, _: unknown, fn: unknown) => {
+      if (!wallets[id]) wallets[id] = { coins: 1000 };
+      const cur = { balances: wallets[id], bankBalances: {} };
+      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as { balances?: Record<string, number> };
+      if (patch.balances) wallets[id] = patch.balances;
+    },
+    set: async () => {},
+    delete: async () => {},
+    query: async () => [],
+  } as unknown as import("@/framework/types").Ctx;
+}
+
 function resetAll() {
   questStore.clear();
   lockState.clear();
@@ -283,7 +313,7 @@ describe("claimRewards", () => {
     await acceptQuest("user-1", "quest_gather_stone");
     await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 20 });
 
-    const result = await claimRewards("user-1", "quest_gather_stone");
+    const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -297,7 +327,7 @@ describe("claimRewards", () => {
   test("returns QUEST_NOT_COMPLETED when quest not finished", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
 
-    const result = await claimRewards("user-1", "quest_gather_stone");
+    const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof QuestError>;
     expect(err.code).toBe("QUEST_NOT_COMPLETED");
@@ -306,16 +336,16 @@ describe("claimRewards", () => {
   test("returns REWARDS_ALREADY_CLAIMED when claimed again", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
     await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 20 });
-    await claimRewards("user-1", "quest_gather_stone");
+    await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
 
-    const result = await claimRewards("user-1", "quest_gather_stone");
+    const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof QuestError>;
     expect(err.code).toBe("REWARDS_ALREADY_CLAIMED");
   });
 
   test("returns QUEST_NOT_FOUND for unknown quest", async () => {
-    const result = await claimRewards("user-1", "unknown_quest");
+    const result = await claimRewards(makeCtx(), "user-1", "unknown_quest");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof QuestError>;
     expect(err.code).toBe("QUEST_NOT_FOUND");
@@ -348,7 +378,7 @@ describe("getActiveQuests", () => {
   test("excludes claimed quests", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
     await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 20 });
-    await claimRewards("user-1", "quest_gather_stone");
+    await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
 
     const result = await getActiveQuests("user-1");
     expect(result.isOk()).toBe(true);

@@ -1,13 +1,12 @@
 /**
  * Economy minigames: coinflip, trivia, rob.
  *
- * Architecture: Plain exported async functions — no classes (except MinigameError).
- * Dependencies: cooldowns/sessions from core/state, getBalance/adjustBalance from mutations,
- *   ensureAccount/isAccountActive from account.
+ * All functions accept `ctx: Ctx` as first parameter. Failures throw
+ * `MinigameError`; DB failures propagate as untyped errors caught at the
+ * interaction boundary.
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
-import { cooldowns, sessions } from "@/core/state";
+import type { Ctx } from "@/framework/types";
 import { getBalance, adjustBalance } from "@/features/economy/mutations";
 import { ensureAccount, isAccountActive } from "@/features/economy/account";
 
@@ -163,69 +162,55 @@ const TRIVIA_QUESTIONS: TriviaQuestion[] = [
 // ---------------------------------------------------------------------------
 
 export async function coinflip(
+  ctx: Ctx,
   userId: string,
   choice: "heads" | "tails",
   betAmount: number,
   config?: Partial<CoinflipConfig>,
-): Promise<Result<CoinflipResult, MinigameError>> {
+): Promise<CoinflipResult> {
   const cfg: CoinflipConfig = { ...DEFAULT_COINFLIP_CONFIG, ...config };
 
   if (choice !== "heads" && choice !== "tails") {
-    return ErrResult(new MinigameError("INVALID_CHOICE", 'Choice must be "heads" or "tails"'));
+    throw new MinigameError("INVALID_CHOICE", 'Choice must be "heads" or "tails"');
   }
-
   if (!Number.isInteger(betAmount) || betAmount < cfg.minBet) {
-    return ErrResult(new MinigameError("BET_TOO_LOW", `Bet must be at least ${cfg.minBet}`));
+    throw new MinigameError("BET_TOO_LOW", `Bet must be at least ${cfg.minBet}`);
   }
-
   if (betAmount > cfg.maxBet) {
-    return ErrResult(new MinigameError("BET_TOO_HIGH", `Bet cannot exceed ${cfg.maxBet}`));
+    throw new MinigameError("BET_TOO_HIGH", `Bet cannot exceed ${cfg.maxBet}`);
+  }
+  if (ctx.cooldowns.isOnCooldown(userId, "coinflip")) {
+    const remaining = ctx.cooldowns.getRemainingMs(userId, "coinflip");
+    throw new MinigameError("COOLDOWN_ACTIVE", `Coinflip is on cooldown. Try again in ${remaining}ms`);
   }
 
-  if (cooldowns.isOnCooldown(userId, "coinflip")) {
-    const remaining = cooldowns.getRemainingMs(userId, "coinflip");
-    return ErrResult(new MinigameError("COOLDOWN_ACTIVE", `Coinflip is on cooldown. Try again in ${remaining}ms`));
-  }
-
-  const accountRes = await ensureAccount(userId);
-  if (accountRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", accountRes.error.message));
-  const { account } = accountRes.unwrap();
-
+  const account = await ensureAccount(ctx, userId);
   if (!isAccountActive(account.status)) {
-    return ErrResult(new MinigameError("ACCOUNT_INACTIVE", "Your economy account is not active"));
+    throw new MinigameError("ACCOUNT_INACTIVE", "Your economy account is not active");
   }
 
-  const balRes = await getBalance(userId, cfg.currencyId);
-  if (balRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", balRes.error.message));
-  const balance = balRes.unwrap();
-
+  const balance = await getBalance(ctx, userId, cfg.currencyId);
   if (balance < betAmount) {
-    return ErrResult(new MinigameError("INSUFFICIENT_FUNDS", `You need at least ${betAmount} ${cfg.currencyId} to play`));
+    throw new MinigameError("INSUFFICIENT_FUNDS", `You need at least ${betAmount} ${cfg.currencyId} to play`);
   }
 
   const outcome: "heads" | "tails" = Math.random() < 0.5 ? "heads" : "tails";
   const won = outcome === choice;
 
   let winnings = 0;
-  let newBalance = 0;
+  let newBalance: number;
 
   if (won) {
     const gross = betAmount * 2;
     const fee = Math.floor(gross * cfg.houseEdge);
     winnings = gross - fee;
-    const delta = winnings - betAmount;
-    const adjRes = await adjustBalance(userId, cfg.currencyId, delta);
-    if (adjRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", adjRes.error.message));
-    newBalance = adjRes.unwrap().newBalance;
+    newBalance = await adjustBalance(ctx, userId, cfg.currencyId, winnings - betAmount);
   } else {
-    const adjRes = await adjustBalance(userId, cfg.currencyId, -betAmount);
-    if (adjRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", adjRes.error.message));
-    newBalance = adjRes.unwrap().newBalance;
+    newBalance = await adjustBalance(ctx, userId, cfg.currencyId, -betAmount);
   }
 
-  cooldowns.set(userId, "coinflip", cfg.cooldownMs);
-
-  return OkResult({ outcome, choice, won, betAmount, winnings, newBalance });
+  ctx.cooldowns.set(userId, "coinflip", cfg.cooldownMs);
+  return { outcome, choice, won, betAmount, winnings, newBalance };
 }
 
 // ---------------------------------------------------------------------------
@@ -233,24 +218,22 @@ export async function coinflip(
 // ---------------------------------------------------------------------------
 
 export async function startTrivia(
+  ctx: Ctx,
   userId: string,
   guildId: string,
   config?: { currencyId?: string; baseReward?: number; timeoutMs?: number },
-): Promise<Result<TriviaStartResult, MinigameError>> {
-  if (cooldowns.isOnCooldown(userId, "trivia")) {
-    const remaining = cooldowns.getRemainingMs(userId, "trivia");
-    return ErrResult(new MinigameError("COOLDOWN_ACTIVE", `Trivia is on cooldown. Try again in ${remaining}ms`));
+): Promise<TriviaStartResult> {
+  if (ctx.cooldowns.isOnCooldown(userId, "trivia")) {
+    const remaining = ctx.cooldowns.getRemainingMs(userId, "trivia");
+    throw new MinigameError("COOLDOWN_ACTIVE", `Trivia is on cooldown. Try again in ${remaining}ms`);
   }
 
-  const accountRes = await ensureAccount(userId);
-  if (accountRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", accountRes.error.message));
-  const { account } = accountRes.unwrap();
-
+  const account = await ensureAccount(ctx, userId);
   if (!isAccountActive(account.status)) {
-    return ErrResult(new MinigameError("ACCOUNT_INACTIVE", "Your economy account is not active"));
+    throw new MinigameError("ACCOUNT_INACTIVE", "Your economy account is not active");
   }
 
-  const question = TRIVIA_QUESTIONS[Math.floor(Math.random() * TRIVIA_QUESTIONS.length)];
+  const question = TRIVIA_QUESTIONS[Math.floor(Math.random() * TRIVIA_QUESTIONS.length)]!;
   const sessionKey = `${userId}:${guildId}`;
   const session: TriviaSession = {
     questionId: question.id,
@@ -262,9 +245,8 @@ export async function startTrivia(
     difficulty: question.difficulty,
   };
 
-  sessions.set(sessionKey, session);
-
-  return OkResult({ sessionKey, question, timeoutMs: config?.timeoutMs ?? 60_000 });
+  ctx.sessions.set(sessionKey, session);
+  return { sessionKey, question, timeoutMs: config?.timeoutMs ?? 60_000 };
 }
 
 // ---------------------------------------------------------------------------
@@ -272,45 +254,46 @@ export async function startTrivia(
 // ---------------------------------------------------------------------------
 
 export async function answerTrivia(
+  ctx: Ctx,
   sessionKey: string,
   answerIndex: number,
   timeoutMs: number = 60_000,
-): Promise<Result<TriviaAnswerResult, MinigameError>> {
-  const raw = sessions.get(sessionKey);
+): Promise<TriviaAnswerResult> {
+  const raw = ctx.sessions.get(sessionKey);
   if (!raw) {
-    return ErrResult(new MinigameError("SESSION_NOT_FOUND", "No active trivia session found"));
+    throw new MinigameError("SESSION_NOT_FOUND", "No active trivia session found");
   }
 
   const session = raw as TriviaSession;
 
   if (Date.now() - session.startedAt > timeoutMs) {
-    sessions.delete(sessionKey);
+    ctx.sessions.delete(sessionKey);
     const question = TRIVIA_QUESTIONS.find((q) => q.id === session.questionId);
-    return ErrResult(new MinigameError("SESSION_EXPIRED", `Time's up! The correct answer was ${question ? String.fromCharCode(65 + question.correctIndex) : "unknown"}`));
+    throw new MinigameError(
+      "SESSION_EXPIRED",
+      `Time's up! The correct answer was ${question ? String.fromCharCode(65 + question.correctIndex) : "unknown"}`,
+    );
   }
 
-  sessions.delete(sessionKey);
-  cooldowns.set(session.userId, "trivia", 30_000);
+  ctx.sessions.delete(sessionKey);
+  ctx.cooldowns.set(session.userId, "trivia", 30_000);
 
   const question = TRIVIA_QUESTIONS.find((q) => q.id === session.questionId);
   if (!question) {
-    return ErrResult(new MinigameError("INVALID_INPUT", "Question not found"));
+    throw new MinigameError("INVALID_INPUT", "Question not found");
   }
 
   const correct = answerIndex === question.correctIndex;
 
   if (!correct) {
-    return OkResult({ correct: false, correctIndex: question.correctIndex, reward: 0, newBalance: 0 });
+    return { correct: false, correctIndex: question.correctIndex, reward: 0, newBalance: 0 };
   }
 
   const multipliers: Record<1 | 2 | 3, number> = { 1: 1, 2: 1.5, 3: 2.5 };
   const reward = Math.floor(session.baseReward * multipliers[session.difficulty]);
+  const newBalance = await adjustBalance(ctx, session.userId, session.currencyId, reward);
 
-  const adjRes = await adjustBalance(session.userId, session.currencyId, reward);
-  if (adjRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", adjRes.error.message));
-  const newBalance = adjRes.unwrap().newBalance;
-
-  return OkResult({ correct: true, correctIndex: question.correctIndex, reward, newBalance });
+  return { correct: true, correctIndex: question.correctIndex, reward, newBalance };
 }
 
 // ---------------------------------------------------------------------------
@@ -318,67 +301,56 @@ export async function answerTrivia(
 // ---------------------------------------------------------------------------
 
 export async function rob(
+  ctx: Ctx,
   robberId: string,
   targetId: string,
   config?: Partial<RobConfig>,
-): Promise<Result<RobResult, MinigameError>> {
+): Promise<RobResult> {
   const cfg: RobConfig = { ...DEFAULT_ROB_CONFIG, ...config };
 
   if (robberId === targetId) {
-    return ErrResult(new MinigameError("INVALID_INPUT", "You cannot rob yourself"));
+    throw new MinigameError("INVALID_INPUT", "You cannot rob yourself");
+  }
+  if (ctx.cooldowns.isOnCooldown(robberId, "rob")) {
+    const remaining = ctx.cooldowns.getRemainingMs(robberId, "rob");
+    throw new MinigameError("COOLDOWN_ACTIVE", `Rob is on cooldown. Try again in ${remaining}ms`);
+  }
+  if (ctx.cooldowns.isOnCooldown(robberId, `rob:${targetId}`)) {
+    const remaining = ctx.cooldowns.getRemainingMs(robberId, `rob:${targetId}`);
+    throw new MinigameError("COOLDOWN_ACTIVE", `You recently robbed this person. Try again in ${remaining}ms`);
   }
 
-  if (cooldowns.isOnCooldown(robberId, "rob")) {
-    const remaining = cooldowns.getRemainingMs(robberId, "rob");
-    return ErrResult(new MinigameError("COOLDOWN_ACTIVE", `Rob is on cooldown. Try again in ${remaining}ms`));
-  }
-
-  if (cooldowns.isOnCooldown(robberId, `rob:${targetId}`)) {
-    const remaining = cooldowns.getRemainingMs(robberId, `rob:${targetId}`);
-    return ErrResult(new MinigameError("COOLDOWN_ACTIVE", `You recently robbed this person. Try again in ${remaining}ms`));
-  }
-
-  const robberRes = await ensureAccount(robberId);
-  if (robberRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", robberRes.error.message));
-  const { account: robberAccount } = robberRes.unwrap();
-
+  const robberAccount = await ensureAccount(ctx, robberId);
   if (!isAccountActive(robberAccount.status)) {
-    return ErrResult(new MinigameError("ACCOUNT_INACTIVE", "Your economy account is not active"));
+    throw new MinigameError("ACCOUNT_INACTIVE", "Your economy account is not active");
   }
 
-  const targetBalRes = await getBalance(targetId, cfg.currencyId);
-  if (targetBalRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", targetBalRes.error.message));
-  const targetBalance = targetBalRes.unwrap();
-
+  const targetBalance = await getBalance(ctx, targetId, cfg.currencyId);
   if (targetBalance < cfg.minTargetBalance) {
-    return ErrResult(new MinigameError("TARGET_INSUFFICIENT_FUNDS", `Target doesn't have enough ${cfg.currencyId} to rob`));
+    throw new MinigameError("TARGET_INSUFFICIENT_FUNDS", `Target doesn't have enough ${cfg.currencyId} to rob`);
   }
 
   const stealAmount = Math.min(Math.floor(targetBalance * cfg.maxStealPct), cfg.maxStealAmount);
   const failed = Math.random() < cfg.failChance;
 
-  cooldowns.set(robberId, "rob", cfg.cooldownMs);
-  cooldowns.set(robberId, `rob:${targetId}`, cfg.pairCooldownMs);
+  ctx.cooldowns.set(robberId, "rob", cfg.cooldownMs);
+  ctx.cooldowns.set(robberId, `rob:${targetId}`, cfg.pairCooldownMs);
 
   if (!failed) {
-    const robberAdjRes = await adjustBalance(robberId, cfg.currencyId, stealAmount);
-    if (robberAdjRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", robberAdjRes.error.message));
-    const robberNewBalance = robberAdjRes.unwrap().newBalance;
-
-    const targetAdjRes = await adjustBalance(targetId, cfg.currencyId, -stealAmount);
-    if (targetAdjRes.isErr()) return ErrResult(new MinigameError("INVALID_INPUT", targetAdjRes.error.message));
-    const targetNewBalance = targetAdjRes.unwrap().newBalance;
-
-    return OkResult({ success: true, stolenAmount: stealAmount, fineAmount: 0, robberNewBalance, targetNewBalance });
+    const robberNewBalance = await adjustBalance(ctx, robberId, cfg.currencyId, stealAmount);
+    const targetNewBalance = await adjustBalance(ctx, targetId, cfg.currencyId, -stealAmount);
+    return { success: true, stolenAmount: stealAmount, fineAmount: 0, robberNewBalance, targetNewBalance };
   }
 
-  // Robbery failed — apply fine to robber
+  // Robbery failed — apply fine to robber (best effort, no throw on insufficient)
   const rawFine = Math.max(Math.floor(stealAmount * cfg.failFinePct), cfg.failFineMin);
-  const fineRes = await adjustBalance(robberId, cfg.currencyId, -rawFine, { allowDebt: false });
-  const fineAmount = fineRes.isErr() ? 0 : rawFine;
+  let fineAmount = rawFine;
+  try {
+    await adjustBalance(ctx, robberId, cfg.currencyId, -rawFine, { allowDebt: false });
+  } catch {
+    fineAmount = 0;
+  }
 
-  const robberBalRes = await getBalance(robberId, cfg.currencyId);
-  const robberNewBalance = robberBalRes.isOk() ? robberBalRes.unwrap() : 0;
-
-  return OkResult({ success: false, stolenAmount: 0, fineAmount, robberNewBalance, targetNewBalance: targetBalance });
+  const robberNewBalance = await getBalance(ctx, robberId, cfg.currencyId);
+  return { success: false, stolenAmount: 0, fineAmount, robberNewBalance, targetNewBalance: targetBalance };
 }

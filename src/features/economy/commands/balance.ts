@@ -1,23 +1,21 @@
 import {
-  MessageFlags,
   SlashCommandBuilder,
   EmbedBuilder,
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { ensureAccount } from "@/features/economy/account";
-import { userStore } from "@/db/repositories/users";
-import { coins } from "@/utils/fmt";
+import type { Ctx } from "@/framework/types";
+import { UserCurrency } from "@/components/user-currency";
 
 export const data = new SlashCommandBuilder()
   .setName("balance")
-  .setDescription("Check a user's balance")
+  .setDescription("Check a user's coin balance")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to check (defaults to you)").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });
@@ -25,60 +23,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const target = interaction.options.getUser("user") ?? interaction.user;
-  const isSelf = target.id === interaction.user.id;
+  const wallet = await ctx.get(target.id, UserCurrency);
+  const balance = wallet?.balances["coins"] ?? 0;
 
-  const embeds: EmbedBuilder[] = [];
+  const embed = new EmbedBuilder()
+    .setColor(Colors.Green)
+    .setTitle(`${target.username}'s Balance`)
+    .setDescription(`**${balance} coins**`);
 
-  // Auto-create account for self only
-  if (isSelf) {
-    const ensureRes = await ensureAccount(target.id);
-    if (ensureRes.isErr()) {
-      await interaction.editReply({ content: `Error: ${ensureRes.error.message}` });
-      return;
-    }
-
-    if (ensureRes.unwrap().isNew) {
-      embeds.push(
-        new EmbedBuilder()
-          .setColor(Colors.Gold)
-          .setTitle("✨ Welcome to the economy!")
-          .setDescription(
-            "Your account has been created.\nUse `/work` to earn your first coins, or try `/daily` for your daily reward.",
-          ),
-      );
-    }
-  }
-
-  // Fetch full balance map
-  const userRes = await userStore.get(target.id);
-  if (userRes.isErr()) {
-    await interaction.editReply({ content: `Error: ${userRes.error.message}` });
-    return;
-  }
-
-  const user = userRes.unwrap();
-  const currency = user?.currency ?? {};
-  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> })?.bank ?? {};
-
-  const nonZero = Object.entries(currency).filter(([, v]) => (v as number) > 0);
-
-  const balanceEmbed = new EmbedBuilder()
-    .setColor(0xffd700)
-    .setAuthor({ name: `${target.username}'s Balance`, iconURL: target.displayAvatarURL() })
-    .setFooter({ text: "💡 /work • /daily • /transfer" });
-
-  if (nonZero.length === 0) {
-    balanceEmbed.setDescription("No currencies yet. Use `/work` or `/daily` to get started!");
-  } else {
-    for (const [currencyId, amount] of nonZero) {
-      const bankAmount = bank[currencyId] ?? 0;
-      const val = bankAmount > 0
-        ? `${coins(amount as number, currencyId)} (+ ${coins(bankAmount, currencyId)} in bank)`
-        : coins(amount as number, currencyId);
-      balanceEmbed.addFields({ name: currencyId, value: val, inline: true });
-    }
-  }
-
-  embeds.push(balanceEmbed);
-  await interaction.editReply({ embeds });
+  await interaction.editReply({ embeds: [embed] });
 }

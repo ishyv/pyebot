@@ -4,7 +4,8 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { rob } from "@/features/economy/minigames";
+import type { Ctx } from "@/framework/types";
+import { rob, MinigameError } from "@/features/economy/minigames";
 
 export const data = new SlashCommandBuilder()
   .setName("rob")
@@ -13,7 +14,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("user").setDescription("User to rob").setRequired(true),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply();
 
   if (!interaction.guild) {
@@ -22,28 +23,24 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const target = interaction.options.getUser("user", true);
-  const robberId = interaction.user.id;
-  const targetId = target.id;
 
-  const result = await rob(robberId, targetId);
+  try {
+    const { stolenAmount, fineAmount } = await rob(ctx, interaction.user.id, target.id);
 
-  if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
-    return;
+    const embed =
+      stolenAmount > 0
+        ? new EmbedBuilder()
+            .setColor(Colors.Orange)
+            .setTitle("Robbery Successful!")
+            .setDescription(`You stole **${stolenAmount} coins** from <@${target.id}>!`)
+        : new EmbedBuilder()
+            .setColor(Colors.Red)
+            .setTitle("Caught!")
+            .setDescription(`You got caught! Lost **${fineAmount} coins** as penalty.`);
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    const msg = err instanceof MinigameError ? err.message : "An error occurred.";
+    await interaction.editReply({ content: `Error: ${msg}` });
   }
-
-  const { stolenAmount, fineAmount } = result.unwrap();
-
-  const embed =
-    stolenAmount > 0
-      ? new EmbedBuilder()
-          .setColor(Colors.Orange)
-          .setTitle("Robbery Successful!")
-          .setDescription(`You stole **${stolenAmount} coins** from <@${targetId}>!`)
-      : new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("Caught!")
-          .setDescription(`You got caught! Lost **${fineAmount} coins** as penalty.`);
-
-  await interaction.editReply({ embeds: [embed] });
 }

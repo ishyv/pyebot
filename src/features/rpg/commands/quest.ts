@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import { listRpgQuests, acceptRpgQuest, claimRewards } from "@/features/rpg/quests";
 import { getHints } from "@/utils/command-registry";
+import type { Ctx } from "@/framework/types";
 
 export const data = new SlashCommandBuilder()
   .setName("rpg-quest")
@@ -31,7 +32,7 @@ export const data = new SlashCommandBuilder()
       ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -118,7 +119,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (subcommand === "claim") {
     const questId = interaction.options.getString("quest_id", true);
-    const result = await claimRewards(userId, questId);
+    const result = await claimRewards(ctx, userId, questId);
 
     if (result.isErr()) {
       await interaction.editReply({ content: `Error: ${result.error.message}` });

@@ -2,15 +2,15 @@
  * Economy marketplace: create, buy, cancel, browse listings.
  *
  * Architecture: Plain exported async functions — no classes (except MarketError).
- * Dependencies: cooldowns from core/state, adjustBalance/getBalance from mutations,
- *   ensureAccount/isAccountActive from account, marketStore/query helpers from economy repo.
+ * Dependencies: ctx for cooldowns + mutations, ensureAccount/isAccountActive from account,
+ *   marketStore/query helpers from economy repo.
  *
  * NOTE: Inventory escrow (deducting items on list, returning on cancel, granting on buy)
  * is stubbed pending the features/inventory module implementation.
  */
 
 import { OkResult, ErrResult, type Result } from "@/core/result";
-import { cooldowns } from "@/core/state";
+import type { Ctx } from "@/framework/types";
 import { getBalance, adjustBalance } from "@/features/economy/mutations";
 import { ensureAccount, isAccountActive } from "@/features/economy/account";
 import {
@@ -114,6 +114,7 @@ export interface BrowseListingsResult {
 // ---------------------------------------------------------------------------
 
 export async function createListing(
+  ctx: Ctx,
   sellerId: string,
   guildId: string,
   itemId: string,
@@ -139,15 +140,12 @@ export async function createListing(
     return ErrResult(new MarketError("INVALID_PRICE", `Price cannot exceed ${cfg.maxPrice}`));
   }
 
-  if (cooldowns.isOnCooldown(sellerId, "market:create")) {
-    const remaining = cooldowns.getRemainingMs(sellerId, "market:create");
+  if (ctx.cooldowns.isOnCooldown(sellerId, "market:create")) {
+    const remaining = ctx.cooldowns.getRemainingMs(sellerId, "market:create");
     return ErrResult(new MarketError("COOLDOWN_ACTIVE", `Wait ${remaining}ms before listing again`));
   }
 
-  const accountRes = await ensureAccount(sellerId);
-  if (accountRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", accountRes.error.message));
-  const { account } = accountRes.unwrap();
-
+  const account = await ensureAccount(ctx, sellerId);
   if (!isAccountActive(account.status)) {
     return ErrResult(new MarketError("ACCOUNT_INACTIVE", "Your economy account is not active"));
   }
@@ -182,7 +180,7 @@ export async function createListing(
   const saveRes = await marketStore.set(listing._id, listing);
   if (saveRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", saveRes.error.message));
 
-  cooldowns.set(sellerId, "market:create", cfg.createCooldownMs);
+  ctx.cooldowns.set(sellerId, "market:create", cfg.createCooldownMs);
 
   return OkResult({ listingId: listing._id, itemId, quantity, pricePerUnit });
 }
@@ -192,6 +190,7 @@ export async function createListing(
 // ---------------------------------------------------------------------------
 
 export async function buyListing(
+  ctx: Ctx,
   buyerId: string,
   listingId: string,
   quantity: number,
@@ -203,15 +202,12 @@ export async function buyListing(
     return ErrResult(new MarketError("INVALID_QUANTITY", "Quantity must be a positive integer"));
   }
 
-  if (cooldowns.isOnCooldown(buyerId, "market:buy")) {
-    const remaining = cooldowns.getRemainingMs(buyerId, "market:buy");
+  if (ctx.cooldowns.isOnCooldown(buyerId, "market:buy")) {
+    const remaining = ctx.cooldowns.getRemainingMs(buyerId, "market:buy");
     return ErrResult(new MarketError("COOLDOWN_ACTIVE", `Wait ${remaining}ms before buying again`));
   }
 
-  const accountRes = await ensureAccount(buyerId);
-  if (accountRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", accountRes.error.message));
-  const { account } = accountRes.unwrap();
-
+  const account = await ensureAccount(ctx, buyerId);
   if (!isAccountActive(account.status)) {
     return ErrResult(new MarketError("ACCOUNT_INACTIVE", "Your economy account is not active"));
   }
@@ -243,22 +239,25 @@ export async function buyListing(
   const total = subtotal + fee;
   const sellerPayout = subtotal;
 
-  const balRes = await getBalance(buyerId, cfg.currencyId);
-  if (balRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", balRes.error.message));
-  if (balRes.unwrap() < total) {
+  const balance = await getBalance(ctx, buyerId, cfg.currencyId);
+  if (balance < total) {
     return ErrResult(new MarketError("INSUFFICIENT_FUNDS", `You need ${total} ${cfg.currencyId}`));
   }
 
   // Debit buyer
-  const debitRes = await adjustBalance(buyerId, cfg.currencyId, -total);
-  if (debitRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", debitRes.error.message));
-  const buyerNewBalance = debitRes.unwrap().newBalance;
+  let buyerNewBalance: number;
+  try {
+    buyerNewBalance = await adjustBalance(ctx, buyerId, cfg.currencyId, -total);
+  } catch {
+    return ErrResult(new MarketError("TRANSACTION_FAILED", "Failed to debit buyer"));
+  }
 
   // Credit seller (payout = subtotal; fee is house edge)
-  const creditRes = await adjustBalance(listing.sellerId, cfg.currencyId, sellerPayout);
-  if (creditRes.isErr()) {
+  try {
+    await adjustBalance(ctx, listing.sellerId, cfg.currencyId, sellerPayout);
+  } catch {
     // Best-effort rollback
-    await adjustBalance(buyerId, cfg.currencyId, total);
+    await adjustBalance(ctx, buyerId, cfg.currencyId, total).catch(() => {});
     return ErrResult(new MarketError("TRANSACTION_FAILED", "Failed to credit seller; transaction reversed"));
   }
 
@@ -274,7 +273,7 @@ export async function buyListing(
 
   // TODO: Add quantity of itemId to buyer inventory when features/inventory is implemented.
 
-  cooldowns.set(buyerId, "market:buy", cfg.buyCooldownMs);
+  ctx.cooldowns.set(buyerId, "market:buy", cfg.buyCooldownMs);
 
   return OkResult({
     listingId,
@@ -294,10 +293,12 @@ export async function buyListing(
 // ---------------------------------------------------------------------------
 
 export async function cancelListing(
+  ctx: Ctx,
   actorId: string,
   listingId: string,
   options: { allowModeratorOverride?: boolean } = {},
 ): Promise<Result<CancelListingResult, MarketError>> {
+  void ctx;
   const listingRes = await marketStore.get(listingId);
   if (listingRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
   const listing = listingRes.unwrap();
@@ -334,10 +335,12 @@ export async function cancelListing(
 // ---------------------------------------------------------------------------
 
 export async function browseListings(
+  ctx: Ctx,
   guildId: string,
   options: { itemId?: string; sellerId?: string; page?: number; pageSize?: number } = {},
   config?: Partial<MarketConfig>,
 ): Promise<Result<BrowseListingsResult, MarketError>> {
+  void ctx;
   const cfg: MarketConfig = { ...DEFAULT_MARKET_CONFIG, ...config };
   const page = Math.max(0, options.page ?? 0);
   const pageSize = options.pageSize ?? cfg.pageSize;

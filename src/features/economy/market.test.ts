@@ -1,6 +1,6 @@
 /**
  * Tests for economy marketplace (createListing, buyListing, cancelListing, browseListings).
- * Mocks state, account, userStore, and economy repo — no real DB required.
+ * Mocks state, userStore, and economy repo — no real DB required.
  *
  * NOTE: We mock @/db/repositories/users and @/db/repositories/economy (not service layers)
  * to avoid Bun module mock cross-contamination with mutations.test.ts and minigames.test.ts.
@@ -12,42 +12,18 @@ import type { User } from "@/db/schemas/user";
 import type { MarketListingDoc } from "@/db/schemas/market";
 
 // ---------------------------------------------------------------------------
-// Mock @/core/state BEFORE importing market
+// Cooldown spies used by the ctx stub.
 // ---------------------------------------------------------------------------
 
 const mockIsOnCooldown = mock((_userId: string, _key: string) => false);
 const mockGetRemainingMs = mock((_userId: string, _key: string) => 0);
 const mockSetCooldown = mock((_userId: string, _key: string, _ms: number) => {});
 
-mock.module("@/core/state", () => ({
-  cooldowns: {
-    isOnCooldown: mockIsOnCooldown,
-    getRemainingMs: mockGetRemainingMs,
-    set: mockSetCooldown,
-  },
-  sessions: { get: mock(() => undefined), set: mock(() => {}), delete: mock(() => {}), has: mock(() => false) },
-}));
-
-// ---------------------------------------------------------------------------
-// Mock @/features/economy/account BEFORE importing market
-// ---------------------------------------------------------------------------
-
 const NOW = new Date("2026-01-01T00:00:00.000Z");
 
-function makeAccountResult(userId: string, status: "ok" | "blocked" | "banned" = "ok") {
-  return OkResult({
-    account: { userId, status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0, dailyStreak: 0, lastDailyAt: null },
-    isNew: false,
-  });
+function makeAccountValue(status: "ok" | "blocked" | "banned" = "ok") {
+  return { status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0, dailyStreak: 0, lastDailyAt: null };
 }
-
-const mockEnsureAccount = mock(async (userId: string) => makeAccountResult(userId));
-const mockIsAccountActive = mock((status: string) => status === "ok");
-
-mock.module("@/features/economy/account", () => ({
-  ensureAccount: mockEnsureAccount,
-  isAccountActive: mockIsAccountActive,
-}));
 
 // ---------------------------------------------------------------------------
 // Mock @/db/repositories/users BEFORE importing market
@@ -147,6 +123,52 @@ mock.module("@/db/repositories/economy", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Ctx stub (wires mock cooldowns + in-memory wallets for mutations)
+// ---------------------------------------------------------------------------
+
+function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
+  const walletStore: Record<string, Record<string, number>> = { ...wallets };
+  return {
+    cooldowns: {
+      isOnCooldown: mockIsOnCooldown,
+      getRemainingMs: mockGetRemainingMs,
+      set: mockSetCooldown,
+    },
+    sessions: { get: () => undefined, set: () => {}, delete: () => {}, has: () => false },
+    locks: { tryAcquire: () => true, release: () => {}, isHeld: () => false },
+    client: {} as never,
+    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
+    interaction: null,
+    emit: async () => {},
+    get: async (id: string, component: { collection?: string }) => {
+      if (component.collection === "economy_accounts") {
+        return makeAccountValue() as never;
+      }
+
+      const bal = walletStore[id];
+      return bal ? { balances: bal, bankBalances: {} } as never : null;
+    },
+    ensure: async (id: string, component: { collection?: string }) => {
+      if (component.collection === "economy_accounts") {
+        return makeAccountValue() as never;
+      }
+
+      if (!walletStore[id]) walletStore[id] = { coins: 0 };
+      return { balances: walletStore[id], bankBalances: {} } as never;
+    },
+    patch: async (id: string, _: unknown, fn: unknown) => {
+      if (!walletStore[id]) walletStore[id] = { coins: 0 };
+      const cur = { balances: walletStore[id], bankBalances: {} };
+      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as { balances?: Record<string, number> };
+      if (patch.balances) walletStore[id] = patch.balances;
+    },
+    set: async () => {},
+    delete: async () => {},
+    query: async () => [],
+  } as unknown as import("@/framework/types").Ctx;
+}
+
+// ---------------------------------------------------------------------------
 // Import AFTER mocking
 // ---------------------------------------------------------------------------
 
@@ -161,8 +183,6 @@ function resetAll() {
   mockIsOnCooldown.mockReset();
   mockGetRemainingMs.mockReset();
   mockSetCooldown.mockReset();
-  mockEnsureAccount.mockReset();
-  mockIsAccountActive.mockReset();
   mockUserGet.mockReset();
   mockUserEnsure.mockReset();
   mockUserUpdatePaths.mockReset();
@@ -177,8 +197,6 @@ function resetAll() {
   mockIsOnCooldown.mockImplementation(() => false);
   mockGetRemainingMs.mockImplementation(() => 0);
   mockSetCooldown.mockImplementation(() => {});
-  mockEnsureAccount.mockImplementation(async (userId: string) => makeAccountResult(userId));
-  mockIsAccountActive.mockImplementation((status: string) => status === "ok");
   mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
   mockUserEnsure.mockImplementation(async () => OkResult(makeUser()));
   mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined as void));
@@ -213,7 +231,7 @@ describe("createListing", () => {
   beforeEach(resetAll);
 
   test("creates a listing successfully", async () => {
-    const result = await createListing("seller-1", "guild-1", "wood", 10, 50);
+    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 10, 50);
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -225,7 +243,7 @@ describe("createListing", () => {
   });
 
   test("rejects invalid quantity", async () => {
-    const result = await createListing("seller-1", "guild-1", "wood", 0, 50);
+    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 0, 50);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err).toBeInstanceOf(MarketError);
@@ -233,14 +251,14 @@ describe("createListing", () => {
   });
 
   test("rejects price below minimum", async () => {
-    const result = await createListing("seller-1", "guild-1", "wood", 10, 0);
+    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 10, 0);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("INVALID_PRICE");
   });
 
   test("rejects price above maximum", async () => {
-    const result = await createListing("seller-1", "guild-1", "wood", 10, 2_000_000);
+    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 10, 2_000_000);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("INVALID_PRICE");
@@ -250,7 +268,7 @@ describe("createListing", () => {
     mockIsOnCooldown.mockImplementation((_: string, key: string) => key === "market:create");
     mockGetRemainingMs.mockImplementation(() => 1_500);
 
-    const result = await createListing("seller-1", "guild-1", "wood", 10, 50);
+    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 10, 50);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("COOLDOWN_ACTIVE");
@@ -259,7 +277,7 @@ describe("createListing", () => {
   test("rejects when listing limit reached", async () => {
     mockCountActiveListings.mockImplementation(async () => OkResult(20));
 
-    const result = await createListing("seller-1", "guild-1", "wood", 10, 50);
+    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 10, 50);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("LISTING_LIMIT_REACHED");
@@ -278,7 +296,7 @@ describe("buyListing", () => {
     // buyer has 500 coins, cost = 5 * 10 * 1.02 = 51
     mockUserEnsure.mockImplementation(async () => OkResult(makeUser({ coins: 500 })));
 
-    const result = await buyListing("buyer-1", "listing:test-1", 5);
+    const result = await buyListing(makeCtx({ "buyer-1": { coins: 500 } }), "buyer-1", "listing:test-1", 5);
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -297,7 +315,7 @@ describe("buyListing", () => {
     listingStore.set("listing:test-1", makeListing({ quantity: 10 }));
     mockUserEnsure.mockImplementation(async () => OkResult(makeUser({ coins: 1000 })));
 
-    const result = await buyListing("buyer-1", "listing:test-1", 10);
+    const result = await buyListing(makeCtx({ "buyer-1": { coins: 1000 } }), "buyer-1", "listing:test-1", 10);
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap().listingRemaining).toBe(0);
@@ -308,14 +326,14 @@ describe("buyListing", () => {
   test("rejects self-buy", async () => {
     listingStore.set("listing:test-1", makeListing({ sellerId: "buyer-1" }));
 
-    const result = await buyListing("buyer-1", "listing:test-1", 5);
+    const result = await buyListing(makeCtx(), "buyer-1", "listing:test-1", 5);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("SELF_BUY_FORBIDDEN");
   });
 
   test("rejects when listing not found", async () => {
-    const result = await buyListing("buyer-1", "listing:nonexistent", 5);
+    const result = await buyListing(makeCtx(), "buyer-1", "listing:nonexistent", 5);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("LISTING_NOT_FOUND");
@@ -324,7 +342,7 @@ describe("buyListing", () => {
   test("rejects when listing is not active", async () => {
     listingStore.set("listing:test-1", makeListing({ status: "sold_out" }));
 
-    const result = await buyListing("buyer-1", "listing:test-1", 5);
+    const result = await buyListing(makeCtx(), "buyer-1", "listing:test-1", 5);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("LISTING_NOT_ACTIVE");
@@ -333,7 +351,7 @@ describe("buyListing", () => {
   test("rejects when buying more than available", async () => {
     listingStore.set("listing:test-1", makeListing({ quantity: 3 }));
 
-    const result = await buyListing("buyer-1", "listing:test-1", 5);
+    const result = await buyListing(makeCtx(), "buyer-1", "listing:test-1", 5);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("INSUFFICIENT_LISTING_QUANTITY");
@@ -345,7 +363,7 @@ describe("buyListing", () => {
     mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser({ coins: 50 })));
     mockUserEnsure.mockImplementation(async () => OkResult(makeUser({ coins: 50 })));
 
-    const result = await buyListing("buyer-1", "listing:test-1", 5);
+    const result = await buyListing(makeCtx({ "buyer-1": { coins: 50 } }), "buyer-1", "listing:test-1", 5);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("INSUFFICIENT_FUNDS");
@@ -355,7 +373,7 @@ describe("buyListing", () => {
     mockIsOnCooldown.mockImplementation((_: string, key: string) => key === "market:buy");
     mockGetRemainingMs.mockImplementation(() => 1_000);
 
-    const result = await buyListing("buyer-1", "listing:test-1", 5);
+    const result = await buyListing(makeCtx(), "buyer-1", "listing:test-1", 5);
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("COOLDOWN_ACTIVE");
@@ -372,7 +390,7 @@ describe("cancelListing", () => {
   test("seller can cancel own active listing", async () => {
     listingStore.set("listing:test-1", makeListing());
 
-    const result = await cancelListing("seller-1", "listing:test-1");
+    const result = await cancelListing(makeCtx(), "seller-1", "listing:test-1");
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -386,14 +404,14 @@ describe("cancelListing", () => {
   test("moderator can cancel with allowModeratorOverride", async () => {
     listingStore.set("listing:test-1", makeListing({ sellerId: "seller-1" }));
 
-    const result = await cancelListing("mod-1", "listing:test-1", { allowModeratorOverride: true });
+    const result = await cancelListing(makeCtx(), "mod-1", "listing:test-1", { allowModeratorOverride: true });
     expect(result.isOk()).toBe(true);
   });
 
   test("non-owner without override gets PERMISSION_DENIED", async () => {
     listingStore.set("listing:test-1", makeListing({ sellerId: "seller-1" }));
 
-    const result = await cancelListing("other-user", "listing:test-1");
+    const result = await cancelListing(makeCtx(), "other-user", "listing:test-1");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("PERMISSION_DENIED");
@@ -402,14 +420,14 @@ describe("cancelListing", () => {
   test("cancelling already-cancelled listing returns LISTING_NOT_ACTIVE", async () => {
     listingStore.set("listing:test-1", makeListing({ status: "cancelled" }));
 
-    const result = await cancelListing("seller-1", "listing:test-1");
+    const result = await cancelListing(makeCtx(), "seller-1", "listing:test-1");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("LISTING_NOT_ACTIVE");
   });
 
   test("returns LISTING_NOT_FOUND for unknown listing", async () => {
-    const result = await cancelListing("seller-1", "listing:nonexistent");
+    const result = await cancelListing(makeCtx(), "seller-1", "listing:nonexistent");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("LISTING_NOT_FOUND");
@@ -429,7 +447,7 @@ describe("browseListings", () => {
     listingStore.set(listing1._id, listing1);
     listingStore.set(listing2._id, listing2);
 
-    const result = await browseListings("guild-1");
+    const result = await browseListings(makeCtx(), "guild-1");
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -439,14 +457,14 @@ describe("browseListings", () => {
   });
 
   test("passes itemId filter to repository", async () => {
-    const result = await browseListings("guild-1", { itemId: "wood" });
+    const result = await browseListings(makeCtx(), "guild-1", { itemId: "wood" });
 
     expect(result.isOk()).toBe(true);
     expect(mockFindActiveListings).toHaveBeenCalledWith("guild-1", expect.objectContaining({ itemId: "wood" }));
   });
 
   test("supports pagination via page and pageSize", async () => {
-    const result = await browseListings("guild-1", { page: 2, pageSize: 5 });
+    const result = await browseListings(makeCtx(), "guild-1", { page: 2, pageSize: 5 });
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();

@@ -56,6 +56,8 @@ export interface SanctionEntry {
   readonly date: string;
   readonly caseId?: number;
   readonly moderatorId?: string;
+  readonly source?: "manual" | "automod" | "appeal" | "escalation" | "system";
+  readonly evidenceSummary?: string;
 }
 
 export interface ModerationResult {
@@ -94,6 +96,7 @@ async function pushSanction(
   moderatorId: string,
   caseId: number,
   moderatorRoleIds: readonly string[] = [],
+  metadata: { source?: SanctionEntry["source"]; evidenceSummary?: string } = {},
 ): Promise<void> {
   await userStore.ensure(userId);
   const db = await getDb();
@@ -104,6 +107,8 @@ async function pushSanction(
     caseId,
     moderatorId,
     ...(moderatorRoleIds.length ? { moderatorRoleIds: [...moderatorRoleIds] } : {}),
+    ...(metadata.source ? { source: metadata.source } : {}),
+    ...(metadata.evidenceSummary ? { evidenceSummary: metadata.evidenceSummary } : {}),
   };
   await db.collection("users").updateOne(
     { _id: userId } as never,
@@ -112,6 +117,38 @@ async function pushSanction(
       $set: { updatedAt: new Date() },
     } as never,
   );
+}
+
+/**
+ * Records a system-owned AutoMod case after policy has authorized a sanction.
+ * Discord side effects stay in AutoMod; this preserves user history and logs.
+ */
+export async function recordAutomodSystemCase(
+  guild: Guild,
+  target: GuildMember,
+  type: SanctionType,
+  reason: string,
+  evidenceSummary: string,
+): Promise<Result<ModerationResult, ModerationError>> {
+  const caseId = await nextCaseId(guild.id);
+  const moderatorId = guild.client.user.id;
+  await pushSanction(target.id, guild.id, type, reason, moderatorId, caseId, [], {
+    source: "automod",
+    evidenceSummary,
+  }).catch(() => {});
+
+  const modResult: ModerationResult = {
+    type,
+    targetId: target.id,
+    targetTag: target.user.tag,
+    reason,
+    moderatorId,
+    caseId,
+  };
+
+  await postModLog(guild, modResult, `AutoMod evidence: ${evidenceSummary.slice(0, 500)}`);
+  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId, sanctionType: type, caseId });
+  return OkResult(modResult);
 }
 
 function moderationRoleSnapshot(member: GuildMember): string[] {

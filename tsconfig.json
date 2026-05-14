@@ -4,9 +4,10 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
     "noImplicitAny": true,
     "strictNullChecks": true,
-    "experimentalDecorators": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
@@ -18,6 +19,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*", "scripts/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules"]
 }

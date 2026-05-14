@@ -11,6 +11,7 @@
  */
 
 import { OkResult, ErrResult, type Result } from "@/core/result";
+import type { Ctx } from "@/framework/types";
 import { adjustBalance } from "@/features/economy/mutations";
 import {
   achievementProgressStore,
@@ -296,6 +297,7 @@ export async function incrementProgress(
 // ---------------------------------------------------------------------------
 
 export async function claimRewards(
+  ctx: Ctx,
   userId: string,
   achievementId: string,
 ): Promise<Result<{ appliedRewards: AppliedReward[] }, AchievementError>> {
@@ -323,10 +325,10 @@ export async function claimRewards(
 
   for (const reward of definition.rewards) {
     if (reward.type === "currency" && reward.currencyId && reward.amount) {
-      const adjRes = await adjustBalance(userId, reward.currencyId, reward.amount);
-      if (adjRes.isOk()) {
+      try {
+        await adjustBalance(ctx, userId, reward.currencyId, reward.amount);
         appliedRewards.push({ type: "currency", description: `${reward.amount} ${reward.currencyId}`, amount: reward.amount });
-      }
+      } catch { /* skip reward on mutation failure */ }
     } else if (reward.type === "title") {
       // Title is noted in the reward list; equipping is handled by the title command
       appliedRewards.push({ type: "title", description: `Title: "${reward.titleName ?? reward.titleId}"` });

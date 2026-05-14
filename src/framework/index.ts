@@ -1,32 +1,23 @@
-export { type BotApplication, type CreateBotOptions, createBot } from "./bot";
-export {
-  Button,
-  type ComponentOptions,
-  type DiscordIntentName,
-  Event,
-  type EventOptions,
-  Feature,
-  type FeatureConstructor,
-  type FeatureOptions,
-  Job,
-  type JobOptions,
-  Modal,
-  Select,
-  SlashCommand,
-  type SlashCommandOptions,
-  Use,
-} from "./decorators";
-export {
-  createDoctorReport,
-  currentBunVersion,
-  type DoctorCheck,
-  type DoctorReport,
-  loadEnvFile,
-} from "./doctor";
-export {
-  FileStorageAdapter,
-  MemoryStorageAdapter,
-  type StorageAdapter,
-  type StorageCollection,
-  type StoragePatch,
-} from "./storage";
+/**
+ * Public framework barrel — the surface every feature imports from.
+ *
+ * Features should NEVER reach into individual framework files. Importing
+ * only from `@/framework` keeps refactors safe and the public surface
+ * obvious from this one file.
+ */
+
+export { component } from "./component";
+export { defineFeature } from "./feature";
+export { On, Handle, Listen } from "./decorators";
+export type {
+  Component,
+  ComponentRecord,
+  Ctx,
+  Entity,
+  EventConstructor,
+  EventHandler,
+  FeatureDescriptor,
+  CommandModule,
+} from "./types";
+export { bootstrapFramework } from "./bootstrap";
+export { World } from "./world";

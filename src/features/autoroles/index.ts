@@ -1,18 +1,21 @@
-import { Event, Feature, SlashCommand } from "@/framework";
-import * as autoroleCmd from "./commands/autorole";
-import { register as registerJoin } from "./handlers/guildMemberAdd";
-import { register as registerReact } from "./handlers/messageReactionAdd";
+/**
+ * Autoroles feature manifest.
+ *
+ * Surface:
+ *   /autorole create | delete | list | enable | disable
+ *
+ * Reactions:
+ *   - onJoin rules apply via @On(MemberJoined).
+ *   - onReact rules apply via @Listen("messageReactionAdd"/"messageReactionRemove").
+ *   - messageContains rules apply via @Listen("messageCreate").
+ *   - onButton rules apply via @Handle("autorole:toggle:").
+ */
 
-@Feature({ id: "autoroles", gate: "autoroles", intents: ["Guilds", "GuildMembers", "GuildMessageReactions"] })
-export default class AutorolesFeature {
-  @SlashCommand({ name: autoroleCmd.data.name, description: "Configure autoroles", data: autoroleCmd.data })
-  async autorole(...args: Parameters<typeof autoroleCmd.execute>): Promise<void> {
-    await autoroleCmd.execute(...args);
-  }
+import { defineFeature } from "@/framework";
 
-  @Event({ name: "guildMemberAdd", intents: ["GuildMembers"], register: registerJoin })
-  registerJoin(): void {}
-
-  @Event({ name: "messageReactionAdd", intents: ["GuildMessageReactions"], register: registerReact })
-  registerReaction(): void {}
-}
+export default defineFeature({
+  id: "autoroles",
+  name: "Autoroles",
+  description: "Grant roles automatically based on triggers (join, reaction, button, message).",
+  defaultEnabled: true,
+});

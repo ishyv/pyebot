@@ -47,7 +47,6 @@ import {
 } from "@/db/schemas/guild";
 import { aiConfig } from "@/features/ai/config";
 import { invalidatePatternCache } from "@/features/automod/service";
-import { listRules, setEnabled } from "@/features/autoroles/service";
 import { Colors } from "@/utils/embeds";
 import {
   makePanelCustomId,
@@ -711,6 +710,7 @@ export function renderAutomodPanel(session: PanelState, cfg: GuildConfig): Panel
           "Use the menu to switch protections, then configure the selected section below.",
         ].join("\n"),
         fields: [
+          automodPolicyField(cfg),
           automodSelectedField(section, cfg),
           automodCoverageField(cfg),
           automodPatternsField(cfg),
@@ -782,6 +782,22 @@ function automodActionLabel(action: string): string {
     quarantine: "Quarantine",
   };
   return labels[action] ?? action;
+}
+
+function automodPolicyField(cfg: GuildConfig): APIEmbedField {
+  const policy = cfg.automod.policy;
+  return {
+    name: "Tiered policy",
+    value: [
+      `Preset: **${policy.preset}**`,
+      `Profiles: **${policy.profileRetentionDays}d rolling**`,
+      `AI detector: **${policy.aiDetector.enabled ? "On" : "Off"}**`,
+      `Staff bypass: **${policy.bypass.staffBypass ? "On" : "Off"}**`,
+      `Overrides: **${policy.bypass.ignoredChannelIds.length} ignored channels**, **${policy.bypass.strictChannelIds.length} strict channels**, **${policy.bypass.trustedRoleIds.length} trusted roles**, **${policy.bypass.protectedRoleIds.length} protected roles**`,
+      `Rate limits: **${policy.alertRateLimit.maxAlerts} alerts/${policy.alertRateLimit.windowSeconds}s**, **${policy.actionRateLimit.maxActions} actions/${policy.actionRateLimit.windowSeconds}s**`,
+    ].join("\n"),
+    inline: false,
+  };
 }
 
 function automodSelectedField(section: AutomodSection, cfg: GuildConfig): APIEmbedField {
@@ -1046,42 +1062,20 @@ async function renderRolesPanel(session: PanelState, cfg: GuildConfig): Promise<
 }
 
 async function renderAutorolesPanel(session: PanelState): Promise<PanelPayload> {
-  const result = await listRules(session.guildId);
-  const rules = result.isOk() ? result.unwrap() : [];
+  void session;
   return {
     embeds: [
       panelEmbed({
         title: "Autoroles Panel",
         fields: [
           {
-            name: "Rules",
-            value: rules.length
-              ? limitText(
-                  rules
-                    .map(
-                      (rule) =>
-                        `${rule.enabled ? "On" : "Off"} **${rule.name}** -> ${roleMention(rule.roleId)} (${rule.trigger.type})`,
-                    )
-                    .join("\n"),
-                  1000,
-                )
-              : "No rules configured.",
+            name: "Configuration",
+            value: "Use `/autorole list` and `/autorole enable|disable` for v2 autorole rules.",
           },
         ],
       }),
     ],
-    components: [
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(makePanelCustomId(session, "autoroles", "enable-all"))
-          .setLabel("Enable all")
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(makePanelCustomId(session, "autoroles", "disable-all"))
-          .setLabel("Disable all")
-          .setStyle(ButtonStyle.Danger),
-      ),
-    ],
+    components: [],
   };
 }
 
@@ -1897,12 +1891,8 @@ async function applyRolesAction(
 }
 
 async function applyAutorolesAction(session: PanelState, action: string): Promise<boolean> {
-  if (action === "enable-all" || action === "disable-all") {
-    const enabled = action === "enable-all";
-    const result = await listRules(session.guildId);
-    if (result.isOk())
-      for (const rule of result.unwrap()) await setEnabled(session.guildId, rule.name, enabled);
-  }
+  void session;
+  void action;
   return true;
 }
 
@@ -2216,9 +2206,7 @@ async function applyTopsAction(
 }
 
 async function disableAllAutoroles(guildId: string): Promise<void> {
-  const rules = await listRules(guildId);
-  if (!rules.isOk()) return;
-  for (const rule of rules.unwrap()) if (rule.enabled) await setEnabled(guildId, rule.name, false);
+  void guildId;
 }
 
 async function patchSelectedRoleRecords(

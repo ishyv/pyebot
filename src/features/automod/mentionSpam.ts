@@ -1,25 +1,16 @@
 /**
  * Mention spam detection.
  *
- * Counts unique user + role mentions per message. If a single message
- * exceeds maxMentions, or if cumulative mentions across messages within
- * windowSeconds exceed maxMentions, the configured action is taken.
- *
- * Configuration: guild.automod.mentionSpam
+ * Counts unique user + role mentions per message and across a short user
+ * window. This module only emits signals; shared AutoMod policy applies the
+ * final action.
  */
 
-import {
-  EmbedBuilder,
-  Colors,
-  PermissionFlagsBits,
-  type Message,
-  type TextChannel,
-  type GuildMember,
-} from "discord.js";
+import { type Message, PermissionFlagsBits } from "discord.js";
 import { getGuild } from "@/db/repositories/guilds";
-import { createLogger } from "@/core/logger";
-
-const log = createLogger("automod:mention-spam");
+import type { AutomodConfig } from "@/db/schemas/guild";
+import { processAutomodSignals } from "@/features/automod/service";
+import type { AutomodSignal } from "./signals";
 
 // ─── Tracking ────────────────────────────────────────────────────────────────
 
@@ -34,95 +25,67 @@ export function pruneMentionSpam(): void {
   }
 }
 
-// ─── Main check ──────────────────────────────────────────────────────────────
-
+/**
+ * Backward-compatible wrapper used by older handlers and tests.
+ */
 export async function checkMentionSpam(message: Message): Promise<void> {
   if (!message.guild || !message.member) return;
-  if (message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return;
+  const guildResult = await getGuild(message.guild.id);
+  const guild = guildResult.isOk() ? guildResult.unwrap() : null;
+  if (!guild) return;
+  const config = guild.automod;
+  await processAutomodSignals(message, config, detectMentionSpam(message, config));
+}
+
+/**
+ * Produces mention-spam signals without deleting, reporting, or timing out.
+ */
+export function detectMentionSpam(message: Message, config: AutomodConfig): AutomodSignal[] {
+  if (!message.guild || !message.member) return [];
+  if (message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return [];
+  if (!config.mentionSpam.enabled) return [];
 
   const mentionCount = message.mentions.users.size + message.mentions.roles.size;
-  if (mentionCount === 0) return;
+  if (mentionCount === 0) return [];
 
-  const guildResult = await getGuild(message.guild.id);
-  if (guildResult.isErr() || !guildResult.unwrap()) return;
-
-  const config = guildResult.unwrap()!.automod.mentionSpam;
-  if (!config.enabled) return;
-
-  // Per-message threshold (single message with too many mentions)
-  if (mentionCount >= config.maxMentions) {
-    await trigger(message, config, mentionCount);
-    return;
-  }
-
-  // Windowed threshold (cumulative mentions across messages)
-  const key = `${message.guild.id}:${message.author.id}`;
   const now = Date.now();
-  const windowMs = config.windowSeconds * 1000;
+  const windowMs = config.mentionSpam.windowSeconds * 1000;
+  let totalMentions = mentionCount;
 
-  const entries = (mentionHistory.get(key) ?? []).filter((e) => now - e.ts < windowMs);
-  entries.push({ count: mentionCount, ts: now });
-  mentionHistory.set(key, entries);
-
-  const totalMentions = entries.reduce((s, e) => s + e.count, 0);
-  if (totalMentions >= config.maxMentions) {
+  if (mentionCount < config.mentionSpam.maxMentions) {
+    const key = `${message.guild.id}:${message.author.id}`;
+    const entries = (mentionHistory.get(key) ?? []).filter((e) => now - e.ts < windowMs);
+    entries.push({ count: mentionCount, ts: now });
+    mentionHistory.set(key, entries);
+    totalMentions = entries.reduce((sum, entry) => sum + entry.count, 0);
+    if (totalMentions < config.mentionSpam.maxMentions) return [];
     mentionHistory.delete(key);
-    await trigger(message, config, totalMentions);
-  }
-}
-
-// ─── Action ──────────────────────────────────────────────────────────────────
-
-async function trigger(
-  message: Message,
-  config: { action: "timeout" | "delete" | "report"; timeoutSeconds: number; reportChannelId: string | null },
-  mentionCount: number,
-): Promise<void> {
-  const reason = `Mention spam (${mentionCount} mentions)`;
-  log.warn(`Mention spam: ${message.author.tag} — ${mentionCount} mentions`);
-
-  try { await message.delete(); } catch { /* best-effort */ }
-
-  if (config.action === "timeout") {
-    await applyTimeout(message.member!, config.timeoutSeconds * 1000, reason);
   }
 
-  if (config.action !== "delete" && config.reportChannelId) {
-    await postAlert(message, reason, mentionCount, config.reportChannelId);
-  }
-}
-
-async function applyTimeout(member: GuildMember, durationMs: number, reason: string): Promise<void> {
-  try {
-    await member.timeout(durationMs, reason);
-  } catch (err) {
-    log.error("Failed to apply mention spam timeout", err);
-  }
-}
-
-async function postAlert(
-  message: Message,
-  reason: string,
-  mentionCount: number,
-  reportChannelId: string,
-): Promise<void> {
-  try {
-    const channel = await message.guild!.channels.fetch(reportChannelId);
-    if (!channel?.isTextBased() || !("send" in channel)) return;
-
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Orange)
-      .setTitle("Mention Spam Detected")
-      .addFields(
-        { name: "User", value: `<@${message.author.id}> (${message.author.tag})`, inline: true },
-        { name: "Channel", value: `<#${message.channelId}>`, inline: true },
-        { name: "Mention Count", value: `${mentionCount}`, inline: true },
-        { name: "Reason", value: reason },
-      )
-      .setTimestamp();
-
-    await (channel as TextChannel).send({ embeds: [embed] });
-  } catch (err) {
-    log.error("Failed to post mention spam alert", err);
-  }
+  return [
+    {
+      detectorId: "mentionSpam",
+      ruleId: "mentionSpam:window",
+      confidence: mentionCount >= config.mentionSpam.maxMentions ? 0.9 : 0.82,
+      severity: totalMentions >= config.mentionSpam.maxMentions * 2 ? "critical" : "high",
+      punishmentEligible: true,
+      recommendedAction: config.mentionSpam.action,
+      target: {
+        guildId: message.guild.id,
+        userId: message.author.id,
+        channelId: message.channelId,
+        messageId: message.id,
+      },
+      evidence: {
+        summary: `Mention spam (${totalMentions} mentions in ${config.mentionSpam.windowSeconds}s).`,
+        messageContent: message.content.slice(0, 500),
+        fingerprint: "mention-spam",
+        metadata: {
+          mentions: totalMentions,
+          windowSeconds: config.mentionSpam.windowSeconds,
+        },
+      },
+      createdAt: new Date().toISOString(),
+    },
+  ];
 }

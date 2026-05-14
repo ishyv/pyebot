@@ -1,20 +1,17 @@
-import { Event, Feature, SlashCommand } from "@/framework";
-import * as aiCmd from "./commands/ai";
-import * as contextCmd from "./commands/context";
-import { register as registerMessageCreate } from "./handlers/messageCreate";
+/**
+ * AI feature manifest.
+ *
+ * Surface:
+ *   /ai — configure provider/model
+ *
+ * Listens to raw `messageCreate` to respond when @mentioned.
+ */
 
-@Feature({ id: "ai", intents: ["Guilds", "GuildMessages", "MessageContent"] })
-export default class AiFeature {
-  @SlashCommand({ name: aiCmd.data.name, description: "Configure AI", data: aiCmd.data })
-  async ai(...args: Parameters<typeof aiCmd.execute>): Promise<void> {
-    await aiCmd.execute(...args);
-  }
+import { defineFeature } from "@/framework";
 
-  @SlashCommand({ name: contextCmd.data.name, description: "Summarize recent channel context", data: contextCmd.data })
-  async context(...args: Parameters<typeof contextCmd.execute>): Promise<void> {
-    await contextCmd.execute(...args);
-  }
-
-  @Event({ name: "messageCreate", intents: ["GuildMessages", "MessageContent"], register: registerMessageCreate })
-  registerMessages(): void {}
-}
+export default defineFeature({
+  id: "ai",
+  name: "AI Assistant",
+  description: "Conversational AI replies when the bot is mentioned.",
+  defaultEnabled: false,
+});

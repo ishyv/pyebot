@@ -1,355 +1,143 @@
-import { type Client, SlashCommandBuilder } from "discord.js";
-import type {
-  ComponentInteraction,
-  EventRegistration,
-  FeatureCommand,
-  RuntimeFeature,
-  MiddlewareFn,
-} from "@/core/feature";
-import type { FeatureConfigDefinition } from "@/core/featureConfig";
+/**
+ * `@On` and `@Handle` — the two method decorators a feature uses to declare
+ * its event listeners and component-interaction routes.
+ *
+ * Why decorators (rather than a plain `on:` array in the manifest)?
+ *
+ *   - They live next to the handler body. Reading the handler tells you
+ *     exactly what triggers it, no jumping to a manifest file.
+ *   - Adding a new listener is dropping a new decorated method in the
+ *     handlers class — no "register me too" list to update.
+ *   - Type inference: the decorator's first argument fixes the event type,
+ *     so the method signature stays typed by the developer's declaration.
+ *
+ * Why NOT `reflect-metadata`?
+ *
+ *   `reflect-metadata` is a 16KB dependency that ships a polyfill for a TC39
+ *   proposal we do not otherwise use. We need exactly one thing: attach
+ *   metadata to a class prototype that the loader can read back. A single
+ *   `Symbol`-keyed array on the prototype does that in 20 lines with zero
+ *   dependencies.
+ *
+ * Mechanism:
+ *
+ *   - `@On(EventClass)` pushes `{ event, methodKey }` onto
+ *     `target[ON_METADATA]` (an array of entries on the prototype).
+ *   - `@Handle("prefix:")` pushes `{ prefix, methodKey }` onto
+ *     `target[HANDLE_METADATA]`.
+ *   - The loader reads these arrays at bootstrap to wire the event bus and
+ *     component router. Features themselves never read the metadata.
+ *
+ * Requirement: `tsconfig.json` must have `"experimentalDecorators": true`.
+ * Legacy decorators are intentional — they are stable in TypeScript and
+ * sufficient for what we need (method decoration, no field/class
+ * transformation).
+ */
 
-export type DiscordIntentName = string;
-export type FeatureConstructor<T extends object = object> = new () => T;
+import type { EventConstructor } from "./types";
 
-export interface FeatureOptions {
-  readonly id: string;
-  readonly gate?: string;
-  readonly intents?: readonly DiscordIntentName[];
-  readonly config?: FeatureConfigDefinition;
+/** Symbol key for the @On metadata array on a handlers-class prototype. */
+export const ON_METADATA = Symbol("tx.framework.on");
+/** Symbol key for the @Handle metadata array on a handlers-class prototype. */
+export const ON_HANDLE = Symbol("tx.framework.handle");
+/** Symbol key for the @Listen metadata array on a handlers-class prototype. */
+export const ON_LISTEN = Symbol("tx.framework.listen");
+
+/** Shape stored on `target[ON_METADATA]`. */
+export interface OnMetadataEntry {
+  readonly event: EventConstructor;
+  readonly methodKey: string;
 }
 
-export interface SlashCommandOptions {
-  readonly name: string;
-  readonly description: string;
-  readonly data?:
-    | FeatureCommand["data"]
-    | ((builder: SlashCommandBuilder) => FeatureCommand["data"]);
-  readonly middleware?: readonly MiddlewareFn[];
-  readonly response?: FeatureCommand["response"];
-}
-
-export interface ComponentOptions<TParsed = unknown> {
+/** Shape stored on `target[ON_HANDLE]`. */
+export interface HandleMetadataEntry {
   readonly prefix: string;
-  readonly matches?: (customId: string) => boolean;
-  readonly parse?: (customId: string) => TParsed;
+  readonly methodKey: string;
 }
 
-export interface EventOptions {
-  readonly name: string;
-  readonly intents?: readonly DiscordIntentName[];
-  readonly once?: boolean;
-  readonly register?: (client: Client) => void;
+/** Shape stored on `target[ON_LISTEN]`. */
+export interface ListenMetadataEntry {
+  readonly event: string;
+  readonly methodKey: string;
 }
 
-export interface JobOptions {
-  readonly name: string;
-  readonly everyMs: number;
-  readonly runOnReady?: boolean;
-}
-
-interface SlashCommandMetadata extends SlashCommandOptions {
-  readonly methodName: string;
-}
-
-interface ComponentMetadata extends ComponentOptions {
-  readonly methodName: string;
-  readonly kind: "button" | "select" | "modal";
-}
-
-interface EventMetadata extends EventOptions {
-  readonly methodName: string;
-}
-
-interface JobMetadata extends JobOptions {
-  readonly methodName: string;
-}
-
-interface FeatureMetadata {
-  feature?: FeatureOptions;
-  readonly classMiddleware: MiddlewareFn[];
-  readonly commands: SlashCommandMetadata[];
-  readonly components: ComponentMetadata[];
-  readonly events: EventMetadata[];
-  readonly jobs: JobMetadata[];
-  readonly methodMiddleware: Map<string, MiddlewareFn[]>;
-}
-
-const metadataByClass = new WeakMap<object, FeatureMetadata>();
-
-export function Feature(options: FeatureOptions): ClassDecorator {
-  return (target) => {
-    const metadata = metadataFor(target);
-    metadata.feature = options;
+/**
+ * Mark a method as a listener for the given event class.
+ *
+ * Usage:
+ *   class FooHandlers {
+ *     @On(FightEnded)
+ *     async onFightEnded(e: FightEnded, ctx: Ctx) { ... }
+ *   }
+ */
+export function On<E>(eventClass: EventConstructor<E>) {
+  return function (target: object, propertyKey: string): void {
+    const list = ((target as Record<symbol, unknown>)[ON_METADATA] as OnMetadataEntry[] | undefined) ?? [];
+    const entry: OnMetadataEntry = { event: eventClass as EventConstructor, methodKey: propertyKey };
+    (target as Record<symbol, unknown>)[ON_METADATA] = [...list, entry];
   };
 }
 
-export function SlashCommand(options: SlashCommandOptions): MethodDecorator {
-  return (target, propertyKey) => {
-    metadataFor(target.constructor).commands.push({
-      ...options,
-      methodName: String(propertyKey),
-    });
+/**
+ * Mark a method as a router for component (button / select) interactions
+ * whose customId starts with the given prefix.
+ *
+ * Usage:
+ *   class FooHandlers {
+ *     @Handle("trivia:")
+ *     async onTriviaAnswer(interaction: ButtonInteraction, ctx: Ctx) { ... }
+ *   }
+ *
+ * Matching is done by `customId.startsWith(prefix)`. The framework picks
+ * the LONGEST matching prefix when multiple routes match — so `"market:"`
+ * and `"market:confirm:"` can coexist and the more specific one wins.
+ */
+export function Handle(prefix: string) {
+  return function (target: object, propertyKey: string): void {
+    const list = ((target as Record<symbol, unknown>)[ON_HANDLE] as HandleMetadataEntry[] | undefined) ?? [];
+    const entry: HandleMetadataEntry = { prefix, methodKey: propertyKey };
+    (target as Record<symbol, unknown>)[ON_HANDLE] = [...list, entry];
   };
 }
 
-export function Button<TParsed = unknown>(options: ComponentOptions<TParsed>): MethodDecorator {
-  return componentDecorator("button", options);
-}
-
-export function Select<TParsed = unknown>(options: ComponentOptions<TParsed>): MethodDecorator {
-  return componentDecorator("select", options);
-}
-
-export function Modal<TParsed = unknown>(options: ComponentOptions<TParsed>): MethodDecorator {
-  return componentDecorator("modal", options);
-}
-
-export function Event(event: string | EventOptions): MethodDecorator {
-  const options = typeof event === "string" ? { name: event } : event;
-  return (target, propertyKey) => {
-    metadataFor(target.constructor).events.push({
-      ...options,
-      methodName: String(propertyKey),
-    });
+/**
+ * Mark a method as a raw Discord.js client event listener (e.g. "messageCreate",
+ * "messageReactionAdd"). Use this when the per-event-class framework events
+ * are too coarse — for example, automod needs every single message, not just
+ * a message-flagged event.
+ *
+ * The framework registers these via `client.on(event, handler)` during
+ * bootstrap. The bound method receives the raw Discord event arguments plus
+ * a Ctx as the last argument.
+ *
+ * Usage:
+ *   class FooHandlers {
+ *     @Listen("messageCreate")
+ *     async onMessage(message: Message, ctx: Ctx) { ... }
+ *   }
+ */
+export function Listen(event: string) {
+  return function (target: object, propertyKey: string): void {
+    const list = ((target as Record<symbol, unknown>)[ON_LISTEN] as ListenMetadataEntry[] | undefined) ?? [];
+    const entry: ListenMetadataEntry = { event, methodKey: propertyKey };
+    (target as Record<symbol, unknown>)[ON_LISTEN] = [...list, entry];
   };
 }
 
-export function Job(options: JobOptions): MethodDecorator {
-  return (target, propertyKey) => {
-    metadataFor(target.constructor).jobs.push({
-      ...options,
-      methodName: String(propertyKey),
-    });
-  };
+/** Read @Listen metadata off a handlers-class instance's prototype. */
+export function getListenMetadata(handlersInstance: object): ReadonlyArray<ListenMetadataEntry> {
+  const proto = Object.getPrototypeOf(handlersInstance) as Record<symbol, unknown>;
+  return (proto[ON_LISTEN] as ListenMetadataEntry[] | undefined) ?? [];
 }
 
-export function Use(...middleware: readonly MiddlewareFn[]): ClassDecorator & MethodDecorator {
-  const decorator = (target: object, propertyKey?: string | symbol) => {
-    if (propertyKey === undefined) {
-      metadataFor(target).classMiddleware.push(...middleware);
-      return;
-    }
-
-    const metadata = metadataFor(target.constructor);
-    const key = String(propertyKey);
-    const existing = metadata.methodMiddleware.get(key) ?? [];
-    existing.push(...middleware);
-    metadata.methodMiddleware.set(key, existing);
-  };
-  return decorator as ClassDecorator & MethodDecorator;
+/** Read @On metadata off a handlers-class instance's prototype. */
+export function getOnMetadata(handlersInstance: object): ReadonlyArray<OnMetadataEntry> {
+  const proto = Object.getPrototypeOf(handlersInstance) as Record<symbol, unknown>;
+  return (proto[ON_METADATA] as OnMetadataEntry[] | undefined) ?? [];
 }
 
-export function compileFeatureClass<T extends object>(
-  FeatureClass: FeatureConstructor<T>,
-): RuntimeFeature {
-  const metadata = metadataByClass.get(FeatureClass);
-  if (!metadata?.feature) {
-    throw new Error(`Class "${FeatureClass.name}" is missing @Feature metadata.`);
-  }
-
-  const instance = new FeatureClass();
-  const declaredIntents = new Set(metadata.feature.intents ?? []);
-  validateDeclaredIntents(metadata.feature, metadata.events, declaredIntents);
-
-  const timers = new Set<ReturnType<typeof setInterval>>();
-  const commands = metadata.commands.map(
-    (command): FeatureCommand => ({
-      data: commandData(command),
-      execute: async (interaction, ctx) => {
-        await invoke(instance, command.methodName, interaction, ctx);
-      },
-      response: command.response,
-      middleware: [
-        ...metadata.classMiddleware,
-        ...(command.middleware ?? []),
-        ...(metadata.methodMiddleware.get(command.methodName) ?? []),
-      ],
-    }),
-  );
-
-  const components = metadata.components.map((component) => ({
-    prefix: component.prefix,
-    matches: component.matches ?? ((customId: string) => customId.startsWith(component.prefix)),
-    handle: async (interaction: ComponentInteraction) => {
-      const parsed = component.parse?.(interaction.customId);
-      await invoke(instance, component.methodName, interaction, parsed);
-    },
-  }));
-
-  const events = metadata.events.map(
-    (event): EventRegistration => ({
-      event: event.name,
-      register: (client: Client) => {
-        if (event.register) {
-          event.register(client);
-          return;
-        }
-        const register = event.once ? client.once.bind(client) : client.on.bind(client);
-        register(event.name as never, async (...args: never[]) => {
-          await invoke(instance, event.methodName, ...args);
-        });
-      },
-    }),
-  );
-
-  return {
-    id: metadata.feature.id,
-    featureGate: metadata.feature.gate,
-    config: metadata.feature.config,
-    capabilities: metadata.feature.intents?.length
-      ? { discordIntents: metadata.feature.intents }
-      : undefined,
-    commands,
-    components,
-    events,
-    onLoad: lifecycle(instance, "onLoad"),
-    onReady: async (client) => {
-      const onReady = lifecycle(instance, "onReady");
-      if (onReady) await onReady(client);
-      for (const job of metadata.jobs) {
-        if (job.runOnReady) {
-          Promise.resolve(invoke(instance, job.methodName, client)).catch((err) => {
-            console.error(`[framework:job:${job.name}]`, err);
-          });
-        }
-        const timer = setInterval(() => {
-          Promise.resolve(invoke(instance, job.methodName, client)).catch((err) => {
-            console.error(`[framework:job:${job.name}]`, err);
-          });
-        }, job.everyMs);
-        timers.add(timer);
-      }
-    },
-    onShutdown: async () => {
-      for (const timer of timers) clearInterval(timer);
-      timers.clear();
-      const onShutdown = lifecycle(instance, "onShutdown");
-      if (onShutdown) await onShutdown();
-    },
-  };
+/** Read @Handle metadata off a handlers-class instance's prototype. */
+export function getHandleMetadata(handlersInstance: object): ReadonlyArray<HandleMetadataEntry> {
+  const proto = Object.getPrototypeOf(handlersInstance) as Record<symbol, unknown>;
+  return (proto[ON_HANDLE] as HandleMetadataEntry[] | undefined) ?? [];
 }
-
-export function compileFeatureClasses(sources: readonly FeatureConstructor[]): RuntimeFeature[] {
-  const modules = sources.map((source, index) => {
-    if (typeof source !== "function") {
-      throw new Error(`Feature source at index ${index} must be a decorated class.`);
-    }
-    return compileFeatureClass(source);
-  });
-  validateUniqueFeatures(modules);
-  validateUniqueCommands(modules);
-  validateUniqueComponentPrefixes(modules);
-  return modules;
-}
-
-function componentDecorator<TParsed>(
-  kind: ComponentMetadata["kind"],
-  options: ComponentOptions<TParsed>,
-): MethodDecorator {
-  return (target, propertyKey) => {
-    metadataFor(target.constructor).components.push({
-      ...options,
-      kind,
-      methodName: String(propertyKey),
-    });
-  };
-}
-
-function metadataFor(target: object): FeatureMetadata {
-  let metadata = metadataByClass.get(target);
-  if (!metadata) {
-    metadata = {
-      classMiddleware: [],
-      commands: [],
-      components: [],
-      events: [],
-      jobs: [],
-      methodMiddleware: new Map(),
-    };
-    metadataByClass.set(target, metadata);
-  }
-  return metadata;
-}
-
-function commandData(command: SlashCommandMetadata): FeatureCommand["data"] {
-  if (typeof command.data === "function") {
-    return command.data(
-      new SlashCommandBuilder().setName(command.name).setDescription(command.description),
-    );
-  }
-  if (command.data) return command.data;
-  return new SlashCommandBuilder().setName(command.name).setDescription(command.description);
-}
-
-async function invoke(instance: object, methodName: string, ...args: unknown[]): Promise<unknown> {
-  const method = (instance as Record<string, unknown>)[methodName];
-  if (typeof method !== "function") {
-    throw new Error(`Decorated method "${methodName}" is not callable.`);
-  }
-  return await method.apply(instance, args);
-}
-
-function lifecycle(instance: object, methodName: "onLoad" | "onReady" | "onShutdown") {
-  const method = (instance as Record<string, unknown>)[methodName];
-  if (typeof method !== "function") return undefined;
-  return async (...args: unknown[]) => {
-    await method.apply(instance, args);
-  };
-}
-
-function validateDeclaredIntents(
-  feature: FeatureOptions,
-  events: readonly EventMetadata[],
-  declaredIntents: ReadonlySet<string>,
-): void {
-  for (const event of events) {
-    for (const intent of event.intents ?? []) {
-      if (!declaredIntents.has(intent)) {
-        throw new Error(
-          `Feature "${feature.id}" handles "${event.name}" but does not declare required intent "${intent}".`,
-        );
-      }
-    }
-  }
-}
-
-function validateUniqueFeatures(modules: readonly RuntimeFeature[]): void {
-  const seen = new Set<string>();
-  for (const mod of modules) {
-    if (seen.has(mod.id)) {
-      throw new Error(`Feature "${mod.id}" is already registered.`);
-    }
-    seen.add(mod.id);
-  }
-}
-
-function validateUniqueCommands(modules: readonly RuntimeFeature[]): void {
-  const seen = new Map<string, string>();
-  for (const mod of modules) {
-    for (const command of mod.commands) {
-      const owner = seen.get(command.data.name);
-      if (owner) {
-        throw new Error(
-          `Command "${command.data.name}" is already registered by feature "${owner}".`,
-        );
-      }
-      seen.set(command.data.name, mod.id);
-    }
-  }
-}
-
-function validateUniqueComponentPrefixes(modules: readonly RuntimeFeature[]): void {
-  const seen = new Map<string, string>();
-  for (const mod of modules) {
-    for (const component of mod.components ?? []) {
-      const owner = seen.get(component.prefix);
-      if (owner) {
-        throw new Error(
-          `Component prefix "${component.prefix}" is already registered by feature "${owner}".`,
-        );
-      }
-      seen.set(component.prefix, mod.id);
-    }
-  }
-}
-

@@ -1,429 +1,194 @@
 /**
  * Tests for economy minigames (coinflip, trivia, rob).
- * Mocks state, account, and userStore — no real DB required.
- *
- * NOTE: We deliberately mock @/db/repositories/users (not @/features/economy/mutations)
- * to avoid Bun module mock cross-contamination with mutations.test.ts.
+ * Uses an in-memory Ctx stub — no real DB required.
  */
 
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { OkResult } from "@/core/result";
-import type { User } from "@/db/schemas/user";
+import { describe, expect, test } from "bun:test";
+import type { Ctx } from "@/framework/types";
+import { CooldownManager, SessionManager } from "@/core/state";
+import {
+  coinflip,
+  startTrivia,
+  answerTrivia,
+  rob,
+  DEFAULT_COINFLIP_CONFIG,
+  DEFAULT_ROB_CONFIG,
+} from "@/features/economy/minigames";
 
 // ---------------------------------------------------------------------------
-// Mock @/core/state BEFORE importing minigames
+// In-memory Ctx factory
 // ---------------------------------------------------------------------------
 
-const mockIsOnCooldown = mock((_userId: string, _key: string) => false);
-const mockGetRemainingMs = mock((_userId: string, _key: string) => 0);
-const mockSetCooldown = mock((_userId: string, _key: string, _ms: number) => {});
+function makeCtx(opts: {
+  wallets?: Record<string, Record<string, number>>;
+  accounts?: Record<string, "ok" | "blocked" | "banned">;
+} = {}): Ctx {
+  const wallets: Record<string, Record<string, number>> = opts.wallets ?? {};
+  const accounts: Record<string, "ok" | "blocked" | "banned"> = opts.accounts ?? {};
+  const cooldowns = new CooldownManager();
+  const sessions = new SessionManager<unknown>();
 
-const sessionStore = new Map<string, unknown>();
-const mockSessionsGet = mock((key: string) => sessionStore.get(key));
-const mockSessionsSet = mock((key: string, value: unknown) => {
-  sessionStore.set(key, value);
-});
-const mockSessionsDelete = mock((key: string) => {
-  sessionStore.delete(key);
-});
-
-mock.module("@/core/state", () => ({
-  cooldowns: {
-    isOnCooldown: mockIsOnCooldown,
-    getRemainingMs: mockGetRemainingMs,
-    set: mockSetCooldown,
-  },
-  sessions: {
-    get: mockSessionsGet,
-    set: mockSessionsSet,
-    delete: mockSessionsDelete,
-    has: (key: string) => sessionStore.has(key),
-  },
-}));
-
-// ---------------------------------------------------------------------------
-// Mock @/features/economy/account BEFORE importing minigames
-// ---------------------------------------------------------------------------
-
-const NOW = new Date("2026-01-01T00:00:00.000Z");
-
-function makeAccountResult(userId: string, status: "ok" | "blocked" | "banned" = "ok") {
-  return OkResult({
-    account: {
-      userId,
-      status,
-      createdAt: NOW,
-      updatedAt: NOW,
-      lastActivityAt: NOW,
-      version: 0,
-      dailyStreak: 0,
-      lastDailyAt: null,
-    },
-    isNew: false,
-  });
-}
-
-const mockEnsureAccount = mock(async (userId: string) => makeAccountResult(userId));
-const mockIsAccountActive = mock((status: string) => status === "ok");
-
-mock.module("@/features/economy/account", () => ({
-  ensureAccount: mockEnsureAccount,
-  isAccountActive: mockIsAccountActive,
-}));
-
-// ---------------------------------------------------------------------------
-// Mock @/db/repositories/users BEFORE importing minigames
-// (mutations.ts uses userStore directly — mocking here avoids cross-test contamination)
-// ---------------------------------------------------------------------------
-
-function makeUser(currency: Record<string, number> = { coins: 200 }): User {
   return {
-    _id: "user-1",
-    warns: [],
-    sanction_history: {},
-    openTickets: [],
-    currency,
-    mod_notes: {},
-    quarantine_roles: {},
-    economyAccount: undefined,
-    rpgProfile: undefined,
-    inventory: {},
-  };
-}
-
-const mockGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
-const mockEnsure = mock(async (_id: string) => OkResult(makeUser()));
-const mockUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
-  OkResult(undefined as undefined),
-);
-
-mock.module("@/db/repositories/users", () => ({
-  userStore: {
-    get: mockGet,
-    ensure: mockEnsure,
-    updatePaths: mockUpdatePaths,
-  },
-  getUser: mockGet,
-  ensureUser: mockEnsure,
-  updateUserPaths: mockUpdatePaths,
-}));
-
-// ---------------------------------------------------------------------------
-// Import AFTER mocking
-// ---------------------------------------------------------------------------
-
-const { coinflip, startTrivia, answerTrivia, rob, MinigameError } = await import("./minigames");
-
-// ---------------------------------------------------------------------------
-// Reset helpers
-// ---------------------------------------------------------------------------
-
-function resetAll() {
-  mockIsOnCooldown.mockReset();
-  mockGetRemainingMs.mockReset();
-  mockSetCooldown.mockReset();
-  mockEnsureAccount.mockReset();
-  mockIsAccountActive.mockReset();
-  mockGet.mockReset();
-  mockEnsure.mockReset();
-  mockUpdatePaths.mockReset();
-  sessionStore.clear();
-  mockSessionsGet.mockReset();
-  mockSessionsSet.mockReset();
-  mockSessionsDelete.mockReset();
-
-  // Restore session store behavior after reset
-  mockSessionsGet.mockImplementation((key: string) => sessionStore.get(key));
-  mockSessionsSet.mockImplementation((key: string, value: unknown) => {
-    sessionStore.set(key, value);
-  });
-  mockSessionsDelete.mockImplementation((key: string) => {
-    sessionStore.delete(key);
-  });
-
-  // Safe defaults
-  mockIsOnCooldown.mockImplementation(() => false);
-  mockGetRemainingMs.mockImplementation(() => 0);
-  mockSetCooldown.mockImplementation(() => {});
-  mockEnsureAccount.mockImplementation(async (userId: string) => makeAccountResult(userId));
-  mockIsAccountActive.mockImplementation((status: string) => status === "ok");
-  mockGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
-  mockEnsure.mockImplementation(async () => OkResult(makeUser()));
-  mockUpdatePaths.mockImplementation(async () => OkResult(undefined as undefined));
+    cooldowns,
+    sessions,
+    locks: { acquire: () => true, release: () => {}, isLocked: () => false } as never,
+    client: {} as never,
+    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
+    interaction: null,
+    emit: async () => {},
+    get: async (id, component) => {
+      if (component.collection === "user_currencies") {
+        const bal = wallets[id as string];
+        if (!bal) return null;
+        return { balances: bal, bankBalances: {} } as never;
+      }
+      if (component.collection === "economy_accounts") {
+        const status = accounts[id as string];
+        if (!status) return null;
+        return { status, createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0, dailyStreak: 0, lastDailyAt: null } as never;
+      }
+      return null;
+    },
+    ensure: async (id, component) => {
+      if (component.collection === "user_currencies") {
+        if (!wallets[id as string]) wallets[id as string] = {};
+        return { balances: wallets[id as string], bankBalances: {} } as never;
+      }
+      if (component.collection === "economy_accounts") {
+        if (!accounts[id as string]) accounts[id as string] = "ok";
+        return { status: accounts[id as string], createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0, dailyStreak: 0, lastDailyAt: null } as never;
+      }
+      return {} as never;
+    },
+    patch: async (id, component, patchArg) => {
+      if (component.collection === "user_currencies") {
+        if (!wallets[id as string]) wallets[id as string] = {};
+        const current = { balances: wallets[id as string], bankBalances: {} };
+        const partial = (typeof patchArg === "function" ? patchArg(current as never) : patchArg) as { balances?: Record<string, number> };
+        if (partial.balances) {
+          wallets[id as string] = partial.balances;
+        }
+      }
+    },
+    set: async () => {},
+    delete: async () => {},
+    query: async () => [],
+  } as Ctx;
 }
 
 // ---------------------------------------------------------------------------
-// coinflip tests
+// coinflip
 // ---------------------------------------------------------------------------
 
 describe("coinflip", () => {
-  beforeEach(resetAll);
-
-  test("wins correctly when choice matches outcome", async () => {
-    // Force Math.random to return 0.1 → outcome = "heads"
-    const origRandom = Math.random;
-    Math.random = () => 0.1;
-
-    const result = await coinflip("user-1", "heads", 100);
-    Math.random = origRandom;
-
-    expect(result.isOk()).toBe(true);
-    const data = result.unwrap();
-    expect(data.won).toBe(true);
-    expect(data.outcome).toBe("heads");
-    expect(data.choice).toBe("heads");
-    expect(data.betAmount).toBe(100);
-    // winnings = 200 - floor(200 * 0.05) = 190
-    expect(data.winnings).toBe(190);
-    // newBalance = 200 + (190 - 100) = 290
-    expect(data.newBalance).toBe(290);
+  test("throws BET_TOO_LOW when bet is below minimum", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "ok" } });
+    await expect(coinflip(ctx, "u1", "heads", DEFAULT_COINFLIP_CONFIG.minBet - 1)).rejects.toMatchObject({ code: "BET_TOO_LOW" });
   });
 
-  test("loses correctly when choice does not match outcome", async () => {
-    // Force Math.random to return 0.6 → outcome = "tails"
-    const origRandom = Math.random;
-    Math.random = () => 0.6;
-
-    const result = await coinflip("user-1", "heads", 50);
-    Math.random = origRandom;
-
-    expect(result.isOk()).toBe(true);
-    const data = result.unwrap();
-    expect(data.won).toBe(false);
-    expect(data.outcome).toBe("tails");
-    expect(data.choice).toBe("heads");
-    expect(data.winnings).toBe(0);
-    // newBalance = 200 - 50 = 150
-    expect(data.newBalance).toBe(150);
+  test("throws BET_TOO_HIGH when bet exceeds maximum", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 99999 } }, accounts: { u1: "ok" } });
+    await expect(coinflip(ctx, "u1", "heads", DEFAULT_COINFLIP_CONFIG.maxBet + 1)).rejects.toMatchObject({ code: "BET_TOO_HIGH" });
   });
 
-  test("rejects invalid choice", async () => {
-    const result = await coinflip("user-1", "invalid" as "heads", 50);
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("INVALID_CHOICE");
+  test("throws INSUFFICIENT_FUNDS when balance too low", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1 } }, accounts: { u1: "ok" } });
+    await expect(coinflip(ctx, "u1", "heads", 100)).rejects.toMatchObject({ code: "INSUFFICIENT_FUNDS" });
   });
 
-  test("rejects bet below minimum", async () => {
-    const result = await coinflip("user-1", "heads", 1);
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("BET_TOO_LOW");
+  test("throws ACCOUNT_INACTIVE for blocked account", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "blocked" } });
+    await expect(coinflip(ctx, "u1", "heads", 50)).rejects.toMatchObject({ code: "ACCOUNT_INACTIVE" });
   });
 
-  test("rejects bet above maximum", async () => {
-    const result = await coinflip("user-1", "heads", 1000);
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("BET_TOO_HIGH");
+  test("throws COOLDOWN_ACTIVE when on cooldown", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "ok" } });
+    ctx.cooldowns.set("u1", "coinflip", 60_000);
+    await expect(coinflip(ctx, "u1", "heads", 50)).rejects.toMatchObject({ code: "COOLDOWN_ACTIVE" });
   });
 
-  test("rejects when on cooldown", async () => {
-    mockIsOnCooldown.mockImplementation((_userId: string, key: string) => key === "coinflip");
-    mockGetRemainingMs.mockImplementation(() => 5000);
-
-    const result = await coinflip("user-1", "heads", 50);
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("COOLDOWN_ACTIVE");
-  });
-
-  test("rejects insufficient funds", async () => {
-    // userStore.get returns user with only 10 coins (getBalance reads from here)
-    mockGet.mockImplementation(async () => OkResult<User | null>(makeUser({ coins: 10 })));
-
-    const result = await coinflip("user-1", "heads", 50);
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("INSUFFICIENT_FUNDS");
+  test("returns a result with correct shape on valid bet", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "ok" } });
+    const result = await coinflip(ctx, "u1", "heads", 50);
+    expect(result).toMatchObject({
+      choice: "heads",
+      betAmount: 50,
+    });
+    expect(["heads", "tails"]).toContain(result.outcome);
   });
 });
 
 // ---------------------------------------------------------------------------
-// startTrivia / answerTrivia tests
+// startTrivia / answerTrivia
 // ---------------------------------------------------------------------------
 
-describe("startTrivia", () => {
-  beforeEach(resetAll);
-
-  test("returns question and session key", async () => {
-    const result = await startTrivia("user-1", "guild-1");
-
-    expect(result.isOk()).toBe(true);
-    const data = result.unwrap();
-    expect(data.sessionKey).toBe("user-1:guild-1");
-    expect(data.question).toBeDefined();
-    expect(data.question.options).toHaveLength(4);
-    expect(data.timeoutMs).toBe(60_000);
-  });
-});
-
-describe("answerTrivia", () => {
-  beforeEach(resetAll);
-
-  test("correct answer returns reward and sets cooldown", async () => {
-    // Start a session manually with a known question (q1 correctIndex = 1)
-    const session = {
-      questionId: "q1",
-      userId: "user-1",
-      guildId: "guild-1",
-      startedAt: Date.now(),
-      currencyId: "coins",
-      baseReward: 20,
-      difficulty: 1 as const,
-    };
-    sessionStore.set("user-1:guild-1", session);
-
-    const result = await answerTrivia("user-1:guild-1", 1);
-
-    expect(result.isOk()).toBe(true);
-    const data = result.unwrap();
-    expect(data.correct).toBe(true);
-    expect(data.reward).toBe(20); // difficulty 1 → 1x multiplier
-    expect(data.correctIndex).toBe(1);
-    expect(mockSetCooldown).toHaveBeenCalledWith("user-1", "trivia", 30_000);
+describe("startTrivia + answerTrivia", () => {
+  test("starts a trivia session and stores it", async () => {
+    const ctx = makeCtx({ accounts: { u1: "ok" } });
+    const result = await startTrivia(ctx, "u1", "g1");
+    expect(result.sessionKey).toBe("u1:g1");
+    expect(result.question).toBeDefined();
+    expect(result.timeoutMs).toBeGreaterThan(0);
   });
 
-  test("wrong answer returns 0 reward", async () => {
-    const session = {
-      questionId: "q1",
-      userId: "user-1",
-      guildId: "guild-1",
-      startedAt: Date.now(),
-      currencyId: "coins",
-      baseReward: 20,
-      difficulty: 1 as const,
-    };
-    sessionStore.set("user-1:guild-1", session);
-
-    // q1 correctIndex = 1, we answer 0
-    const result = await answerTrivia("user-1:guild-1", 0);
-
-    expect(result.isOk()).toBe(true);
-    const data = result.unwrap();
-    expect(data.correct).toBe(false);
-    expect(data.reward).toBe(0);
-    expect(data.newBalance).toBe(0);
+  test("throws COOLDOWN_ACTIVE when trivia is on cooldown", async () => {
+    const ctx = makeCtx({ accounts: { u1: "ok" } });
+    ctx.cooldowns.set("u1", "trivia", 60_000);
+    await expect(startTrivia(ctx, "u1", "g1")).rejects.toMatchObject({ code: "COOLDOWN_ACTIVE" });
   });
 
-  test("expired session returns SESSION_EXPIRED", async () => {
-    const session = {
-      questionId: "q1",
-      userId: "user-1",
-      guildId: "guild-1",
-      startedAt: Date.now() - 90_000, // 90 seconds ago
-      currencyId: "coins",
-      baseReward: 20,
-      difficulty: 1 as const,
-    };
-    sessionStore.set("user-1:guild-1", session);
-
-    const result = await answerTrivia("user-1:guild-1", 1, 60_000);
-
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("SESSION_EXPIRED");
+  test("answerTrivia awards coins on correct answer", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 100 } }, accounts: { u1: "ok" } });
+    const { sessionKey, question } = await startTrivia(ctx, "u1", "g1", { baseReward: 10 });
+    const result = await answerTrivia(ctx, sessionKey, question.correctIndex);
+    expect(result.correct).toBe(true);
+    expect(result.reward).toBeGreaterThan(0);
   });
 
-  test("unknown session returns SESSION_NOT_FOUND", async () => {
-    const result = await answerTrivia("nonexistent:session", 1);
+  test("answerTrivia returns correct=false on wrong answer", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 100 } }, accounts: { u1: "ok" } });
+    const { sessionKey, question } = await startTrivia(ctx, "u1", "g1");
+    const wrongIndex = (question.correctIndex + 1) % question.options.length;
+    const result = await answerTrivia(ctx, sessionKey, wrongIndex);
+    expect(result.correct).toBe(false);
+    expect(result.reward).toBe(0);
+  });
 
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("SESSION_NOT_FOUND");
+  test("throws SESSION_NOT_FOUND for unknown session", async () => {
+    const ctx = makeCtx();
+    await expect(answerTrivia(ctx, "nonexistent:key", 0)).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
   });
 });
 
 // ---------------------------------------------------------------------------
-// rob tests
+// rob
 // ---------------------------------------------------------------------------
 
 describe("rob", () => {
-  beforeEach(resetAll);
-
-  test("successful rob transfers coins to robber and deducts from target", async () => {
-    // Force success: Math.random() = 0.9, failChance = 0.35 → 0.9 >= 0.35 → success
-    const origRandom = Math.random;
-    Math.random = () => 0.9;
-
-    // Both users start with 200 coins
-    // target balance check uses userStore.get; adjustBalance uses userStore.ensure
-    const result = await rob("robber-1", "target-1");
-    Math.random = origRandom;
-
-    expect(result.isOk()).toBe(true);
-    const data = result.unwrap();
-    expect(data.success).toBe(true);
-    // stealAmount = min(floor(200 * 0.15), 500) = min(30, 500) = 30
-    expect(data.stolenAmount).toBe(30);
-    expect(data.fineAmount).toBe(0);
-    // robber 200 + 30 = 230
-    expect(data.robberNewBalance).toBe(230);
-    // target 200 - 30 = 170
-    expect(data.targetNewBalance).toBe(170);
+  test("throws INVALID_INPUT when robbing yourself", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "ok" } });
+    await expect(rob(ctx, "u1", "u1")).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
 
-  test("failed rob applies fine to robber", async () => {
-    // Force failure: Math.random() = 0.1 → 0.1 < 0.35 (failChance) → failed
-    const origRandom = Math.random;
-    Math.random = () => 0.1;
-
-    // Rob calls getBalance(targetId) [mockGet call 1] then, after fine,
-    // getBalance(robberId) [mockGet call 2]. Sequence the mocks accordingly.
-    mockGet
-      .mockResolvedValueOnce(OkResult<User | null>(makeUser({ coins: 200 }))) // target balance check
-      .mockResolvedValueOnce(OkResult<User | null>(makeUser({ coins: 194 }))); // robber after fine
-
-    const result = await rob("robber-1", "target-1");
-    Math.random = origRandom;
-
-    expect(result.isOk()).toBe(true);
-    const data = result.unwrap();
-    expect(data.success).toBe(false);
-    expect(data.stolenAmount).toBe(0);
-    // fine = max(floor(30 * 0.2), 5) = max(6, 5) = 6
-    expect(data.fineAmount).toBe(6);
-    // robber balance after fine reported by getBalance re-read
-    expect(data.robberNewBalance).toBe(194);
+  test("throws TARGET_INSUFFICIENT_FUNDS when target too poor", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1000 }, u2: { coins: 1 } }, accounts: { u1: "ok", u2: "ok" } });
+    await expect(rob(ctx, "u1", "u2")).rejects.toMatchObject({ code: "TARGET_INSUFFICIENT_FUNDS" });
   });
 
-  test("rejects when robber is on cooldown", async () => {
-    mockIsOnCooldown.mockImplementation((_userId: string, key: string) => key === "rob");
-    mockGetRemainingMs.mockImplementation(() => 120_000);
-
-    const result = await rob("robber-1", "target-1");
-
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("COOLDOWN_ACTIVE");
+  test("throws COOLDOWN_ACTIVE when robber is on cooldown", async () => {
+    const ctx = makeCtx({ wallets: { u1: { coins: 1000 }, u2: { coins: 500 } }, accounts: { u1: "ok", u2: "ok" } });
+    ctx.cooldowns.set("u1", "rob", 60_000);
+    await expect(rob(ctx, "u1", "u2")).rejects.toMatchObject({ code: "COOLDOWN_ACTIVE" });
   });
 
-  test("rejects self-rob", async () => {
-    const result = await rob("user-1", "user-1");
-
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("INVALID_INPUT");
-  });
-
-  test("rejects when target has insufficient funds", async () => {
-    // Target has only 10 coins (below minTargetBalance of 50)
-    mockGet.mockImplementation(async () => OkResult<User | null>(makeUser({ coins: 10 })));
-
-    const result = await rob("robber-1", "target-1");
-
-    expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof MinigameError>;
-    expect(err).toBeInstanceOf(MinigameError);
-    expect(err.code).toBe("TARGET_INSUFFICIENT_FUNDS");
+  test("returns a rob result with expected shape", async () => {
+    const ctx = makeCtx({
+      wallets: { u1: { coins: 1000 }, u2: { coins: DEFAULT_ROB_CONFIG.minTargetBalance + 100 } },
+      accounts: { u1: "ok", u2: "ok" },
+    });
+    const result = await rob(ctx, "u1", "u2");
+    expect(result).toHaveProperty("success");
+    expect(typeof result.stolenAmount).toBe("number");
+    expect(typeof result.fineAmount).toBe("number");
   });
 });

@@ -211,6 +211,48 @@ export const AutomodSchema = z.object({
     action: z.enum(["delete", "timeout", "report"]).catch("delete"),
     timeoutSeconds: z.number().int().catch(300),
   })).catch(() => []),
+  policy: z.object({
+    preset: z.enum(["relaxed", "balanced", "strict"]).catch("balanced"),
+    profileRetentionDays: z.number().int().min(1).max(365).catch(30),
+    aiDetector: z.object({
+      enabled: z.boolean().catch(false),
+      minConfidence: z.number().min(0).max(1).catch(0.75),
+    }).catch(() => ({ enabled: false, minConfidence: 0.75 })),
+    bypass: z.object({
+      staffBypass: z.boolean().catch(true),
+      ignoredChannelIds: z.array(z.string()).catch(() => []),
+      strictChannelIds: z.array(z.string()).catch(() => []),
+      trustedRoleIds: z.array(z.string()).catch(() => []),
+      protectedRoleIds: z.array(z.string()).catch(() => []),
+    }).catch(() => ({
+      staffBypass: true,
+      ignoredChannelIds: [],
+      strictChannelIds: [],
+      trustedRoleIds: [],
+      protectedRoleIds: [],
+    })),
+    alertRateLimit: z.object({
+      windowSeconds: z.number().int().min(1).catch(60),
+      maxAlerts: z.number().int().min(1).catch(4),
+    }).catch(() => ({ windowSeconds: 60, maxAlerts: 4 })),
+    actionRateLimit: z.object({
+      windowSeconds: z.number().int().min(1).catch(60),
+      maxActions: z.number().int().min(1).catch(3),
+    }).catch(() => ({ windowSeconds: 60, maxActions: 3 })),
+  }).catch(() => ({
+    preset: "balanced" as const,
+    profileRetentionDays: 30,
+    aiDetector: { enabled: false, minConfidence: 0.75 },
+    bypass: {
+      staffBypass: true,
+      ignoredChannelIds: [],
+      strictChannelIds: [],
+      trustedRoleIds: [],
+      protectedRoleIds: [],
+    },
+    alertRateLimit: { windowSeconds: 60, maxAlerts: 4 },
+    actionRateLimit: { windowSeconds: 60, maxActions: 3 },
+  })),
 }).catch(() => ({
   linkSpam: { enabled: false, maxLinks: 4, windowSeconds: 10, timeoutSeconds: 300, action: "timeout" as const, reportChannelId: null },
   domainWhitelist: { enabled: false, domains: [] },
@@ -220,6 +262,20 @@ export const AutomodSchema = z.object({
   slowmode: { enabled: false, messagesPerWindow: 20, windowSeconds: 60, slowmodeSeconds: 5, releaseAfterSeconds: 60 },
   raidDetection: { enabled: false, joinsPerMinute: 10, minAccountAgeDays: 7, action: "alert" as const, reportChannelId: null },
   customPatterns: [],
+  policy: {
+    preset: "balanced" as const,
+    profileRetentionDays: 30,
+    aiDetector: { enabled: false, minConfidence: 0.75 },
+    bypass: {
+      staffBypass: true,
+      ignoredChannelIds: [],
+      strictChannelIds: [],
+      trustedRoleIds: [],
+      protectedRoleIds: [],
+    },
+    alertRateLimit: { windowSeconds: 60, maxAlerts: 4 },
+    actionRateLimit: { windowSeconds: 60, maxActions: 3 },
+  },
 }));
 
 // ─── Moderation config ────────────────────────────────────────────────────────

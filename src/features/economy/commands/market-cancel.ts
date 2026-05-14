@@ -5,6 +5,7 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import type { Ctx } from "@/framework/types";
 import { cancelListing } from "@/features/economy/market";
 
 export const data = new SlashCommandBuilder()
@@ -14,7 +15,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("listing_id").setDescription("Listing ID to cancel").setRequired(true),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -25,7 +26,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const listingId = interaction.options.getString("listing_id", true);
   const sellerId = interaction.user.id;
 
-  const result = await cancelListing(sellerId, listingId);
+  const result = await cancelListing(ctx, sellerId, listingId);
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Error: ${result.error.message}` });

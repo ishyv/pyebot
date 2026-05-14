@@ -5,6 +5,7 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import type { Ctx } from "@/framework/types";
 import { browseListings } from "@/features/economy/market";
 
 export const data = new SlashCommandBuilder()
@@ -14,7 +15,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("item_id").setDescription("Filter by item ID").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -25,7 +26,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const guildId = interaction.guild.id;
   const itemId = interaction.options.getString("item_id") ?? undefined;
 
-  const result = await browseListings(guildId, { itemId, pageSize: 10 });
+  const result = await browseListings(ctx, guildId, { itemId, pageSize: 10 });
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Error: ${result.error.message}` });

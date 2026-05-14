@@ -24,4 +24,3 @@ export type { RuntimeFeature, FeatureCommand, ComponentHandler, EventRegistratio
 export { FeatureRegistry } from "./registry";
 export { runMiddleware } from "./middleware";
 export { createDispatcher } from "./dispatcher";
-export { bootstrap } from "./bootstrap";

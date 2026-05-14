@@ -1,27 +1,15 @@
 /**
  * Currency mutations service.
  *
- * Purpose: Read/write user currency balances.
- * Architecture: Plain exported async functions — no classes (except MutationError).
- * Dependencies: userStore, economy account module, currency schema validators.
- *
- * Invariants:
- * - All async functions that can fail return Result<T, Error>.
- * - adjustBalance uses a read-modify-write pattern. This is NOT atomic:
- *   concurrent writes may race. A future version should use MongoDB $inc
- *   via a custom updateOne call or a pipeline to avoid this.
- * - transfer uses two separate adjustBalance calls (best-effort, not transactional).
- *   Full atomicity requires a MongoDB replica set with multi-document transactions.
+ * All functions accept `ctx: Ctx` — the single data-access surface — rather than
+ * importing repository functions directly. Failures throw `MutationError` so
+ * callers can catch typed domain errors. DB failures propagate as untyped errors
+ * caught at the interaction boundary.
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
-import { userStore } from "@/db/repositories/users";
-import { ensureAccount, isAccountActive } from "@/features/economy/account";
-import { isValidCurrencyId } from "@/db/schemas/currency";
-
-// ---------------------------------------------------------------------------
-// Error type
-// ---------------------------------------------------------------------------
+import type { Ctx } from "@/framework/types";
+import { UserCurrency } from "@/components/user-currency";
+import { EconomyAccount } from "@/components/economy-account";
 
 export class MutationError extends Error {
   constructor(
@@ -30,8 +18,7 @@ export class MutationError extends Error {
       | "INVALID_AMOUNT"
       | "SELF_TRANSFER"
       | "INVALID_CURRENCY"
-      | "UPDATE_FAILED"
-      | "TRANSFER_PARTIAL_FAILURE",
+      | "ACCOUNT_INACTIVE",
     message: string,
   ) {
     super(message);
@@ -39,287 +26,138 @@ export class MutationError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// getBalance
-// ---------------------------------------------------------------------------
-
-/**
- * Get a user's balance for a currency. Returns 0 if account/currency doesn't exist.
- */
-export async function getBalance(
-  userId: string,
-  currencyId: string,
-): Promise<Result<number, Error>> {
-  const userRes = await userStore.get(userId);
-  if (userRes.isErr()) return ErrResult(userRes.error);
-  const user = userRes.unwrap();
-  if (!user) return OkResult(0);
-  return OkResult(user.currency[currencyId] ?? 0);
+/** Read a user's balance for a currency. Returns 0 when no wallet document exists. */
+export async function getBalance(ctx: Ctx, userId: string, currencyId: string): Promise<number> {
+  const wallet = await ctx.get(userId, UserCurrency);
+  return wallet?.balances[currencyId] ?? 0;
 }
 
-// ---------------------------------------------------------------------------
-// adjustBalance
-// ---------------------------------------------------------------------------
-
 /**
- * Adjust a user's currency balance by delta (can be negative).
- * Ensures the result won't go below 0 unless allowDebt is true.
- *
- * NOTE: This uses a read-modify-write pattern and is NOT atomic.
- * Concurrent adjustments may race. A future version should use MongoDB
- * $inc with a conditional update to avoid this limitation.
- *
- * Returns the new balance.
+ * Adjust a user's balance by delta (positive to credit, negative to debit).
+ * Returns the new balance. Throws MutationError on domain failure.
  */
 export async function adjustBalance(
+  ctx: Ctx,
   userId: string,
   currencyId: string,
   delta: number,
   options?: { allowDebt?: boolean },
-): Promise<Result<{ newBalance: number }, Error>> {
-  if (delta === 0) {
-    return ErrResult(
-      new MutationError("INVALID_AMOUNT", "Delta must be non-zero"),
+): Promise<number> {
+  if (delta === 0) throw new MutationError("INVALID_AMOUNT", "Delta must be non-zero");
+  if (!/^[a-z][a-z0-9_]*$/.test(currencyId)) {
+    throw new MutationError("INVALID_CURRENCY", `Invalid currency ID: "${currencyId}"`);
+  }
+
+  const wallet = await ctx.ensure(userId, UserCurrency);
+  const current = wallet.balances[currencyId] ?? 0;
+  const next = current + delta;
+
+  if (!options?.allowDebt && next < 0) {
+    throw new MutationError(
+      "INSUFFICIENT_FUNDS",
+      `Insufficient funds: balance is ${current}, attempted to adjust by ${delta}`,
     );
   }
 
-  if (!isValidCurrencyId(currencyId)) {
-    return ErrResult(
-      new MutationError(
-        "INVALID_CURRENCY",
-        `Invalid currency ID: "${currencyId}"`,
-      ),
-    );
-  }
-
-  // Ensure user document exists before reading balance
-  const ensureRes = await userStore.ensure(userId);
-  if (ensureRes.isErr()) return ErrResult(ensureRes.error);
-  const user = ensureRes.unwrap();
-
-  const currentBalance = user.currency[currencyId] ?? 0;
-  const newBalance = currentBalance + delta;
-
-  if (!options?.allowDebt && newBalance < 0) {
-    return ErrResult(
-      new MutationError(
-        "INSUFFICIENT_FUNDS",
-        `Insufficient funds: balance is ${currentBalance}, attempted to adjust by ${delta}`,
-      ),
-    );
-  }
-
-  // allowDebt permits negative balances (e.g. mod-applied deductions)
-  const finalBalance = options?.allowDebt ? newBalance : Math.max(newBalance, 0);
-  const updateRes = await userStore.updatePaths(userId, {
-    [`currency.${currencyId}`]: finalBalance,
-  });
-
-  if (updateRes.isErr()) {
-    return ErrResult(
-      new MutationError("UPDATE_FAILED", `Failed to update balance: ${updateRes.error.message}`),
-    );
-  }
-
-  return OkResult({ newBalance: finalBalance });
+  const final = options?.allowDebt ? next : Math.max(next, 0);
+  await ctx.patch(userId, UserCurrency, (w) => ({
+    balances: { ...w.balances, [currencyId]: final },
+  }));
+  return final;
 }
 
-// ---------------------------------------------------------------------------
-// getBank / deposit / withdraw
-// ---------------------------------------------------------------------------
-
-/**
- * Get a user's bank balance for a currency. Returns 0 if not set.
- */
-export async function getBankBalance(
-  userId: string,
-  currencyId: string,
-): Promise<Result<number, Error>> {
-  const userRes = await userStore.get(userId);
-  if (userRes.isErr()) return ErrResult(userRes.error);
-  const user = userRes.unwrap();
-  if (!user) return OkResult(0);
-  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> }).bank ?? {};
-  return OkResult(bank[currencyId] ?? 0);
+/** Read a user's bank balance for a currency. Returns 0 when no wallet document exists. */
+export async function getBankBalance(ctx: Ctx, userId: string, currencyId: string): Promise<number> {
+  const wallet = await ctx.get(userId, UserCurrency);
+  return wallet?.bankBalances[currencyId] ?? 0;
 }
 
 /**
- * Move coins from hand (currency) to bank.
+ * Move funds from wallet to bank. Returns new hand and bank balances.
+ * Throws MutationError on domain failure.
  */
 export async function deposit(
+  ctx: Ctx,
   userId: string,
   currencyId: string,
   amount: number,
-): Promise<Result<{ handBalance: number; bankBalance: number }, Error>> {
-  if (amount <= 0) {
-    return ErrResult(new MutationError("INVALID_AMOUNT", "Deposit amount must be greater than 0"));
+): Promise<{ handBalance: number; bankBalance: number }> {
+  if (amount <= 0) throw new MutationError("INVALID_AMOUNT", "Deposit amount must be positive");
+  const wallet = await ctx.ensure(userId, UserCurrency);
+  const hand = wallet.balances[currencyId] ?? 0;
+  if (hand < amount) {
+    throw new MutationError("INSUFFICIENT_FUNDS", `Insufficient funds: balance is ${hand}`);
   }
-  if (!isValidCurrencyId(currencyId)) {
-    return ErrResult(new MutationError("INVALID_CURRENCY", `Invalid currency: "${currencyId}"`));
-  }
-
-  const ensureRes = await userStore.ensure(userId);
-  if (ensureRes.isErr()) return ErrResult(ensureRes.error);
-  const user = ensureRes.unwrap();
-
-  const handBalance = user.currency[currencyId] ?? 0;
-  if (handBalance < amount) {
-    return ErrResult(
-      new MutationError("INSUFFICIENT_FUNDS", `Insufficient hand balance: ${handBalance}`),
-    );
-  }
-
-  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> }).bank ?? {};
-  const currentBank = bank[currencyId] ?? 0;
-  const newHand = handBalance - amount;
-  const newBank = currentBank + amount;
-
-  const updateRes = await userStore.updatePaths(userId, {
-    [`currency.${currencyId}`]: newHand,
-    [`bank.${currencyId}`]: newBank,
-  });
-
-  if (updateRes.isErr()) {
-    return ErrResult(new MutationError("UPDATE_FAILED", updateRes.error.message));
-  }
-
-  return OkResult({ handBalance: newHand, bankBalance: newBank });
+  const handBalance = hand - amount;
+  const bankBalance = (wallet.bankBalances[currencyId] ?? 0) + amount;
+  await ctx.patch(userId, UserCurrency, (w) => ({
+    balances: { ...w.balances, [currencyId]: handBalance },
+    bankBalances: { ...w.bankBalances, [currencyId]: bankBalance },
+  }));
+  return { handBalance, bankBalance };
 }
 
 /**
- * Move coins from bank to hand (currency).
+ * Move funds from bank to wallet. Returns new hand and bank balances.
+ * Throws MutationError on domain failure.
  */
 export async function withdraw(
+  ctx: Ctx,
   userId: string,
   currencyId: string,
   amount: number,
-): Promise<Result<{ handBalance: number; bankBalance: number }, Error>> {
-  if (amount <= 0) {
-    return ErrResult(new MutationError("INVALID_AMOUNT", "Withdrawal amount must be greater than 0"));
+): Promise<{ handBalance: number; bankBalance: number }> {
+  if (amount <= 0) throw new MutationError("INVALID_AMOUNT", "Withdrawal amount must be positive");
+  const wallet = await ctx.ensure(userId, UserCurrency);
+  const bank = wallet.bankBalances[currencyId] ?? 0;
+  if (bank < amount) {
+    throw new MutationError("INSUFFICIENT_FUNDS", `Insufficient bank funds: balance is ${bank}`);
   }
-  if (!isValidCurrencyId(currencyId)) {
-    return ErrResult(new MutationError("INVALID_CURRENCY", `Invalid currency: "${currencyId}"`));
-  }
-
-  const ensureRes = await userStore.ensure(userId);
-  if (ensureRes.isErr()) return ErrResult(ensureRes.error);
-  const user = ensureRes.unwrap();
-
-  const bank = (user as Record<string, unknown> & { bank?: Record<string, number> }).bank ?? {};
-  const bankBalance = bank[currencyId] ?? 0;
-  if (bankBalance < amount) {
-    return ErrResult(
-      new MutationError("INSUFFICIENT_FUNDS", `Insufficient bank balance: ${bankBalance}`),
-    );
-  }
-
-  const currentHand = user.currency[currencyId] ?? 0;
-  const newHand = currentHand + amount;
-  const newBank = bankBalance - amount;
-
-  const updateRes = await userStore.updatePaths(userId, {
-    [`currency.${currencyId}`]: newHand,
-    [`bank.${currencyId}`]: newBank,
-  });
-
-  if (updateRes.isErr()) {
-    return ErrResult(new MutationError("UPDATE_FAILED", updateRes.error.message));
-  }
-
-  return OkResult({ handBalance: newHand, bankBalance: newBank });
+  const bankBalance = bank - amount;
+  const handBalance = (wallet.balances[currencyId] ?? 0) + amount;
+  await ctx.patch(userId, UserCurrency, (w) => ({
+    balances: { ...w.balances, [currencyId]: handBalance },
+    bankBalances: { ...w.bankBalances, [currencyId]: bankBalance },
+  }));
+  return { handBalance, bankBalance };
 }
 
-// ---------------------------------------------------------------------------
-// transfer
-// ---------------------------------------------------------------------------
-
 /**
- * Transfer currency from sender to recipient.
- * Validates sender has sufficient funds.
- * Debits sender atomically, credits recipient atomically.
- * On recipient credit failure: attempts best-effort rollback of sender debit.
- *
- * NOTE: Full atomicity requires MongoDB replica set transactions.
- * This implementation uses two atomic $set operations (best-effort).
- * A future version should use multi-document transactions.
+ * Transfer currency from sender to recipient. Returns new balances on success.
+ * Throws MutationError on any domain failure. Not fully atomic — if the credit
+ * patch fails after the debit succeeds, the debit is not rolled back. Full
+ * atomicity requires a MongoDB replica set transaction (future improvement).
  */
 export async function transfer(
+  ctx: Ctx,
   senderId: string,
   recipientId: string,
   currencyId: string,
   amount: number,
-): Promise<Result<{ senderBalance: number; recipientBalance: number }, Error>> {
-  if (amount <= 0) {
-    return ErrResult(
-      new MutationError("INVALID_AMOUNT", "Transfer amount must be greater than 0"),
+): Promise<{ senderBalance: number; recipientBalance: number }> {
+  if (amount <= 0) throw new MutationError("INVALID_AMOUNT", "Transfer amount must be greater than 0");
+  if (senderId === recipientId) throw new MutationError("SELF_TRANSFER", "Cannot transfer currency to yourself");
+  if (!/^[a-z][a-z0-9_]*$/.test(currencyId)) {
+    throw new MutationError("INVALID_CURRENCY", `Invalid currency ID: "${currencyId}"`);
+  }
+
+  const [senderAccount, recipientAccount] = await Promise.all([
+    ctx.ensure(senderId, EconomyAccount),
+    ctx.ensure(recipientId, EconomyAccount),
+  ]);
+  if (senderAccount.status !== "ok") throw new MutationError("ACCOUNT_INACTIVE", "Sender account is not active");
+  if (recipientAccount.status !== "ok") throw new MutationError("ACCOUNT_INACTIVE", "Recipient account is not active");
+
+  const senderWallet = await ctx.ensure(senderId, UserCurrency);
+  const senderCurrent = senderWallet.balances[currencyId] ?? 0;
+  if (senderCurrent < amount) {
+    throw new MutationError(
+      "INSUFFICIENT_FUNDS",
+      `Sender has insufficient funds: balance is ${senderCurrent}, attempted to transfer ${amount}`,
     );
   }
 
-  if (senderId === recipientId) {
-    return ErrResult(
-      new MutationError("SELF_TRANSFER", "Cannot transfer currency to yourself"),
-    );
-  }
-
-  if (!isValidCurrencyId(currencyId)) {
-    return ErrResult(
-      new MutationError("INVALID_CURRENCY", `Invalid currency ID: "${currencyId}"`),
-    );
-  }
-
-  // Ensure both accounts exist and are active
-  const senderRes = await ensureAccount(senderId);
-  if (senderRes.isErr()) return ErrResult(senderRes.error);
-  const { account: senderAccount } = senderRes.unwrap();
-
-  if (!isAccountActive(senderAccount.status)) {
-    return ErrResult(
-      new MutationError("UPDATE_FAILED", "Sender account is not active"),
-    );
-  }
-
-  const recipientRes = await ensureAccount(recipientId);
-  if (recipientRes.isErr()) return ErrResult(recipientRes.error);
-  const { account: recipientAccount } = recipientRes.unwrap();
-
-  if (!isAccountActive(recipientAccount.status)) {
-    return ErrResult(
-      new MutationError("UPDATE_FAILED", "Recipient account is not active"),
-    );
-  }
-
-  // Check sender has sufficient funds
-  const senderBalRes = await getBalance(senderId, currencyId);
-  if (senderBalRes.isErr()) return ErrResult(senderBalRes.error);
-  const senderCurrentBalance = senderBalRes.unwrap();
-
-  if (senderCurrentBalance < amount) {
-    return ErrResult(
-      new MutationError(
-        "INSUFFICIENT_FUNDS",
-        `Sender has insufficient funds: balance is ${senderCurrentBalance}, attempted to transfer ${amount}`,
-      ),
-    );
-  }
-
-  // Debit sender
-  const debitRes = await adjustBalance(senderId, currencyId, -amount);
-  if (debitRes.isErr()) return ErrResult(debitRes.error);
-  const { newBalance: senderBalance } = debitRes.unwrap();
-
-  // Credit recipient
-  const creditRes = await adjustBalance(recipientId, currencyId, +amount);
-  if (creditRes.isErr()) {
-    // Attempt best-effort rollback of sender debit
-    await adjustBalance(senderId, currencyId, +amount);
-    return ErrResult(
-      new MutationError(
-        "TRANSFER_PARTIAL_FAILURE",
-        `Credited recipient failed; attempted rollback. Original error: ${creditRes.error.message}`,
-      ),
-    );
-  }
-  const { newBalance: recipientBalance } = creditRes.unwrap();
-
-  return OkResult({ senderBalance, recipientBalance });
+  const senderBalance = await adjustBalance(ctx, senderId, currencyId, -amount);
+  const recipientBalance = await adjustBalance(ctx, recipientId, currencyId, +amount);
+  return { senderBalance, recipientBalance };
 }

@@ -1,22 +1,19 @@
-import type { ButtonInteraction, ChatInputCommandInteraction } from "discord.js";
-import { Button, Feature, SlashCommand } from "@/framework";
-import * as ticketCmd from "./commands/ticket";
-import { TICKET_CLOSE_BUTTON_PREFIX } from "./commands/ticket";
-import { handleTicketClose } from "./handlers/close";
+/**
+ * Tickets feature manifest.
+ *
+ * Surface:
+ *   /ticket open <type> — opens a ticket channel in the configured category
+ *   /ticket close       — closes the current ticket channel (staff only)
+ *
+ * Handlers: button `tickets:close:<channelId>` (rendered in the welcome
+ * embed inside each ticket channel).
+ */
 
-@Feature({ id: "tickets", gate: "tickets", intents: ["Guilds"] })
-export default class TicketsFeature {
-  @SlashCommand({
-    name: ticketCmd.data.name,
-    description: "Ticket system",
-    data: ticketCmd.data,
-  })
-  async ticket(interaction: ChatInputCommandInteraction): Promise<void> {
-    await ticketCmd.execute(interaction);
-  }
+import { defineFeature } from "@/framework";
 
-  @Button({ prefix: TICKET_CLOSE_BUTTON_PREFIX })
-  async close(interaction: ButtonInteraction): Promise<void> {
-    await handleTicketClose(interaction);
-  }
-}
+export default defineFeature({
+  id: "tickets",
+  name: "Tickets",
+  description: "Create and manage support ticket channels.",
+  defaultEnabled: true,
+});

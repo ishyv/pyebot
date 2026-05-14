@@ -1,39 +1,35 @@
-/**
- * /autorole create <name> <trigger-type> <role> [options...]
- * /autorole delete <name>
- * /autorole list
- * /autorole enable <name>
- * /autorole disable <name>
- */
-
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelType,
   Colors,
+  EmbedBuilder,
+  MessageFlags,
   PermissionFlagsBits,
+  SlashCommandBuilder,
   type ChatInputCommandInteraction,
+  type Message,
+  type Role,
 } from "discord.js";
+import { AutoroleRule, autoroleRuleId, type AutoroleTriggerValue } from "@/components/autorole-rule";
+import type { Ctx } from "@/framework/types";
 import {
-  createRule,
-  deleteRule,
-  listRules,
-  setEnabled,
-  type AutoroleTrigger,
-} from "@/features/autoroles/service";
-import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+  autoroleButtonId,
+  normalizeEmoji,
+  parseDurationMs,
+} from "@/features/autoroles/rules";
 
 export const data = new SlashCommandBuilder()
   .setName("autorole")
   .setDescription("Manage automatic role assignment rules")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+  .setDMPermission(false)
   .addSubcommand((sub) =>
     sub
       .setName("create")
-      .setDescription("Create a new autorole rule")
-      .addStringOption((o) =>
-        o.setName("name").setDescription("Rule name (unique per server)").setRequired(true),
-      )
+      .setDescription("Create a rule")
+      .addStringOption((o) => o.setName("name").setDescription("Unique rule name").setRequired(true))
       .addStringOption((o) =>
         o
           .setName("trigger")
@@ -45,230 +41,408 @@ export const data = new SlashCommandBuilder()
             { name: "Message Contains", value: "messageContains" },
           ),
       )
-      .addRoleOption((o) =>
-        o.setName("role").setDescription("Role to grant").setRequired(true),
-      )
-      .addStringOption((o) =>
-        o
-          .setName("message_id")
-          .setDescription("Message ID (required for onReact)"),
-      )
-      .addStringOption((o) =>
-        o
-          .setName("emoji")
-          .setDescription("Emoji (for onReact — use * to match any reaction)"),
-      )
-      .addStringOption((o) =>
-        o
-          .setName("keywords")
-          .setDescription("Comma-separated keywords (for messageContains)"),
-      ),
+      .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
+      .addStringOption((o) => o.setName("message_id").setDescription("Message ID for reactions"))
+      .addStringOption((o) => o.setName("emoji").setDescription("Emoji for reactions, or *"))
+      .addStringOption((o) => o.setName("keywords").setDescription("Comma-separated keywords"))
+      .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d")),
   )
   .addSubcommand((sub) =>
     sub
       .setName("delete")
       .setDescription("Delete a rule")
-      .addStringOption((o) =>
-        o.setName("name").setDescription("Rule name").setRequired(true),
-      ),
+      .addStringOption((o) => o.setName("name").setDescription("Rule name").setRequired(true)),
   )
-  .addSubcommand((sub) => sub.setName("list").setDescription("List all rules"))
+  .addSubcommand((sub) => sub.setName("list").setDescription("List rules"))
   .addSubcommand((sub) =>
     sub
       .setName("enable")
       .setDescription("Enable a rule")
-      .addStringOption((o) =>
-        o.setName("name").setDescription("Rule name").setRequired(true),
-      ),
+      .addStringOption((o) => o.setName("name").setDescription("Rule name").setRequired(true)),
   )
   .addSubcommand((sub) =>
     sub
       .setName("disable")
       .setDescription("Disable a rule")
-      .addStringOption((o) =>
-        o.setName("name").setDescription("Rule name").setRequired(true),
+      .addStringOption((o) => o.setName("name").setDescription("Rule name").setRequired(true)),
+  )
+  .addSubcommandGroup((group) =>
+    group
+      .setName("prompt")
+      .setDescription("Post a self-role prompt and create its rule")
+      .addSubcommand((sub) =>
+        sub
+          .setName("reaction")
+          .setDescription("Post a reaction-role prompt")
+          .addChannelOption((o) =>
+            o
+              .setName("channel")
+              .setDescription("Channel to post in")
+              .setRequired(true)
+              .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+          )
+          .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
+          .addStringOption((o) => o.setName("emoji").setDescription("Reaction emoji").setRequired(true))
+          .addStringOption((o) => o.setName("title").setDescription("Prompt title"))
+          .addStringOption((o) => o.setName("description").setDescription("Prompt text"))
+          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("button")
+          .setDescription("Post a button self-role prompt")
+          .addChannelOption((o) =>
+            o
+              .setName("channel")
+              .setDescription("Channel to post in")
+              .setRequired(true)
+              .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+          )
+          .addRoleOption((o) => o.setName("role").setDescription("Role to toggle").setRequired(true))
+          .addStringOption((o) => o.setName("label").setDescription("Button label"))
+          .addStringOption((o) => o.setName("title").setDescription("Prompt title"))
+          .addStringOption((o) => o.setName("description").setDescription("Prompt text"))
+          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
       ),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("panel")
-      .setDescription("Open the autoroles panel"),
+  .addSubcommandGroup((group) =>
+    group
+      .setName("attach")
+      .setDescription("Attach a rule to an existing prompt message")
+      .addSubcommand((sub) =>
+        sub
+          .setName("reaction")
+          .setDescription("Attach a reaction-role rule")
+          .addStringOption((o) => o.setName("message_id").setDescription("Message ID").setRequired(true))
+          .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
+          .addStringOption((o) => o.setName("emoji").setDescription("Reaction emoji").setRequired(true))
+          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("button")
+          .setDescription("Attach a button self-role rule")
+          .addStringOption((o) => o.setName("message_id").setDescription("Message ID").setRequired(true))
+          .addRoleOption((o) => o.setName("role").setDescription("Role to toggle").setRequired(true))
+          .addStringOption((o) => o.setName("label").setDescription("Button label"))
+          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
+      ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  const group = interaction.options.getSubcommandGroup(false);
   const sub = interaction.options.getSubcommand();
 
-  if (sub === "create") await handleCreate(interaction);
-  else if (sub === "delete") await handleDelete(interaction);
-  else if (sub === "list") await handleList(interaction);
-  else if (sub === "enable") await handleToggle(interaction, true);
-  else if (sub === "disable") await handleToggle(interaction, false);
-  else if (sub === "panel") {
-    if (!(await assertPanelPermission(interaction))) return;
-    await openAdminPanel(interaction, "autoroles");
-  }
+  if (group === "prompt") return handlePrompt(interaction, ctx, sub);
+  if (group === "attach") return handleAttach(interaction, ctx, sub);
+  if (sub === "create") return handleCreate(interaction, ctx);
+  if (sub === "delete") return handleDelete(interaction, ctx);
+  if (sub === "list") return handleList(interaction, ctx);
+  if (sub === "enable") return handleToggle(interaction, ctx, true);
+  if (sub === "disable") return handleToggle(interaction, ctx, false);
 }
 
-async function handleCreate(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = requireGuild(interaction);
+  if (!guildId) return;
 
-  const guildId = interaction.guildId!;
-  const name = interaction.options.getString("name", true);
-  const triggerType = interaction.options.getString("trigger", true) as AutoroleTrigger["type"];
-  const role = interaction.options.getRole("role", true);
+  const role = await requireManageableRole(interaction);
+  if (!role) return;
 
-  let trigger: AutoroleTrigger;
-
+  let trigger: AutoroleTriggerValue;
+  const triggerType = interaction.options.getString("trigger", true);
   if (triggerType === "onJoin") {
     trigger = { type: "onJoin" };
   } else if (triggerType === "onReact") {
     const messageId = interaction.options.getString("message_id");
     const emoji = interaction.options.getString("emoji");
     if (!messageId || !emoji) {
-      await interaction.editReply({
-        content: "onReact requires both `message_id` and `emoji`.",
-      });
+      await interaction.editReply({ content: "Reaction rules require `message_id` and `emoji`." });
       return;
     }
-    trigger = { type: "onReact", messageId, emoji };
+    trigger = { type: "onReact", messageId, emoji: normalizeEmoji(emoji) };
   } else {
-    const keywordsStr = interaction.options.getString("keywords");
-    if (!keywordsStr) {
-      await interaction.editReply({ content: "messageContains requires `keywords`." });
-      return;
-    }
-    const keywords = keywordsStr
-      .split(",")
-      .map((k) => k.trim())
-      .filter(Boolean);
+    const keywords = parseKeywords(interaction.options.getString("keywords"));
     if (keywords.length === 0) {
-      await interaction.editReply({ content: "Provide at least one keyword." });
+      await interaction.editReply({ content: "Message rules require at least one keyword." });
       return;
     }
     trigger = { type: "messageContains", keywords };
   }
 
-  const result = await createRule({ guildId, name, trigger, roleId: role.id });
-
-  if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(`Could not create rule: ${result.error.message}`)],
-    });
-    return;
-  }
-
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Green)
-        .setTitle("✅ Autorole Rule Created")
-        .addFields(
-          { name: "Name", value: name, inline: true },
-          { name: "Trigger", value: triggerType, inline: true },
-          { name: "Role", value: `<@&${role.id}>`, inline: true },
-        ),
-    ],
-  });
-}
-
-async function handleDelete(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  const guildId = interaction.guildId!;
   const name = interaction.options.getString("name", true);
+  const durationMs = parseDurationForReply(interaction);
+  if (durationMs === undefined) return;
+  await saveRule(ctx, guildId, name, trigger, role.id, durationMs);
+  await interaction.editReply({ embeds: [createdEmbed(name, trigger, role.id, durationMs)] });
+}
 
-  const result = await deleteRule(guildId, name);
+async function handlePrompt(
+  interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
+  sub: string,
+): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = requireGuild(interaction);
+  if (!guildId) return;
 
-  if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(result.error.message)],
-    });
+  const role = await requireManageableRole(interaction);
+  if (!role) return;
+
+  const channel = interaction.options.getChannel("channel", true);
+  if (!canSend(channel)) {
+    await interaction.editReply({ content: "Choose a text channel I can post in." });
     return;
   }
 
-  if (!result.unwrap()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Yellow).setTitle("Not Found").setDescription(`No rule named **${name}** found.`)],
-    });
+  const title = interaction.options.getString("title") ?? `Choose ${role.name}`;
+  const description =
+    interaction.options.getString("description") ?? `Use this prompt to manage <@&${role.id}>.`;
+  const embed = new EmbedBuilder().setColor(Colors.Blue).setTitle(title).setDescription(description);
+  const durationMs = parseDurationForReply(interaction);
+  if (durationMs === undefined) return;
+
+  if (sub === "reaction") {
+    const emojiInput = interaction.options.getString("emoji", true);
+    const message = await channel.send({ embeds: [embed] });
+    await message.react(emojiInput).catch(() => null);
+    const name = interaction.options.getString("name") ?? `reaction-${message.id}-${role.id}`;
+    await saveRule(
+      ctx,
+      guildId,
+      name,
+      { type: "onReact", messageId: message.id, emoji: normalizeEmoji(emojiInput) },
+      role.id,
+      durationMs,
+    );
+    await interaction.editReply({ content: `Reaction role prompt posted: ${message.url}` });
     return;
   }
 
+  const label = interaction.options.getString("label") ?? role.name;
+  const message = await channel.send({ embeds: [embed] });
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(autoroleButtonId(message.id, role.id))
+      .setLabel(label)
+      .setStyle(ButtonStyle.Primary),
+  );
+  await message.edit({ components: [row] });
+  const name = interaction.options.getString("name") ?? `button-${message.id}-${role.id}`;
+  await saveRule(ctx, guildId, name, { type: "onButton", messageId: message.id, label }, role.id, durationMs);
+  await interaction.editReply({ content: `Button role prompt posted: ${message.url}` });
+}
+
+async function handleAttach(
+  interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
+  sub: string,
+): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = requireGuild(interaction);
+  if (!guildId) return;
+
+  const role = await requireManageableRole(interaction);
+  if (!role) return;
+
+  const messageId = interaction.options.getString("message_id", true);
+  const durationMs = parseDurationForReply(interaction);
+  if (durationMs === undefined) return;
+  const label = interaction.options.getString("label") ?? role.name;
+  const name = interaction.options.getString("name") ?? `${sub}-${messageId}-${role.id}`;
+  const trigger: AutoroleTriggerValue =
+    sub === "reaction"
+      ? {
+          type: "onReact",
+          messageId,
+          emoji: normalizeEmoji(interaction.options.getString("emoji", true)),
+        }
+      : { type: "onButton", messageId, label };
+
+  await saveRule(ctx, guildId, name, trigger, role.id, durationMs);
   await interaction.editReply({
-    embeds: [new EmbedBuilder().setColor(Colors.Green).setTitle("✅ Rule Deleted").setDescription(`Rule **${name}** has been removed.`)],
+    content:
+      sub === "button"
+        ? `Rule saved. Add a button with custom ID \`${autoroleButtonId(messageId, role.id)}\` to that message.`
+        : "Reaction rule saved.",
   });
 }
 
-async function handleList(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleDelete(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = requireGuild(interaction);
+  if (!guildId) return;
 
-  const guildId = interaction.guildId!;
-  const result = await listRules(guildId);
-
-  if (result.isErr()) {
-    await interaction.editReply({ content: "Failed to fetch rules." });
+  const name = interaction.options.getString("name", true);
+  const id = autoroleRuleId(guildId, name);
+  const existing = await ctx.get(id, AutoroleRule);
+  if (!existing) {
+    await interaction.editReply({ content: `No rule named **${name}** found.` });
     return;
   }
+  await ctx.delete(id, AutoroleRule);
+  await interaction.editReply({ content: `Rule **${name}** has been deleted.` });
+}
 
-  const rules = result.unwrap();
+async function handleList(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = requireGuild(interaction);
+  if (!guildId) return;
 
+  const rules = await listRules(ctx, guildId);
   if (rules.length === 0) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Blue).setTitle("Autorole Rules").setDescription("No rules configured yet. Use `/autorole create` to add one.")],
-    });
+    await interaction.editReply({ content: "No autorole rules configured." });
     return;
   }
 
-  const lines = rules.map((r) => {
-    const status = r.enabled ? "✅" : "❌";
-    const triggerDesc =
-      r.trigger.type === "onJoin"
-        ? "On Join"
-        : r.trigger.type === "onReact"
-          ? `On React (msg: ${r.trigger.messageId}, emoji: ${r.trigger.emoji})`
-          : `Contains: ${r.trigger.keywords.join(", ")}`;
-    return `${status} **${r.name}** — ${triggerDesc} → <@&${r.roleId}>`;
+  const lines = rules.map((rule) => {
+    const trigger =
+      rule.trigger.type === "onReact"
+        ? `reaction ${rule.trigger.emoji} on ${rule.trigger.messageId}`
+        : rule.trigger.type === "onButton"
+          ? `button on ${rule.trigger.messageId}`
+          : rule.trigger.type === "messageContains"
+            ? `message contains ${rule.trigger.keywords.join(", ")}`
+            : "join";
+    const duration = rule.durationMs ? ` for ${formatDuration(rule.durationMs)}` : "";
+    return `${rule.enabled ? "On" : "Off"} **${rule.name}** -> <@&${rule.roleId}> (${trigger}${duration})`;
   });
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle("Autorole Rules")
-    .setDescription(lines.join("\n"))
-    .setFooter({ text: `${rules.length} rule(s)` });
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply({
+    embeds: [new EmbedBuilder().setColor(Colors.Blue).setTitle("Autorole Rules").setDescription(lines.join("\n"))],
+  });
 }
 
 async function handleToggle(
   interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
   enabled: boolean,
 ): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = requireGuild(interaction);
+  if (!guildId) return;
 
-  const guildId = interaction.guildId!;
   const name = interaction.options.getString("name", true);
-
-  const result = await setEnabled(guildId, name, enabled);
-
-  if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(result.error.message)],
-    });
+  const id = autoroleRuleId(guildId, name);
+  const existing = await ctx.get(id, AutoroleRule);
+  if (!existing) {
+    await interaction.editReply({ content: `No rule named **${name}** found.` });
     return;
   }
+  await ctx.patch(id, AutoroleRule, { enabled });
+  await interaction.editReply({ content: `Rule **${name}** is now ${enabled ? "enabled" : "disabled"}.` });
+}
 
-  if (!result.unwrap()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Yellow).setTitle("Not Found").setDescription(`No rule named **${name}** found.`)],
-    });
-    return;
-  }
-
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(enabled ? Colors.Green : Colors.Grey)
-        .setTitle(enabled ? "✅ Rule Enabled" : "⏸️ Rule Disabled")
-        .setDescription(`Rule **${name}** is now ${enabled ? "active" : "paused"}.`),
-    ],
+async function saveRule(
+  ctx: Ctx,
+  guildId: string,
+  name: string,
+  trigger: AutoroleTriggerValue,
+  roleId: string,
+  durationMs: number | null,
+): Promise<void> {
+  await ctx.set(autoroleRuleId(guildId, name), AutoroleRule, {
+    guildId,
+    name,
+    enabled: true,
+    trigger,
+    roleId,
+    durationMs,
+    createdAt: new Date(),
   });
+}
+
+async function listRules(ctx: Ctx, guildId: string) {
+  return ctx.query(AutoroleRule, { filter: { guildId } });
+}
+
+function requireGuild(interaction: ChatInputCommandInteraction): string | null {
+  if (interaction.guildId && interaction.guild) return interaction.guildId;
+  void interaction.editReply({ content: "This command can only be used in a server." });
+  return null;
+}
+
+async function requireManageableRole(interaction: ChatInputCommandInteraction): Promise<Role | null> {
+  const selected = interaction.options.getRole("role", true);
+  const role = await interaction.guild?.roles.fetch(selected.id);
+  const me = interaction.guild?.members.me ?? await interaction.guild?.members.fetchMe().catch(() => null);
+  if (!role || !me) {
+    await interaction.editReply({ content: "I could not resolve that role or my member record." });
+    return null;
+  }
+  if (role.managed) {
+    await interaction.editReply({ content: "Managed integration roles cannot be assigned by autoroles." });
+    return null;
+  }
+  if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    await interaction.editReply({ content: "I need Manage Roles to assign autoroles." });
+    return null;
+  }
+  if (me.roles.highest.comparePositionTo(role) <= 0) {
+    await interaction.editReply({ content: `Move my highest role above <@&${role.id}> first.` });
+    return null;
+  }
+  return role;
+}
+
+type PromptChannel = {
+  isTextBased(): boolean;
+  send(payload: { embeds: EmbedBuilder[] }): Promise<Message>;
+};
+
+function canSend(channel: unknown): channel is PromptChannel {
+  return (
+    typeof channel === "object" &&
+    channel !== null &&
+    "isTextBased" in channel &&
+    typeof channel.isTextBased === "function" &&
+    channel.isTextBased() &&
+    "send" in channel &&
+    typeof channel.send === "function"
+  );
+}
+
+function parseKeywords(value: string | null): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((keyword) => keyword.trim())
+    .filter(Boolean);
+}
+
+function parseDurationForReply(interaction: ChatInputCommandInteraction): number | null | undefined {
+  try {
+    return parseDurationMs(interaction.options.getString("duration"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid duration.";
+    void interaction.editReply({ content: message });
+    return undefined;
+  }
+}
+
+function createdEmbed(
+  name: string,
+  trigger: AutoroleTriggerValue,
+  roleId: string,
+  durationMs: number | null,
+): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(Colors.Green)
+    .setTitle("Autorole Rule Created")
+    .addFields(
+      { name: "Name", value: name, inline: true },
+      { name: "Trigger", value: trigger.type, inline: true },
+      { name: "Role", value: `<@&${roleId}>`, inline: true },
+      { name: "Duration", value: durationMs ? formatDuration(durationMs) : "Permanent", inline: true },
+    );
+}
+
+function formatDuration(ms: number): string {
+  if (ms % (24 * 60 * 60_000) === 0) return `${ms / (24 * 60 * 60_000)}d`;
+  if (ms % (60 * 60_000) === 0) return `${ms / (60 * 60_000)}h`;
+  return `${ms / 60_000}m`;
 }

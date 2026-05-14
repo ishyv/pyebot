@@ -5,11 +5,11 @@
  */
 
 import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  PermissionFlagsBits,
   type ChatInputCommandInteraction,
+  Colors,
+  EmbedBuilder,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import type { CommandContext } from "@/core/feature";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
@@ -28,16 +28,21 @@ export const data = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Enable or disable link spam detection")
           .setRequired(true)
-          .addChoices(
-            { name: "Enable", value: "enable" },
-            { name: "Disable", value: "disable" },
-          ),
+          .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
       )
       .addIntegerOption((o) =>
-        o.setName("max_links").setDescription("Max links per window (default 4)").setMinValue(1).setMaxValue(20),
+        o
+          .setName("max_links")
+          .setDescription("Max links per window (default 4)")
+          .setMinValue(1)
+          .setMaxValue(20),
       )
       .addIntegerOption((o) =>
-        o.setName("window_seconds").setDescription("Window in seconds (default 10)").setMinValue(5).setMaxValue(120),
+        o
+          .setName("window_seconds")
+          .setDescription("Window in seconds (default 10)")
+          .setMinValue(5)
+          .setMaxValue(120),
       )
       .addStringOption((o) =>
         o
@@ -59,13 +64,13 @@ export const data = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Add or remove a domain")
           .setRequired(true)
-          .addChoices(
-            { name: "Add", value: "add" },
-            { name: "Remove", value: "remove" },
-          ),
+          .addChoices({ name: "Add", value: "add" }, { name: "Remove", value: "remove" }),
       )
       .addStringOption((o) =>
-        o.setName("domain").setDescription("Domain to add/remove (e.g. example.com)").setRequired(true),
+        o
+          .setName("domain")
+          .setDescription("Domain to add/remove (e.g. example.com)")
+          .setRequired(true),
       ),
   )
   .addSubcommand((sub) =>
@@ -77,9 +82,7 @@ export const data = new SlashCommandBuilder()
       ),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName("status")
-      .setDescription("Show current automod configuration"),
+    sub.setName("status").setDescription("Show current automod configuration"),
   )
   .addSubcommand((sub) =>
     sub
@@ -90,16 +93,21 @@ export const data = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Enable or disable mention spam detection")
           .setRequired(true)
-          .addChoices(
-            { name: "Enable", value: "enable" },
-            { name: "Disable", value: "disable" },
-          ),
+          .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
       )
       .addIntegerOption((o) =>
-        o.setName("max_mentions").setDescription("Max mentions per message/window (default 5)").setMinValue(1).setMaxValue(50),
+        o
+          .setName("max_mentions")
+          .setDescription("Max mentions per message/window (default 5)")
+          .setMinValue(1)
+          .setMaxValue(50),
       )
       .addIntegerOption((o) =>
-        o.setName("window_seconds").setDescription("Window in seconds (default 10)").setMinValue(5).setMaxValue(120),
+        o
+          .setName("window_seconds")
+          .setDescription("Window in seconds (default 10)")
+          .setMinValue(5)
+          .setMaxValue(120),
       )
       .addStringOption((o) =>
         o
@@ -112,7 +120,11 @@ export const data = new SlashCommandBuilder()
           ),
       )
       .addIntegerOption((o) =>
-        o.setName("timeout_seconds").setDescription("Timeout duration in seconds (default 600)").setMinValue(60).setMaxValue(604800),
+        o
+          .setName("timeout_seconds")
+          .setDescription("Timeout duration in seconds (default 600)")
+          .setMinValue(60)
+          .setMaxValue(604800),
       ),
   )
   .addSubcommand((sub) =>
@@ -124,22 +136,35 @@ export const data = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Enable or disable automatic slowmode")
           .setRequired(true)
-          .addChoices(
-            { name: "Enable", value: "enable" },
-            { name: "Disable", value: "disable" },
-          ),
+          .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
       )
       .addIntegerOption((o) =>
-        o.setName("messages_per_window").setDescription("Messages to trigger slowmode (default 20)").setMinValue(5).setMaxValue(200),
+        o
+          .setName("messages_per_window")
+          .setDescription("Messages to trigger slowmode (default 20)")
+          .setMinValue(5)
+          .setMaxValue(200),
       )
       .addIntegerOption((o) =>
-        o.setName("window_seconds").setDescription("Detection window in seconds (default 60)").setMinValue(10).setMaxValue(300),
+        o
+          .setName("window_seconds")
+          .setDescription("Detection window in seconds (default 60)")
+          .setMinValue(10)
+          .setMaxValue(300),
       )
       .addIntegerOption((o) =>
-        o.setName("slowmode_seconds").setDescription("Slowmode rate limit to apply (default 5)").setMinValue(1).setMaxValue(21600),
+        o
+          .setName("slowmode_seconds")
+          .setDescription("Slowmode rate limit to apply (default 5)")
+          .setMinValue(1)
+          .setMaxValue(21600),
       )
       .addIntegerOption((o) =>
-        o.setName("release_after").setDescription("Seconds before slowmode is lifted (default 60)").setMinValue(10).setMaxValue(3600),
+        o
+          .setName("release_after")
+          .setDescription("Seconds before slowmode is lifted (default 60)")
+          .setMinValue(10)
+          .setMaxValue(3600),
       ),
   )
   .addSubcommand((sub) =>
@@ -151,16 +176,21 @@ export const data = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Enable or disable raid detection")
           .setRequired(true)
-          .addChoices(
-            { name: "Enable", value: "enable" },
-            { name: "Disable", value: "disable" },
-          ),
+          .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
       )
       .addIntegerOption((o) =>
-        o.setName("joins_per_minute").setDescription("Join rate to trigger detection (default 10)").setMinValue(3).setMaxValue(100),
+        o
+          .setName("joins_per_minute")
+          .setDescription("Join rate to trigger detection (default 10)")
+          .setMinValue(3)
+          .setMaxValue(100),
       )
       .addIntegerOption((o) =>
-        o.setName("min_account_age").setDescription("Account age in days considered 'new' (default 7)").setMinValue(0).setMaxValue(30),
+        o
+          .setName("min_account_age")
+          .setDescription("Account age in days considered 'new' (default 7)")
+          .setMinValue(0)
+          .setMaxValue(30),
       )
       .addStringOption((o) =>
         o
@@ -193,12 +223,8 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) =>
         o.setName("name").setDescription("Pattern name (required for add/remove)"),
       )
-      .addStringOption((o) =>
-        o.setName("regex").setDescription("Regex pattern (required for add)"),
-      )
-      .addStringOption((o) =>
-        o.setName("flags").setDescription("Regex flags (default: i)"),
-      )
+      .addStringOption((o) => o.setName("regex").setDescription("Regex pattern (required for add)"))
+      .addStringOption((o) => o.setName("flags").setDescription("Regex flags (default: i)"))
       .addStringOption((o) =>
         o
           .setName("response")
@@ -210,7 +236,11 @@ export const data = new SlashCommandBuilder()
           ),
       )
       .addIntegerOption((o) =>
-        o.setName("timeout_seconds").setDescription("Timeout duration in seconds (default 300)").setMinValue(60).setMaxValue(604800),
+        o
+          .setName("timeout_seconds")
+          .setDescription("Timeout duration in seconds (default 300)")
+          .setMinValue(60)
+          .setMaxValue(604800),
       ),
   )
   .addSubcommand((sub) =>
@@ -222,10 +252,7 @@ export const data = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Enable or disable cross-channel spam detection")
           .setRequired(true)
-          .addChoices(
-            { name: "Enable", value: "enable" },
-            { name: "Disable", value: "disable" },
-          ),
+          .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
       )
       .addIntegerOption((o) =>
         o
@@ -245,7 +272,9 @@ export const data = new SlashCommandBuilder()
         o.setName("report_channel").setDescription("Channel to send mod alerts (omit to clear)"),
       )
       .addBooleanOption((o) =>
-        o.setName("auto_timeout").setDescription("Auto-timeout the user on detection (default true)"),
+        o
+          .setName("auto_timeout")
+          .setDescription("Auto-timeout the user on detection (default true)"),
       )
       .addIntegerOption((o) =>
         o
@@ -257,11 +286,42 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub
-      .setName("panel")
-      .setDescription("Open the automod configuration panel"),
+      .setName("policy")
+      .setDescription("Configure tiered AutoMod policy")
+      .addStringOption((o) =>
+        o
+          .setName("preset")
+          .setDescription("Evidence threshold preset")
+          .addChoices(
+            { name: "Relaxed", value: "relaxed" },
+            { name: "Balanced", value: "balanced" },
+            { name: "Strict", value: "strict" },
+          ),
+      )
+      .addBooleanOption((o) =>
+        o.setName("ai_detector").setDescription("Enable optional AI detector signal plumbing"),
+      )
+      .addBooleanOption((o) =>
+        o
+          .setName("staff_bypass")
+          .setDescription("Allow staff with Manage Messages to bypass AutoMod"),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName("retention_days")
+          .setDescription("Rolling profile retention in days")
+          .setMinValue(1)
+          .setMaxValue(365),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub.setName("panel").setDescription("Open the automod configuration panel"),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+export async function execute(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
   if (sub === "linkspam") await handleLinkspam(interaction, ctx);
@@ -273,13 +333,17 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Com
   else if (sub === "slowmode") await handleSlowmode(interaction, ctx);
   else if (sub === "raid") await handleRaid(interaction, ctx);
   else if (sub === "pattern") await handlePattern(interaction, ctx);
+  else if (sub === "policy") await handlePolicy(interaction, ctx);
   else if (sub === "panel") {
     if (!(await assertPanelPermission(interaction))) return;
     await openAdminPanel(interaction, "automod");
   }
 }
 
-async function handleLinkspam(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handleLinkspam(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -300,7 +364,12 @@ async function handleLinkspam(interaction: ChatInputCommandInteraction, ctx: Com
 
   if (result.isErr()) {
     await ctx.respond.fail({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(Colors.Red)
+          .setTitle("❌ Failed")
+          .setDescription("Could not update configuration."),
+      ],
     });
     return;
   }
@@ -312,13 +381,17 @@ async function handleLinkspam(interaction: ChatInputCommandInteraction, ctx: Com
     .setFooter({ text: "💡 Use /automod status to see full config" });
 
   if (maxLinks !== null) embed.addFields({ name: "Max Links", value: `${maxLinks}`, inline: true });
-  if (windowSeconds !== null) embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
+  if (windowSeconds !== null)
+    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
   if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
 
   await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleWhitelist(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handleWhitelist(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -348,10 +421,14 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction, ctx: Co
     }
   }
 
-  const result = await updateGuildPaths(guildId, {
-    "automod.domainWhitelist.enabled": true,
-    "automod.domainWhitelist.domains": updated,
-  }, { upsert: true });
+  const result = await updateGuildPaths(
+    guildId,
+    {
+      "automod.domainWhitelist.enabled": true,
+      "automod.domainWhitelist.domains": updated,
+    },
+    { upsert: true },
+  );
 
   if (result.isErr()) {
     await ctx.respond.fail({ content: "Could not update domain whitelist." });
@@ -363,26 +440,40 @@ async function handleWhitelist(interaction: ChatInputCommandInteraction, ctx: Co
       new EmbedBuilder()
         .setColor(action === "add" ? Colors.Green : Colors.Orange)
         .setTitle(`${action === "add" ? "✅ Domain Added" : "🗑️ Domain Removed"}`)
-        .setDescription(`\`${domain}\` has been ${action === "add" ? "added to" : "removed from"} the whitelist.`)
+        .setDescription(
+          `\`${domain}\` has been ${action === "add" ? "added to" : "removed from"} the whitelist.`,
+        )
         .addFields({ name: "Total Entries", value: `${updated.length}`, inline: true }),
     ],
   });
 }
 
-async function handleReportChannel(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handleReportChannel(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
   const channel = interaction.options.getChannel("channel");
   const channelId = channel?.id ?? null;
 
-  const result = await updateGuildPaths(guildId, {
-    "automod.linkSpam.reportChannelId": channelId,
-  }, { upsert: true });
+  const result = await updateGuildPaths(
+    guildId,
+    {
+      "automod.linkSpam.reportChannelId": channelId,
+    },
+    { upsert: true },
+  );
 
   if (result.isErr()) {
     await ctx.respond.fail({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update report channel.")],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(Colors.Red)
+          .setTitle("❌ Failed")
+          .setDescription("Could not update report channel."),
+      ],
     });
     return;
   }
@@ -392,12 +483,19 @@ async function handleReportChannel(interaction: ChatInputCommandInteraction, ctx
       new EmbedBuilder()
         .setColor(Colors.Blue)
         .setTitle("⚙️ Report Channel Updated")
-        .setDescription(channelId ? `Automod reports will be sent to <#${channelId}>.` : "Report channel cleared — reports are disabled."),
+        .setDescription(
+          channelId
+            ? `Automod reports will be sent to <#${channelId}>.`
+            : "Report channel cleared — reports are disabled.",
+        ),
     ],
   });
 }
 
-async function handleStatus(_interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handleStatus(
+  _interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -418,8 +516,11 @@ async function handleStatus(_interaction: ChatInputCommandInteraction, ctx: Comm
   const sm = automod.slowmode;
   const rd = automod.raidDetection;
   const cp = automod.customPatterns ?? [];
+  const policy = automod.policy;
 
   const lines = [
+    `**Policy:** \`${policy.preset}\` | Profiles: ${policy.profileRetentionDays}d | AI detector: ${policy.aiDetector.enabled ? "on" : "off"}`,
+    `  Staff bypass: ${policy.bypass.staffBypass ? "on" : "off"} | Ignored channels: ${policy.bypass.ignoredChannelIds.length} | Strict channels: ${policy.bypass.strictChannelIds.length}`,
     `**Link Spam:** ${ls.enabled ? "✅ Enabled" : "❌ Disabled"}`,
     `  Max links: ${ls.maxLinks} per ${ls.windowSeconds}s | Action: \`${ls.action}\``,
     `  Report channel: ${ls.reportChannelId ? `<#${ls.reportChannelId}>` : "none"}`,
@@ -442,7 +543,52 @@ async function handleStatus(_interaction: ChatInputCommandInteraction, ctx: Comm
   await ctx.respond.send({ content: lines.join("\n") });
 }
 
-async function handleCrossChannel(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handlePolicy(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
+
+  const paths: Record<string, unknown> = {};
+  const preset = interaction.options.getString("preset");
+  const aiDetector = interaction.options.getBoolean("ai_detector");
+  const staffBypass = interaction.options.getBoolean("staff_bypass");
+  const retentionDays = interaction.options.getInteger("retention_days");
+
+  if (preset !== null) paths["automod.policy.preset"] = preset;
+  if (aiDetector !== null) paths["automod.policy.aiDetector.enabled"] = aiDetector;
+  if (staffBypass !== null) paths["automod.policy.bypass.staffBypass"] = staffBypass;
+  if (retentionDays !== null) paths["automod.policy.profileRetentionDays"] = retentionDays;
+
+  if (Object.keys(paths).length === 0) {
+    await ctx.respond.send({ content: "Choose at least one policy option to update." });
+    return;
+  }
+
+  const result = await updateGuildPaths(ctx.guildId, paths, { upsert: true });
+  if (result.isErr()) {
+    await ctx.respond.fail({ content: "Could not update AutoMod policy." });
+    return;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(Colors.Blue)
+    .setTitle("AutoMod Policy Updated")
+    .setDescription("Tiered evidence policy has been updated.");
+  if (preset !== null) embed.addFields({ name: "Preset", value: preset, inline: true });
+  if (aiDetector !== null)
+    embed.addFields({ name: "AI detector", value: aiDetector ? "on" : "off", inline: true });
+  if (staffBypass !== null)
+    embed.addFields({ name: "Staff bypass", value: staffBypass ? "on" : "off", inline: true });
+  if (retentionDays !== null)
+    embed.addFields({ name: "Profile retention", value: `${retentionDays}d`, inline: true });
+  await ctx.respond.send({ embeds: [embed] });
+}
+
+async function handleCrossChannel(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -459,7 +605,8 @@ async function handleCrossChannel(interaction: ChatInputCommandInteraction, ctx:
 
   if (minChannels !== null) paths["automod.crossChannelSpam.minChannels"] = minChannels;
   if (windowSeconds !== null) paths["automod.crossChannelSpam.windowSeconds"] = windowSeconds;
-  if (reportChannel !== undefined) paths["automod.crossChannelSpam.reportChannelId"] = reportChannel?.id ?? null;
+  if (reportChannel !== undefined)
+    paths["automod.crossChannelSpam.reportChannelId"] = reportChannel?.id ?? null;
   if (autoTimeout !== null) paths["automod.crossChannelSpam.autoTimeout"] = autoTimeout;
   if (timeoutSeconds !== null) paths["automod.crossChannelSpam.timeoutSeconds"] = timeoutSeconds;
 
@@ -467,7 +614,12 @@ async function handleCrossChannel(interaction: ChatInputCommandInteraction, ctx:
 
   if (result.isErr()) {
     await ctx.respond.fail({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(Colors.Red)
+          .setTitle("❌ Failed")
+          .setDescription("Could not update configuration."),
+      ],
     });
     return;
   }
@@ -478,18 +630,29 @@ async function handleCrossChannel(interaction: ChatInputCommandInteraction, ctx:
     .setDescription(`Cross-channel spam detection is now **${enabled ? "enabled" : "disabled"}**.`)
     .setFooter({ text: "💡 Use /automod status to see full config" });
 
-  if (minChannels !== null) embed.addFields({ name: "Min Channels", value: `${minChannels}`, inline: true });
-  if (windowSeconds !== null) embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
-  if (autoTimeout !== null) embed.addFields({ name: "Auto-timeout", value: autoTimeout ? "on" : "off", inline: true });
-  if (timeoutSeconds !== null) embed.addFields({ name: "Timeout Duration", value: `${timeoutSeconds}s`, inline: true });
+  if (minChannels !== null)
+    embed.addFields({ name: "Min Channels", value: `${minChannels}`, inline: true });
+  if (windowSeconds !== null)
+    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
+  if (autoTimeout !== null)
+    embed.addFields({ name: "Auto-timeout", value: autoTimeout ? "on" : "off", inline: true });
+  if (timeoutSeconds !== null)
+    embed.addFields({ name: "Timeout Duration", value: `${timeoutSeconds}s`, inline: true });
   if (reportChannel !== undefined) {
-    embed.addFields({ name: "Report Channel", value: reportChannel ? `<#${reportChannel.id}>` : "cleared", inline: true });
+    embed.addFields({
+      name: "Report Channel",
+      value: reportChannel ? `<#${reportChannel.id}>` : "cleared",
+      inline: true,
+    });
   }
 
   await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleMentionSpam(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handleMentionSpam(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -512,7 +675,12 @@ async function handleMentionSpam(interaction: ChatInputCommandInteraction, ctx: 
 
   if (result.isErr()) {
     await ctx.respond.fail({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(Colors.Red)
+          .setTitle("❌ Failed")
+          .setDescription("Could not update configuration."),
+      ],
     });
     return;
   }
@@ -523,15 +691,21 @@ async function handleMentionSpam(interaction: ChatInputCommandInteraction, ctx: 
     .setDescription(`Mention spam detection is now **${enabled ? "enabled" : "disabled"}**.`)
     .setFooter({ text: "💡 Use /automod status to see full config" });
 
-  if (maxMentions !== null) embed.addFields({ name: "Max Mentions", value: `${maxMentions}`, inline: true });
-  if (windowSeconds !== null) embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
+  if (maxMentions !== null)
+    embed.addFields({ name: "Max Mentions", value: `${maxMentions}`, inline: true });
+  if (windowSeconds !== null)
+    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
   if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
-  if (timeoutSeconds !== null) embed.addFields({ name: "Timeout Duration", value: `${timeoutSeconds}s`, inline: true });
+  if (timeoutSeconds !== null)
+    embed.addFields({ name: "Timeout Duration", value: `${timeoutSeconds}s`, inline: true });
 
   await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleSlowmode(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handleSlowmode(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -554,7 +728,12 @@ async function handleSlowmode(interaction: ChatInputCommandInteraction, ctx: Com
 
   if (result.isErr()) {
     await ctx.respond.fail({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(Colors.Red)
+          .setTitle("❌ Failed")
+          .setDescription("Could not update configuration."),
+      ],
     });
     return;
   }
@@ -565,15 +744,22 @@ async function handleSlowmode(interaction: ChatInputCommandInteraction, ctx: Com
     .setDescription(`Automatic slowmode is now **${enabled ? "enabled" : "disabled"}**.`)
     .setFooter({ text: "💡 Use /automod status to see full config" });
 
-  if (messagesPerWindow !== null) embed.addFields({ name: "Trigger", value: `${messagesPerWindow} messages`, inline: true });
-  if (windowSeconds !== null) embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
-  if (slowmodeSeconds !== null) embed.addFields({ name: "Slowmode Rate", value: `${slowmodeSeconds}s`, inline: true });
-  if (releaseAfter !== null) embed.addFields({ name: "Release After", value: `${releaseAfter}s`, inline: true });
+  if (messagesPerWindow !== null)
+    embed.addFields({ name: "Trigger", value: `${messagesPerWindow} messages`, inline: true });
+  if (windowSeconds !== null)
+    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
+  if (slowmodeSeconds !== null)
+    embed.addFields({ name: "Slowmode Rate", value: `${slowmodeSeconds}s`, inline: true });
+  if (releaseAfter !== null)
+    embed.addFields({ name: "Release After", value: `${releaseAfter}s`, inline: true });
 
   await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handleRaid(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handleRaid(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -590,13 +776,19 @@ async function handleRaid(interaction: ChatInputCommandInteraction, ctx: Command
   if (joinsPerMinute !== null) paths["automod.raidDetection.joinsPerMinute"] = joinsPerMinute;
   if (minAccountAge !== null) paths["automod.raidDetection.minAccountAgeDays"] = minAccountAge;
   if (response !== null) paths["automod.raidDetection.action"] = response;
-  if (reportChannel !== undefined) paths["automod.raidDetection.reportChannelId"] = reportChannel?.id ?? null;
+  if (reportChannel !== undefined)
+    paths["automod.raidDetection.reportChannelId"] = reportChannel?.id ?? null;
 
   const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
     await ctx.respond.fail({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update configuration.")],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(Colors.Red)
+          .setTitle("❌ Failed")
+          .setDescription("Could not update configuration."),
+      ],
     });
     return;
   }
@@ -607,17 +799,26 @@ async function handleRaid(interaction: ChatInputCommandInteraction, ctx: Command
     .setDescription(`Raid detection is now **${enabled ? "enabled" : "disabled"}**.`)
     .setFooter({ text: "💡 Use /automod status to see full config" });
 
-  if (joinsPerMinute !== null) embed.addFields({ name: "Join Rate", value: `${joinsPerMinute}/min`, inline: true });
-  if (minAccountAge !== null) embed.addFields({ name: "Min Account Age", value: `${minAccountAge}d`, inline: true });
+  if (joinsPerMinute !== null)
+    embed.addFields({ name: "Join Rate", value: `${joinsPerMinute}/min`, inline: true });
+  if (minAccountAge !== null)
+    embed.addFields({ name: "Min Account Age", value: `${minAccountAge}d`, inline: true });
   if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
   if (reportChannel !== undefined) {
-    embed.addFields({ name: "Report Channel", value: reportChannel ? `<#${reportChannel.id}>` : "cleared", inline: true });
+    embed.addFields({
+      name: "Report Channel",
+      value: reportChannel ? `<#${reportChannel.id}>` : "cleared",
+      inline: true,
+    });
   }
 
   await ctx.respond.send({ embeds: [embed] });
 }
 
-async function handlePattern(interaction: ChatInputCommandInteraction, ctx: CommandContext): Promise<void> {
+async function handlePattern(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = ctx.guildId;
@@ -635,7 +836,9 @@ async function handlePattern(interaction: ChatInputCommandInteraction, ctx: Comm
       await ctx.respond.send({ content: "No custom patterns configured." });
       return;
     }
-    const lines = patterns.map((p, i) => `**${i + 1}. ${p.name}** — \`/${p.pattern}/${p.flags}\` → \`${p.action}\``);
+    const lines = patterns.map(
+      (p, i) => `**${i + 1}. ${p.name}** — \`/${p.pattern}/${p.flags}\` → \`${p.action}\``,
+    );
     await ctx.respond.send({ content: lines.join("\n") });
     return;
   }
@@ -659,7 +862,11 @@ async function handlePattern(interaction: ChatInputCommandInteraction, ctx: Comm
       await ctx.respond.send({ content: `No pattern named \`${name}\` found.` });
       return;
     }
-    const result = await updateGuildPaths(guildId, { "automod.customPatterns": updated }, { upsert: true });
+    const result = await updateGuildPaths(
+      guildId,
+      { "automod.customPatterns": updated },
+      { upsert: true },
+    );
     if (result.isErr()) {
       await ctx.respond.fail({ content: "Could not remove custom pattern." });
       return;
@@ -685,7 +892,10 @@ async function handlePattern(interaction: ChatInputCommandInteraction, ctx: Comm
   }
 
   const flags = interaction.options.getString("flags") ?? "i";
-  const response = (interaction.options.getString("response") ?? "delete") as "delete" | "timeout" | "report";
+  const response = (interaction.options.getString("response") ?? "delete") as
+    | "delete"
+    | "timeout"
+    | "report";
   const timeoutSeconds = interaction.options.getInteger("timeout_seconds") ?? 300;
 
   // Validate the regex before saving
@@ -705,12 +915,18 @@ async function handlePattern(interaction: ChatInputCommandInteraction, ctx: Comm
 
   const patterns = guild.automod.customPatterns ?? [];
   if (patterns.some((p) => p.name === name)) {
-    await ctx.respond.send({ content: `A pattern named \`${name}\` already exists. Remove it first.` });
+    await ctx.respond.send({
+      content: `A pattern named \`${name}\` already exists. Remove it first.`,
+    });
     return;
   }
 
   const updated = [...patterns, { name, pattern: regex, flags, action: response, timeoutSeconds }];
-  const result = await updateGuildPaths(guildId, { "automod.customPatterns": updated }, { upsert: true });
+  const result = await updateGuildPaths(
+    guildId,
+    { "automod.customPatterns": updated },
+    { upsert: true },
+  );
   if (result.isErr()) {
     await ctx.respond.fail({ content: "Could not add custom pattern." });
     return;

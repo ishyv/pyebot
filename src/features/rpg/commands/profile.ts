@@ -7,7 +7,8 @@ import {
   Colors,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { getRpgProfile } from "@/db/repositories/rpg";
+import type { Ctx } from "@/framework/types";
+import { RpgProfile } from "@/components/rpg-profile";
 import { ONBOARD_PREFIX } from "@/features/rpg/handlers/onboard";
 
 export const data = new SlashCommandBuilder()
@@ -17,7 +18,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("user").setDescription("User to view (defaults to you)").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -26,17 +27,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const target = interaction.options.getUser("user") ?? interaction.user;
-  const result = await getRpgProfile(target.id);
-
-  if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
-    return;
-  }
-
-  const profile = result.unwrap();
+  const profile = await ctx.get(target.id, RpgProfile);
 
   if (!profile) {
-    // Only show onboarding for the user's own profile
     if (target.id !== interaction.user.id) {
       await interaction.editReply({ content: "That user hasn't started their RPG journey yet." });
       return;

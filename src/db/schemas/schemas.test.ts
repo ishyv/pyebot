@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { UserSchema } from "./user";
 import { GuildSchema } from "./guild";
 import { RpgProfileSchema } from "./rpg-profile";
+import { UserSchema } from "./user";
 
 describe("UserSchema", () => {
   test("parses minimal doc with _id", () => {
@@ -36,6 +36,8 @@ describe("GuildSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.automod.linkSpam.enabled).toBe(false);
+      expect(result.data.automod.policy.preset).toBe("balanced");
+      expect(result.data.automod.policy.profileRetentionDays).toBe(30);
     }
   });
 });
@@ -52,7 +54,12 @@ describe("RpgProfileSchema", () => {
   });
 
   test("preserves valid data", () => {
-    const result = RpgProfileSchema.safeParse({ hpCurrent: 75, wins: 3, losses: 1, isFighting: true });
+    const result = RpgProfileSchema.safeParse({
+      hpCurrent: 75,
+      wins: 3,
+      losses: 1,
+      isFighting: true,
+    });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.hpCurrent).toBe(75);

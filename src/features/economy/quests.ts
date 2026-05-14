@@ -10,6 +10,7 @@
  */
 
 import { OkResult, ErrResult, type Result } from "@/core/result";
+import type { Ctx } from "@/framework/types";
 import { locks } from "@/core/state";
 import { adjustBalance } from "@/features/economy/mutations";
 import {
@@ -282,6 +283,7 @@ export interface ClaimedQuestReward {
 }
 
 export async function claimRewards(
+  ctx: Ctx,
   userId: string,
   questId: string,
 ): Promise<Result<{ rewards: ClaimedQuestReward[] }, QuestError>> {
@@ -309,10 +311,10 @@ export async function claimRewards(
 
     // Apply currency rewards
     for (const reward of def.rewards.currency ?? []) {
-      const adjRes = await adjustBalance(userId, reward.currencyId, reward.amount);
-      if (adjRes.isOk()) {
+      try {
+        await adjustBalance(ctx, userId, reward.currencyId, reward.amount);
         appliedRewards.push({ type: "currency", description: `${reward.amount} ${reward.currencyId}`, amount: reward.amount });
-      }
+      } catch { /* skip reward on mutation failure */ }
     }
 
     // Note XP rewards (pending progression module)

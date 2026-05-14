@@ -1,27 +1,16 @@
 /**
  * Cross-channel spam detection.
  *
- * Detects accounts that post the same message across multiple channels in a
- * short window — the classic pattern of raid/spam bots. Detection is based on
- * an in-memory sliding window per guild:user. On trigger: all cached messages
- * are deleted, an optional auto-timeout is applied, and a mod alert embed is
- * posted with action buttons.
- *
- * Configuration: guild.automod.crossChannelSpam
+ * Tracks accounts that post the same message across multiple channels in a
+ * short window. This module emits signals; shared AutoMod policy owns actions.
  */
 
-import {
-  EmbedBuilder,
-  Colors,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  type Message,
-  type TextChannel,
-  type GuildMember,
-} from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
+import type { Message } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { getGuild } from "@/db/repositories/guilds";
+import type { AutomodConfig } from "@/db/schemas/guild";
+import { processAutomodSignals } from "@/features/automod/service";
+import type { AutomodSignal } from "./signals";
 
 const log = createLogger("automod:cross-channel");
 
@@ -53,140 +42,73 @@ export function pruneCrossChannelSpam(): void {
   }
 }
 
-// ─── Main check ──────────────────────────────────────────────────────────────
-
+/**
+ * Backward-compatible wrapper used by older handlers and tests.
+ */
 export async function checkCrossChannelSpam(message: Message): Promise<void> {
   if (!message.guild || !message.member) return;
-
   const guildResult = await getGuild(message.guild.id);
-  if (guildResult.isErr() || !guildResult.unwrap()) return;
+  const guild = guildResult.isOk() ? guildResult.unwrap() : null;
+  if (!guild) return;
+  const config = guild.automod;
+  await processAutomodSignals(message, config, detectCrossChannelSpam(message, config));
+}
 
-  const config = guildResult.unwrap()!.automod.crossChannelSpam;
-  if (!config.enabled) return;
+/**
+ * Produces a signal when one account repeats content across enough channels.
+ */
+export function detectCrossChannelSpam(message: Message, config: AutomodConfig): AutomodSignal[] {
+  if (!message.guild || !message.member) return [];
+  if (!config.crossChannelSpam.enabled) return [];
 
   const normalized = normalize(message.content);
-  if (normalized.length < 20) return;
+  if (normalized.length < 20) return [];
 
   const key = `${message.guild.id}:${message.author.id}`;
   const now = Date.now();
-  const windowMs = config.windowSeconds * 1000;
+  const windowMs = config.crossChannelSpam.windowSeconds * 1000;
 
-  // Prune old entries, add current
   const entries = (recentMessages.get(key) ?? []).filter((e) => now - e.ts < windowMs);
   entries.push({ normalized, channelId: message.channelId, messageId: message.id, ts: now });
   recentMessages.set(key, entries);
 
-  // Count distinct channels with the same normalized content
   const matching = entries.filter((e) => e.normalized === normalized);
   const uniqueChannels = new Set(matching.map((e) => e.channelId));
+  if (uniqueChannels.size < config.crossChannelSpam.minChannels) return [];
 
-  if (uniqueChannels.size < config.minChannels) return;
-
-  // ── Triggered ──
-  log.warn(`Cross-channel spam detected: ${message.author.tag} in ${uniqueChannels.size} channels`);
-
-  // Clear tracking immediately to avoid double-triggering
   recentMessages.delete(key);
+  log.warn(`Cross-channel spam signal: ${message.author.tag} in ${uniqueChannels.size} channels`);
 
-  // Delete all cached messages in the window
-  await deleteSpamMessages(message, matching);
-
-  // Auto-timeout
-  if (config.autoTimeout) {
-    await applyTimeout(message.member, config.timeoutSeconds * 1000, "Cross-channel spam");
-  }
-
-  // Post mod alert
-  if (config.reportChannelId) {
-    await postSpamAlert(message, normalized, [...uniqueChannels], config.reportChannelId);
-  }
-}
-
-// ─── Actions ─────────────────────────────────────────────────────────────────
-
-async function deleteSpamMessages(
-  trigger: Message,
-  cached: TrackedMessage[],
-): Promise<void> {
-  // Delete the triggering message and all cached ones (best-effort, no throw)
-  const deletions = cached.map(async (entry) => {
-    try {
-      if (entry.channelId === trigger.channelId && entry.messageId === trigger.id) {
-        await trigger.delete();
-        return;
-      }
-      const channel = await trigger.guild!.channels.fetch(entry.channelId);
-      if (!channel?.isTextBased() || !("messages" in channel)) return;
-      const msg = await (channel as TextChannel).messages.fetch(entry.messageId);
-      await msg.delete();
-    } catch { /* best-effort */ }
-  });
-  await Promise.allSettled(deletions);
-}
-
-async function applyTimeout(member: GuildMember, durationMs: number, reason: string): Promise<void> {
-  try {
-    await member.timeout(durationMs, reason);
-  } catch (err) {
-    log.error("Failed to apply cross-channel spam timeout", err);
-  }
-}
-
-async function postSpamAlert(
-  message: Message,
-  normalizedContent: string,
-  channelIds: string[],
-  reportChannelId: string,
-): Promise<void> {
-  if (!message.guild) return;
-
-  try {
-    const channel = await message.guild.channels.fetch(reportChannelId);
-    if (!channel?.isTextBased() || !("send" in channel)) return;
-
-    const accountAge = Math.floor(
-      (Date.now() - message.author.createdTimestamp) / (1000 * 60 * 60 * 24),
-    );
-
-    const MAX_CHANNEL_DISPLAY = 5;
-    const displayChannels = channelIds
-      .slice(0, MAX_CHANNEL_DISPLAY)
-      .map((id) => `<#${id}>`)
-      .join(", ");
-    const overflow = channelIds.length - MAX_CHANNEL_DISPLAY;
-    const channelField = overflow > 0
-      ? `${displayChannels} (+${overflow} more)`
-      : displayChannels;
-
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setTitle("Cross-Channel Spam Detected")
-      .addFields(
-        { name: "User", value: `<@${message.author.id}> (${message.author.tag})`, inline: true },
-        { name: "Account age", value: `${accountAge} day${accountAge === 1 ? "" : "s"}`, inline: true },
-        { name: "Channels hit", value: channelField },
-        { name: "Message", value: normalizedContent.slice(0, 500) || "(empty)" },
-      )
-      .setFooter({ text: "Messages have been deleted. Apply further action below." })
-      .setTimestamp();
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`automod:spam:timeout:${message.author.id}`)
-        .setLabel("Timeout 1h")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`automod:spam:ban:${message.author.id}`)
-        .setLabel("Ban")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`automod:spam:dismiss:${message.author.id}`)
-        .setLabel("Dismiss")
-        .setStyle(ButtonStyle.Secondary),
-    );
-
-    await (channel as TextChannel).send({ embeds: [embed], components: [row] });
-  } catch (err) {
-    log.error("Failed to post spam alert", err);
-  }
+  return [
+    {
+      detectorId: "crossChannelSpam",
+      ruleId: "crossChannelSpam:duplicate-content",
+      confidence: 0.94,
+      severity: "critical",
+      punishmentEligible: config.crossChannelSpam.autoTimeout,
+      recommendedAction: config.crossChannelSpam.autoTimeout ? "timeout" : "report",
+      target: {
+        guildId: message.guild.id,
+        userId: message.author.id,
+        channelId: message.channelId,
+        messageId: message.id,
+        messageIds: matching.map((entry) => entry.messageId),
+        messageRefs: matching.map((entry) => ({
+          channelId: entry.channelId,
+          messageId: entry.messageId,
+        })),
+      },
+      evidence: {
+        summary: `Repeated message across ${uniqueChannels.size} channels.`,
+        messageContent: normalized.slice(0, 500),
+        fingerprint: normalized.slice(0, 80),
+        metadata: {
+          channels: uniqueChannels.size,
+          messages: matching.length,
+          windowSeconds: config.crossChannelSpam.windowSeconds,
+        },
+      },
+      createdAt: new Date().toISOString(),
+    },
+  ];
 }

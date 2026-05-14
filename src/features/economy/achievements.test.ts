@@ -109,6 +109,40 @@ const {
 } = await import("./achievements");
 
 // ---------------------------------------------------------------------------
+// Ctx stub for claimRewards (adjustBalance now requires ctx)
+// ---------------------------------------------------------------------------
+
+function makeCtx() {
+  const wallets: Record<string, Record<string, number>> = {};
+  return {
+    cooldowns: { isOnCooldown: () => false, getRemainingMs: () => 0, set: () => {} },
+    sessions: { get: () => undefined, set: () => {}, delete: () => {}, has: () => false },
+    locks: { tryAcquire: () => true, release: () => {}, isHeld: () => false },
+    client: {} as never,
+    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
+    interaction: null,
+    emit: async () => {},
+    get: async (id: string) => {
+      const bal = wallets[id];
+      return bal ? { balances: bal, bankBalances: {} } as never : null;
+    },
+    ensure: async (id: string) => {
+      if (!wallets[id]) wallets[id] = { coins: 1000 };
+      return { balances: wallets[id], bankBalances: {} } as never;
+    },
+    patch: async (id: string, _: unknown, fn: unknown) => {
+      if (!wallets[id]) wallets[id] = { coins: 1000 };
+      const cur = { balances: wallets[id], bankBalances: {} };
+      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as { balances?: Record<string, number> };
+      if (patch.balances) wallets[id] = patch.balances;
+    },
+    set: async () => {},
+    delete: async () => {},
+    query: async () => [],
+  } as unknown as import("@/framework/types").Ctx;
+}
+
+// ---------------------------------------------------------------------------
 // Reset helpers
 // ---------------------------------------------------------------------------
 
@@ -253,7 +287,7 @@ describe("claimRewards", () => {
       rewardsClaimed: false,
     });
 
-    const result = await claimRewards("user-1", "trivia_10");
+    const result = await claimRewards(makeCtx(), "user-1", "trivia_10");
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -267,7 +301,7 @@ describe("claimRewards", () => {
   });
 
   test("returns ACHIEVEMENT_NOT_FOUND for unknown achievement", async () => {
-    const result = await claimRewards("user-1", "nonexistent");
+    const result = await claimRewards(makeCtx(), "user-1", "nonexistent");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof AchievementError>;
     expect(err).toBeInstanceOf(AchievementError);
@@ -275,7 +309,7 @@ describe("claimRewards", () => {
   });
 
   test("returns ACHIEVEMENT_NOT_UNLOCKED when not unlocked", async () => {
-    const result = await claimRewards("user-1", "trivia_10");
+    const result = await claimRewards(makeCtx(), "user-1", "trivia_10");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof AchievementError>;
     expect(err.code).toBe("ACHIEVEMENT_NOT_UNLOCKED");
@@ -290,7 +324,7 @@ describe("claimRewards", () => {
       rewardsClaimed: true,
     });
 
-    const result = await claimRewards("user-1", "trivia_10");
+    const result = await claimRewards(makeCtx(), "user-1", "trivia_10");
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof AchievementError>;
     expect(err.code).toBe("REWARDS_ALREADY_CLAIMED");

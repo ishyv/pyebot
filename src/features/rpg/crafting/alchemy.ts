@@ -6,7 +6,7 @@
  */
 import { OkResult, ErrResult, type Result } from "@/core/result";
 import { getContentRegistry } from "@/content/registry";
-import type { Trait } from "@/content/schemas";
+type Trait = string;
 import { getUser, updateUserPaths } from "@/db/repositories/users";
 import { getDiscoveredRecipe, saveDiscoveredRecipe } from "@/db/repositories/rpg-discovery";
 import { generateResilientText } from "@/features/ai/service";
@@ -22,11 +22,12 @@ function getAlchemyItem(itemId: string): ItemData | null {
   const item = getContentRegistry()?.getItem(itemId);
   if (!item) return null;
 
+  const anyItem = item as Record<string, unknown>;
   return {
     id: item.id,
     name: item.name,
-    trait1: item.trait1,
-    trait2: item.trait2,
+    trait1: (anyItem["trait1"] as Trait | undefined) ?? "unknown",
+    trait2: (anyItem["trait2"] as Trait | undefined) ?? "unknown",
   };
 }
 
