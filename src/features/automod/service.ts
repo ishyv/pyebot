@@ -148,10 +148,9 @@ export function detectMessageContentSignals(
     });
 
     if (nonWhitelisted.length > 0) {
-      const key = `${message.guild.id}:${message.author.id}`;
-      const now = Date.now();
       const windowMs = config.linkSpam.windowSeconds * 1000;
-
+      const key = `${baseTarget.guildId}:${baseTarget.userId}`;
+      const now = Date.now();
       const times = (linkTimestamps.get(key) ?? []).filter((t) => now - t < windowMs);
       times.push(...Array(nonWhitelisted.length).fill(now));
       linkTimestamps.set(key, times);

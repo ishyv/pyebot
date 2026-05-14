@@ -7,6 +7,8 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { kick } from "@/features/moderation/service";
+import { dmUser } from "../notifications";
+import { sendModLog } from "../modlog";
 
 export const data = new SlashCommandBuilder()
   .setName("kick")
@@ -48,11 +50,19 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  const sanctionResult = result.unwrap();
+
+  await dmUser(targetMember.user, "KICK", interaction.guild.name, reason, sanctionResult.caseId);
+  await sendModLog(interaction.guild, sanctionResult);
+
   const embed = new EmbedBuilder()
     .setColor(Colors.Orange)
     .setTitle("Member Kicked")
     .setDescription(`**${targetUser.tag}** has been kicked.`)
-    .addFields({ name: "Reason", value: reason })
+    .addFields(
+      { name: "Reason", value: reason },
+      { name: "Case ID", value: `#${sanctionResult.caseId}`, inline: true },
+    )
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });

@@ -29,7 +29,9 @@ webapp
 CLAUDE.md
 AGENTS.md
 
+bun.lock
 
-# Ignore all JSON files in the root directory
+# cai 
 history.json
 tasks.json
+__file_log

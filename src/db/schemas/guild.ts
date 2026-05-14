@@ -316,6 +316,12 @@ export const ModerationConfigSchema = z.object({
     roleId: null,
     kickOnFail: false,
   })),
+  restrictionRoles: z.object({
+    forums: z.string().nullable().catch(null),
+    voice:  z.string().nullable().catch(null),
+    jobs:   z.string().nullable().catch(null),
+    all:    z.string().nullable().catch(null),
+  }).catch(() => ({ forums: null, voice: null, jobs: null, all: null })),
 }).catch(() => ({
   modLogChannelId: null,
   appealsChannelId: null,
@@ -324,6 +330,7 @@ export const ModerationConfigSchema = z.object({
   tempBanCheckIntervalMs: 60_000,
   quarantine: { enabled: false, roleId: null, channelId: null },
   verification: { enabled: false, mode: "button" as const, minAccountAgeDays: 0, channelId: null, roleId: null, kickOnFail: false },
+  restrictionRoles: { forums: null, voice: null, jobs: null, all: null },
 }));
 
 // ─── Guild document ───────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ export const WarnSchema = z.object({
 });
 export type Warn = z.infer<typeof WarnSchema>;
 
-export const SanctionType = z.enum(["BAN", "KICK", "TIMEOUT", "WARN", "RESTRICT"]);
+export const SanctionType = z.enum(["BAN", "KICK", "TIMEOUT", "WARN", "RESTRICT", "PARDON"]);
 export type SanctionType = z.infer<typeof SanctionType>;
 
 export const SanctionHistoryEntrySchema = z.object({

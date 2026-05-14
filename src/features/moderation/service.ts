@@ -13,13 +13,16 @@
  */
 
 import type { Guild, GuildMember, TextChannel, User } from "discord.js";
-import { EmbedBuilder, Colors } from "discord.js";
+import { EmbedBuilder, Colors, PermissionFlagsBits, type PermissionResolvable } from "discord.js";
 import { OkResult, ErrResult, type Result } from "@/core/result";
 import { getDb } from "@/core/db";
 import { userStore, updateUserPaths } from "@/db/repositories/users";
 import { getGuild } from "@/db/repositories/guilds";
 import { bus } from "@/core/bus";
 import { createLogger } from "@/core/logger";
+import { missingPermission } from "@/middleware/permissions";
+import { msToHuman } from "@/utils/time";
+import type { SanctionHistoryEntry } from "@/db/schemas/user";
 
 const log = createLogger("moderation");
 
@@ -48,7 +51,7 @@ export class ModerationError extends Error {
 // Types
 // ---------------------------------------------------------------------------
 
-export type SanctionType = "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT";
+export type SanctionType = "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON";
 
 export interface SanctionEntry {
   readonly type: SanctionType;
@@ -60,6 +63,7 @@ export interface SanctionEntry {
   readonly evidenceSummary?: string;
 }
 
+
 export interface ModerationResult {
   readonly type: SanctionType;
   readonly targetId: string;
@@ -67,6 +71,7 @@ export interface ModerationResult {
   readonly reason: string;
   readonly moderatorId: string;
   readonly caseId: number;
+  readonly escalated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +195,7 @@ export async function postModLog(
       TIMEOUT: Colors.Yellow,
       WARN: Colors.Yellow,
       RESTRICT: Colors.Purple,
+      PARDON: Colors.Green,
     };
 
     const embed = new EmbedBuilder()
@@ -208,6 +214,14 @@ export async function postModLog(
   } catch (err) {
     log.error("Failed to post mod log", err);
   }
+}
+
+function checkBotPerms(guild: Guild, ...perms: PermissionResolvable[]): ModerationError | null {
+  const bot = guild.members.me;
+  if (!bot) return new ModerationError("INSUFFICIENT_PERMISSIONS", "Bot is not a guild member");
+  const missing = missingPermission(bot, ...perms);
+  if (missing) return new ModerationError("INSUFFICIENT_PERMISSIONS", `Bot missing permission: ${String(missing)}`);
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +249,9 @@ export async function ban(
 ): Promise<Result<ModerationResult, ModerationError>> {
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
+
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.BanMembers);
+  if (botErr) return ErrResult(botErr);
 
   try {
     await guild.members.ban(target.id, { reason: `${reason} | by ${moderator.user.tag}` });
@@ -312,6 +329,9 @@ export async function kick(
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
 
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.KickMembers);
+  if (botErr) return ErrResult(botErr);
+
   try {
     await target.kick(`${reason} | by ${moderator.user.tag}`);
   } catch (err) {
@@ -351,20 +371,19 @@ export const DURATION_MAP: Record<string, number> = {
 
 export const MUTE_DURATION_CHOICES = Object.keys(DURATION_MAP);
 
+
 export async function mute(
   guild: Guild,
   moderator: GuildMember,
   target: GuildMember,
-  durationKey: string,
+  durationMs: number,
   reason: string,
 ): Promise<Result<ModerationResult, ModerationError>> {
   const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
   if (validationErr) return ErrResult(validationErr);
 
-  const durationMs = DURATION_MAP[durationKey];
-  if (!durationMs) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Invalid duration: ${durationKey}`));
-  }
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.ModerateMembers);
+  if (botErr) return ErrResult(botErr);
 
   try {
     await target.timeout(durationMs, `${reason} | by ${moderator.user.tag}`);
@@ -373,7 +392,7 @@ export async function mute(
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "TIMEOUT", `${durationKey} — ${reason}`, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
+  await pushSanction(target.id, guild.id, "TIMEOUT", `${msToHuman(durationMs)} — ${reason}`, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "TIMEOUT",
@@ -384,7 +403,7 @@ export async function mute(
     caseId,
   };
 
-  await postModLog(guild, modResult, `Duration: ${durationKey}`);
+  await postModLog(guild, modResult, `Duration: ${msToHuman(durationMs)}`);
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "TIMEOUT", caseId });
 
   return OkResult(modResult);
@@ -419,9 +438,9 @@ export async function warn(
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "WARN", caseId });
 
   // Check escalation thresholds after warn
-  await checkEscalation(guild, target, moderator).catch((err) => log.error("Escalation check failed", err));
+  const escalated = await checkEscalation(guild, target, moderator).catch(() => false);
 
-  return OkResult(modResult);
+  return OkResult({ ...modResult, escalated });
 }
 
 // ---------------------------------------------------------------------------
@@ -432,14 +451,14 @@ async function checkEscalation(
   guild: Guild,
   target: GuildMember,
   moderator: GuildMember,
-): Promise<void> {
+): Promise<boolean> {
   const guildResult = await getGuild(guild.id);
-  if (guildResult.isErr()) return;
+  if (guildResult.isErr()) return false;
   const config = guildResult.unwrap()?.moderation.escalation;
-  if (!config?.enabled || config.thresholds.length === 0) return;
+  if (!config?.enabled || config.thresholds.length === 0) return false;
 
   const casesResult = await getCases(target.id, guild.id);
-  if (casesResult.isErr()) return;
+  if (casesResult.isErr()) return false;
 
   const warnCount = casesResult.unwrap().filter((c) => c.type === "WARN").length;
 
@@ -449,17 +468,54 @@ async function checkEscalation(
     .sort((a, b) => b.warnCount - a.warnCount);
 
   const threshold = matching[0];
-  if (!threshold) return;
+  if (!threshold) return false;
 
   const escalationReason = `Auto-escalation: reached ${warnCount} warning${warnCount === 1 ? "" : "s"}`;
 
   if (threshold.action === "timeout" && threshold.durationKey) {
-    await mute(guild, moderator, target, threshold.durationKey, escalationReason).catch(() => {});
+    const durationMs = DURATION_MAP[threshold.durationKey ?? ""] ?? DURATION_MAP["1h"];
+    await mute(guild, moderator, target, durationMs, escalationReason).catch(() => {});
+    return true;
   } else if (threshold.action === "kick") {
     await kick(guild, moderator, target, escalationReason).catch(() => {});
+    return true;
   } else if (threshold.action === "ban") {
     await ban(guild, moderator, target.user, escalationReason).catch(() => {});
+    return true;
   }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// restrict
+// ---------------------------------------------------------------------------
+
+export async function restrict(
+  guild: Guild,
+  moderator: GuildMember,
+  target: GuildMember,
+  _restrictionType: "forums" | "voice" | "jobs" | "all",
+  roleId: string,
+  reason: string,
+): Promise<Result<ModerationResult, ModerationError>> {
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.ManageRoles);
+  if (botErr) return ErrResult(botErr);
+
+  const validationErr = validateTarget(moderator.id, guild.client.user.id, target.id);
+  if (validationErr) return ErrResult(validationErr);
+
+  try {
+    await target.roles.add(roleId, reason);
+  } catch (err) {
+    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Restrict failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
+
+  const caseId = await nextCaseId(guild.id);
+  await pushSanction(target.id, guild.id, "RESTRICT", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
+  const modResult: ModerationResult = { type: "RESTRICT", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId };
+  await postModLog(guild, modResult);
+  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "RESTRICT", caseId });
+  return OkResult(modResult);
 }
 
 // ---------------------------------------------------------------------------
@@ -469,11 +525,11 @@ async function checkEscalation(
 export async function getCases(
   userId: string,
   guildId: string,
-): Promise<Result<SanctionEntry[], ModerationError>> {
+): Promise<Result<SanctionHistoryEntry[], ModerationError>> {
   const res = await userStore.get(userId);
   if (res.isErr()) return ErrResult(new ModerationError("DB_FAILED", res.error.message));
   const user = res.unwrap();
-  const history = (user?.sanction_history?.[guildId] as SanctionEntry[] | undefined) ?? [];
+  const history = (user?.sanction_history?.[guildId] as SanctionHistoryEntry[] | undefined) ?? [];
   return OkResult(history);
 }
 
@@ -544,6 +600,27 @@ export async function deleteCase(
     return OkResult(undefined);
   } catch (err) {
     return ErrResult(new ModerationError("DB_FAILED", String(err)));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// removeWarn
+// ---------------------------------------------------------------------------
+
+export async function removeWarn(
+  userId: string,
+  guildId: string,
+  warnId: string,
+): Promise<Result<boolean, ModerationError>> {
+  try {
+    const db = await getDb();
+    const result = await db.collection("users").updateOne(
+      { _id: userId } as never,
+      { $pull: { [`sanction_history.${guildId}`]: { caseId: parseInt(warnId, 10), type: "WARN" } } } as never,
+    );
+    return OkResult(result.modifiedCount > 0);
+  } catch (err) {
+    return ErrResult(new ModerationError("DB_FAILED", `removeWarn failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 }
 
@@ -679,4 +756,61 @@ export async function release(
   await updateUserPaths(target.id, { [`quarantine_roles.${guild.id}`]: [] }).catch(() => {});
 
   return OkResult({ restoredRoles: savedRoles.length });
+}
+
+// ---------------------------------------------------------------------------
+// unban
+// ---------------------------------------------------------------------------
+
+export async function unban(
+  guild: Guild,
+  moderator: GuildMember,
+  targetId: string,
+  reason: string,
+  targetTag?: string,
+): Promise<Result<ModerationResult, ModerationError>> {
+  const validationErr = validateTarget(moderator.id, guild.client.user.id, targetId);
+  if (validationErr) return ErrResult(validationErr);
+
+  const botErr = checkBotPerms(guild, PermissionFlagsBits.BanMembers);
+  if (botErr) return ErrResult(botErr);
+
+  try {
+    await guild.members.unban(targetId, reason);
+  } catch (err) {
+    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Unban failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
+
+  const caseId = await nextCaseId(guild.id);
+  await pushSanction(targetId, guild.id, "PARDON", reason, moderator.id, caseId).catch(() => {});
+  const modResult: ModerationResult = { type: "PARDON", targetId, targetTag: targetTag ?? targetId, reason, moderatorId: moderator.id, caseId };
+  await postModLog(guild, modResult);
+  bus.emit({ type: "mod:action", guildId: guild.id, userId: targetId, moderatorId: moderator.id, sanctionType: "PARDON", caseId });
+  return OkResult(modResult);
+}
+
+// ---------------------------------------------------------------------------
+// clearWarns
+// ---------------------------------------------------------------------------
+
+export async function clearWarns(
+  userId: string,
+  guildId: string,
+): Promise<Result<number, ModerationError>> {
+  try {
+    const res = await userStore.get(userId);
+    if (res.isErr()) return ErrResult(new ModerationError("DB_FAILED", res.error.message));
+    const user = res.unwrap();
+    const history = (user?.sanction_history?.[guildId] as SanctionHistoryEntry[] | undefined) ?? [];
+    const count = history.filter((e) => e.type === "WARN").length;
+
+    const db = await getDb();
+    await db.collection("users").updateOne(
+      { _id: userId } as never,
+      { $pull: { [`sanction_history.${guildId}`]: { type: "WARN" } } } as never,
+    );
+    return OkResult(count);
+  } catch (err) {
+    return ErrResult(new ModerationError("DB_FAILED", `clearWarns failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
 }
