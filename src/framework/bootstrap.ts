@@ -25,6 +25,7 @@ import {
   type ChatInputCommandInteraction,
   type Client,
   type Interaction,
+  type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
 import { createLogger } from "@/core/logger";
@@ -36,6 +37,7 @@ import {
   buildToggleHandler,
   TOGGLE_CUSTOM_ID_PREFIX,
 } from "./panel";
+import { buildCommandCatalog, installCommandCatalog } from "@/utils/command-registry";
 import { ComponentRouter } from "./router";
 import type {
   CommandModule,
@@ -85,6 +87,8 @@ export async function bootstrapFramework(client: Client): Promise<BootstrapResul
   commandMap.set(featuresCommand.data.name, featuresCommand);
   commandOwner.set(featuresCommand.data.name, null);
 
+  installCommandCatalog(buildCommandCatalog(features));
+
   // ─── Wire event listeners from @On metadata ──────────────────────────
   for (const feat of features) {
     if (!feat.handlers) continue;
@@ -131,6 +135,8 @@ export async function bootstrapFramework(client: Client): Promise<BootstrapResul
         await handleAutocomplete(interaction);
       } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
         await handleComponent(interaction);
+      } else if (interaction.isModalSubmit()) {
+        await handleModalSubmit(interaction);
       }
     } catch (err) {
       log.error("Unhandled interaction error", err);
@@ -176,6 +182,13 @@ export async function bootstrapFramework(client: Client): Promise<BootstrapResul
   ): Promise<void> {
     const route = router.resolve(interaction.customId);
     if (!route) return; // stale buttons silently ignored
+    const ctx = world.forInteraction(interaction, route.featureId);
+    await route.handler(interaction, ctx);
+  }
+
+  async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    const route = router.resolve(interaction.customId);
+    if (!route) return; // unknown modal — silently ignore
     const ctx = world.forInteraction(interaction, route.featureId);
     await route.handler(interaction, ctx);
   }

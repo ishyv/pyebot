@@ -19,6 +19,7 @@ import type {
   ChatInputCommandInteraction,
   Client,
   Interaction,
+  ModalSubmitInteraction,
   StringSelectMenuInteraction,
 } from "discord.js";
 import type { Collection, Document, Filter, FindOptions } from "mongodb";
@@ -79,10 +80,19 @@ export type EventHandler<E> = (event: E, ctx: Ctx) => void | Promise<void>;
 
 // ─── Commands ──────────────────────────────────────────────────────────────
 
+/** Help metadata that cannot be derived from Discord's slash-command builder. */
+export type CommandHelp =
+  | false
+  | {
+      readonly hints?: readonly string[];
+      readonly requires?: string;
+    };
+
 /**
- * What every file in a feature's `commands/` folder must export.
+ * What every file in a feature's `commands/` folder must export by default.
  *
  * - `data`: a slash-command builder (or anything with a `name` and `toJSON()`).
+ * - `help`: curated help metadata, or `false` to opt out of `/help`.
  * - `execute`: the actual handler. The framework injects a `Ctx` after the
  *    interaction so features never construct one themselves.
  * - `autocomplete` (optional): for slash-command option autocomplete.
@@ -92,6 +102,7 @@ export type EventHandler<E> = (event: E, ctx: Ctx) => void | Promise<void>;
  */
 export interface CommandModule {
   readonly data: { name: string; toJSON(): unknown };
+  readonly help: CommandHelp;
   execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void>;
   autocomplete?(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void>;
 }
@@ -108,7 +119,7 @@ export interface ComponentRoute {
 
 /** A bound component handler ready to be invoked by the router. */
 export type BoundComponentHandler = (
-  interaction: ButtonInteraction | StringSelectMenuInteraction,
+  interaction: ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction,
   ctx: Ctx,
 ) => Promise<void>;
 

@@ -25,6 +25,9 @@ import { createLogger } from "@/core/logger";
 import { loadContentRegistry } from "@/content/registry";
 import { bootstrapFramework } from "@/framework/bootstrap";
 import { MemberJoined } from "@/events/member-joined";
+import { registerMessageDeleteListener } from "@/core/importantMessages";
+import { reregisterQueueMessage } from "@/features/moderation/appeals";
+
 
 const log = createLogger("bootstrap");
 
@@ -41,6 +44,7 @@ async function bootstrap(): Promise<void> {
   }
 
   const client = createClient();
+  registerMessageDeleteListener(client);
   const { dispatch, commands, world } = await bootstrapFramework(client);
 
   client.on("interactionCreate", (interaction) => {
@@ -67,12 +71,17 @@ async function bootstrap(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const token = process.env.TOKEN;
+  const token = process.env.DISCORD_TOKEN;
   if (!token) throw new Error("TOKEN environment variable is not set.");
   await client.login(token);
 
   client.once("ready", async (c) => {
     log.info(`Logged in as ${c.user.tag} (${commands.length} commands loaded)`);
+
+    // Re-register appeals queue messages as important for all guilds.
+    for (const guild of c.guilds.cache.values()) {
+      reregisterQueueMessage(guild).catch(() => null);
+    }
 
     const clientId = process.env.CLIENT_ID ?? c.user.id;
     const guildId = process.env.GUILD_ID;
