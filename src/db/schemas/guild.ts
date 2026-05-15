@@ -290,6 +290,7 @@ export type EscalationThreshold = z.infer<typeof EscalationThresholdSchema>;
 export const ModerationConfigSchema = z.object({
   modLogChannelId: z.string().nullable().catch(null),
   appealsChannelId: z.string().nullable().catch(null),
+  appealsQueueMessageId: z.string().nullable().catch(null),
   altDetectionEnabled: z.boolean().catch(false),
   escalation: z.object({
     enabled: z.boolean().catch(false),
@@ -325,6 +326,7 @@ export const ModerationConfigSchema = z.object({
 }).catch(() => ({
   modLogChannelId: null,
   appealsChannelId: null,
+  appealsQueueMessageId: null,
   altDetectionEnabled: false,
   escalation: { enabled: false, thresholds: [] },
   tempBanCheckIntervalMs: 60_000,

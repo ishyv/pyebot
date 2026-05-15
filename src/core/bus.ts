@@ -35,7 +35,15 @@ export type BusEvent =
   | { type: "coinflip:won";   userId: string }
   | { type: "trivia:won";     userId: string }
   | { type: "quest:completed"; userId: string; questId: string }
-  | { type: "mod:action"; guildId: string; userId: string; moderatorId: string; sanctionType: "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON"; caseId: number };
+  | { type: "mod:action"; guildId: string; userId: string; moderatorId: string; sanctionType: "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON"; caseId: number }
+  | {
+      type: "appeal:decided";
+      guildId: string;
+      userId: string;
+      caseId: number;
+      reviewerId: string;
+      status: "approved" | "denied";
+    };
 
 type BusListener<T extends BusEvent["type"]> = (
   event: Extract<BusEvent, { type: T }>,
