@@ -54,3 +54,53 @@ describe("buildQueuePayload", () => {
     expect(json).toContain("+2 more");
   });
 });
+
+// Integration: schema round-trip
+describe("Appeal schema round-trip", () => {
+  test("pending appeal with all required fields validates correctly", async () => {
+    const { AppealSchema } = await import("@/db/schemas/appeal");
+    const appeal = {
+      _id: "appeal:g1:99",
+      guildId: "g1",
+      caseId: 99,
+      userId: "u1",
+      userTag: "user",
+      submittedAt: new Date().toISOString(),
+      reason: "Please reconsider",
+      threadId: "th1",
+      status: "pending" as const,
+    };
+    const result = AppealSchema.safeParse(appeal);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.status).toBe("pending");
+      expect(result.data.decision).toBeUndefined();
+    }
+  });
+
+  test("approved appeal with decision validates", async () => {
+    const { AppealSchema } = await import("@/db/schemas/appeal");
+    const appeal = {
+      _id: "appeal:g1:100",
+      guildId: "g1",
+      caseId: 100,
+      userId: "u2",
+      userTag: "user2",
+      submittedAt: new Date().toISOString(),
+      reason: "I am innocent",
+      threadId: "th2",
+      status: "approved" as const,
+      decision: {
+        reviewerId: "mod1",
+        decidedAt: new Date().toISOString(),
+        reasonCode: "wrongful_punishment" as const,
+        note: "User was correct",
+      },
+    };
+    const result = AppealSchema.safeParse(appeal);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.decision?.reasonCode).toBe("wrongful_punishment");
+    }
+  });
+});
