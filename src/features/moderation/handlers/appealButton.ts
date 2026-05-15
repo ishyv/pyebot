@@ -1,173 +1,199 @@
 /**
- * Ban appeal button handlers.
+ * Appeal submission flow.
  *
- * Appeal flow:
- *   1. User clicks "Appeal Ban" in ban DM (customId: "mod:appeal:{guildId}")
- *   2. Bot creates a thread in guild.moderation.appealsChannelId
- *   3. Mods click Approve or Deny in the thread
- *      - Approve: unban + close thread
- *      - Deny: close thread
+ * Step 1: User clicks "Appeal Ban" button in their DM.
+ *         CustomId: `mod:appeal:{guildId}:{caseId}`
+ *         → Check appeals are enabled and no prior appeal exists, then show modal.
+ *
+ * Step 2: User submits the modal.
+ *         CustomId: `mod:appeal-submit:{guildId}:{caseId}`
+ *         → Create appeal record, open private thread, sync queue message,
+ *           confirm to user.
+ *
+ * Both handlers are best-effort — DM failures are silently swallowed, and a
+ * missing appeals channel means appeals are disabled for that guild.
  */
-
 import {
-  MessageFlags,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  Colors,
   ChannelType,
+  type ModalActionRowComponentBuilder,
+  type ModalSubmitInteraction,
   type ButtonInteraction,
-  type TextChannel,
-  type MessageActionRowComponentBuilder,
+  MessageFlags,
 } from "discord.js";
 import { getGuild } from "@/db/repositories/guilds";
-import { createLogger } from "@/core/logger";
-import { guardModerationComponentAction } from "@/features/moderation/authorization";
+import { createAppeal, getAppeal } from "@/db/repositories/appeals";
+import { syncQueueMessage } from "@/features/moderation/appeals";
+import { container, text, v2Message } from "@/ui/v2";
 
-const log = createLogger("moderation:appeals");
+export const APPEAL_BUTTON_PREFIX = "mod:appeal:";
+export const APPEAL_SUBMIT_PREFIX = "mod:appeal-submit:";
 
-export const APPEAL_PREFIX = "mod:appeal:";
-export const APPEAL_APPROVE_PREFIX = "mod:appeal:approve:";
-export const APPEAL_DENY_PREFIX = "mod:appeal:deny:";
-
-export const isAppealButton = (id: string): boolean =>
-  id.startsWith(APPEAL_PREFIX) && !id.startsWith(APPEAL_APPROVE_PREFIX) && !id.startsWith(APPEAL_DENY_PREFIX);
-export const isAppealApprove = (id: string): boolean => id.startsWith(APPEAL_APPROVE_PREFIX);
-export const isAppealDeny = (id: string): boolean => id.startsWith(APPEAL_DENY_PREFIX);
-
-async function disableAppealButtons(interaction: ButtonInteraction, _label: string): Promise<void> {
-  try {
-    const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId("mod:appeal:approve:_done")
-        .setLabel("Approve")
-        .setStyle(ButtonStyle.Success)
-        .setDisabled(true),
-      new ButtonBuilder()
-        .setCustomId("mod:appeal:deny:_done")
-        .setLabel("Deny")
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(true),
-    );
-    await interaction.message.edit({
-      components: [row],
-      embeds: [
-        ...(interaction.message.embeds ?? []),
-      ],
-    });
-  } catch { /* best-effort */ }
+/** Parses `mod:appeal:{guildId}:{caseId}` or `mod:appeal-submit:{guildId}:{caseId}`. */
+function parseAppealId(
+  customId: string,
+  prefix: string,
+): { guildId: string; caseId: number } | null {
+  const rest = customId.slice(prefix.length);
+  const idx = rest.lastIndexOf(":");
+  if (idx === -1) return null;
+  const guildId = rest.slice(0, idx);
+  const caseId = Number(rest.slice(idx + 1));
+  if (!guildId || Number.isNaN(caseId)) return null;
+  return { guildId, caseId };
 }
 
-// ─── Step 1: User clicks appeal in their DM ──────────────────────────────────
-
+/**
+ * Handles the "Appeal Ban" button click in the user's DM. Shows the appeal
+ * reason modal if appeals are enabled and no prior appeal exists for this case.
+ */
 export async function handleAppealButton(interaction: ButtonInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  const guildId = interaction.customId.slice(APPEAL_PREFIX.length);
-
-  // Find the guild
-  const guild = interaction.client.guilds.cache.get(guildId);
-  if (!guild) {
-    await interaction.editReply({ content: "Could not find the server. It may no longer exist." });
+  const parsed = parseAppealId(interaction.customId, APPEAL_BUTTON_PREFIX);
+  if (!parsed) {
+    await interaction.reply({
+      content: "Invalid appeal link.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
+
+  const { guildId, caseId } = parsed;
 
   const guildResult = await getGuild(guildId);
-  if (guildResult.isErr() || !guildResult.unwrap()) {
-    await interaction.editReply({ content: "Failed to load server config." });
-    return;
-  }
+  const guildData = guildResult.isOk() ? guildResult.unwrap() : null;
 
-  const appealsChannelId = guildResult.unwrap()!.moderation.appealsChannelId;
-  if (!appealsChannelId) {
-    await interaction.editReply({ content: "This server has not set up a ban appeals channel. Contact a moderator directly." });
-    return;
-  }
-
-  const channel = await guild.channels.fetch(appealsChannelId).catch(() => null);
-  if (!channel?.isTextBased() || !("threads" in channel)) {
-    await interaction.editReply({ content: "The appeals channel is not accessible." });
-    return;
-  }
-
-  try {
-    const thread = await (channel as TextChannel).threads.create({
-      name: `Appeal — ${interaction.user.tag}`,
-      autoArchiveDuration: 1440, // 24h
-      type: ChannelType.PrivateThread,
-      reason: `Ban appeal from ${interaction.user.tag}`,
+  if (!guildData?.moderation.appealsChannelId) {
+    await interaction.reply({
+      content: "This server has not enabled appeals.",
+      flags: MessageFlags.Ephemeral,
     });
+    return;
+  }
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Yellow)
-      .setTitle("Ban Appeal")
-      .setDescription(`<@${interaction.user.id}> has submitted a ban appeal.`)
-      .addFields(
-        { name: "User", value: `${interaction.user.tag} (<@${interaction.user.id}>)`, inline: true },
-        { name: "User ID", value: interaction.user.id, inline: true },
-      )
-      .setThumbnail(interaction.user.displayAvatarURL())
-      .setTimestamp();
+  const existing = await getAppeal(guildId, caseId);
+  if (existing) {
+    await interaction.reply({
+      content: "You have already submitted an appeal for this case.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`mod:appeal:approve:${interaction.user.id}:${guildId}`)
-        .setLabel("Approve (Unban)")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`mod:appeal:deny:${interaction.user.id}:${guildId}`)
-        .setLabel("Deny")
-        .setStyle(ButtonStyle.Danger),
+  const modal = new ModalBuilder()
+    .setCustomId(`${APPEAL_SUBMIT_PREFIX}${guildId}:${caseId}`)
+    .setTitle(`Appeal Ban — Case #${caseId}`)
+    .addComponents(
+      new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("reason")
+          .setLabel("Why should this decision be reconsidered?")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMinLength(1)
+          .setMaxLength(2000)
+          .setRequired(true),
+      ),
     );
 
-    await thread.send({ embeds: [embed], components: [row] });
-    await interaction.editReply({ content: "Your appeal has been submitted. A moderator will review it soon." });
-  } catch (err) {
-    log.error("Failed to create appeal thread", err);
-    await interaction.editReply({ content: "Failed to submit your appeal. Please contact a moderator directly." });
-  }
+  await interaction.showModal(modal);
 }
 
-// ─── Step 2a: Mod approves appeal ────────────────────────────────────────────
+/**
+ * Handles modal submit for the appeal reason. Creates the appeal record,
+ * opens a private thread, and syncs the guild queue message.
+ */
+export async function handleAppealSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const parsed = parseAppealId(interaction.customId, APPEAL_SUBMIT_PREFIX);
+  if (!parsed) return;
 
-export async function handleAppealApprove(interaction: ButtonInteraction): Promise<void> {
-  if (!(await guardModerationComponentAction(interaction, "UNBAN"))) return;
+  const { guildId, caseId } = parsed;
+  const reason = interaction.fields.getTextInputValue("reason");
+
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await disableAppealButtons(interaction, "Approved");
 
-  const [userId, guildId] = interaction.customId.slice(APPEAL_APPROVE_PREFIX.length).split(":");
-  const guild = interaction.guild ?? interaction.client.guilds.cache.get(guildId);
+  const guildResult = await getGuild(guildId);
+  const guildData = guildResult.isOk() ? guildResult.unwrap() : null;
+  const appealsChannelId = guildData?.moderation.appealsChannelId;
 
-  if (!guild || !userId) {
-    await interaction.editReply({ content: "Invalid appeal data." });
+  if (!appealsChannelId) {
+    await interaction.editReply({ content: "Appeals are not enabled for this server." });
     return;
   }
 
-  try {
-    await guild.members.unban(userId, `Appeal approved by ${interaction.user.tag}`);
-    await interaction.editReply({ content: `<@${userId}> has been unbanned.` });
-
-    // Archive the thread
-    if (interaction.channel?.isThread()) {
-      await interaction.channel.setArchived(true, "Appeal resolved").catch(() => {});
-    }
-  } catch (err) {
-    log.error("Failed to unban on appeal", err);
-    await interaction.editReply({ content: "Failed to unban the user." });
+  // Fetch guild from client (we're in a DM context, so guild is not on interaction)
+  const guild = await interaction.client.guilds.fetch(guildId).catch(() => null);
+  if (!guild) {
+    await interaction.editReply({ content: "Could not reach that server. Please try again." });
+    return;
   }
-}
 
-// ─── Step 2b: Mod denies appeal ───────────────────────────────────────────────
-
-export async function handleAppealDeny(interaction: ButtonInteraction): Promise<void> {
-  if (!(await guardModerationComponentAction(interaction, "WARN"))) return;
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await disableAppealButtons(interaction, "Denied");
-
-  await interaction.editReply({ content: "Appeal denied." });
-
-  if (interaction.channel?.isThread()) {
-    await interaction.channel.setArchived(true, "Appeal denied").catch(() => {});
+  const appealsChannel = await guild.channels.fetch(appealsChannelId).catch(() => null);
+  if (!appealsChannel?.isTextBased() || !("threads" in appealsChannel)) {
+    await interaction.editReply({ content: "The appeals channel is misconfigured." });
+    return;
   }
+
+  // Create private thread for moderator discussion
+  const thread = await (appealsChannel as any).threads
+    .create({
+      name: `Appeal — @${interaction.user.username} · Case #${caseId}`,
+      autoArchiveDuration: 10080, // 7 days
+      type: ChannelType.PrivateThread,
+      reason: `Appeal for ban case #${caseId}`,
+    })
+    .catch(() => null);
+
+  if (!thread) {
+    await interaction.editReply({
+      content: "Could not create the appeal thread. Please contact a moderator.",
+    });
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  const createResult = await createAppeal({
+    guildId,
+    caseId,
+    userId: interaction.user.id,
+    userTag: interaction.user.username,
+    submittedAt: now,
+    reason,
+    threadId: thread.id,
+    status: "pending",
+  });
+
+  if (createResult.isErr()) {
+    await interaction.editReply({ content: "Failed to save your appeal. Please try again." });
+    return;
+  }
+
+  // Post context card in thread
+  // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
+  await thread.send(
+    v2Message(
+      container(
+        "info",
+        text(
+          [
+            `## Appeal — Case #${caseId}`,
+            `**User:** <@${interaction.user.id}> (\`${interaction.user.username}\`)`,
+            `**Submitted:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+            "",
+            "**Appeal reason:**",
+            reason,
+          ].join("\n"),
+        ),
+      ),
+    ) as any,
+  );
+
+  await syncQueueMessage(guild, interaction.client);
+
+  await interaction.editReply({
+    content:
+      "✅ Your appeal has been submitted. You will receive a DM when a moderator makes a decision.",
+  });
 }
