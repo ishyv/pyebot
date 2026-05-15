@@ -1,0 +1,463 @@
+/**
+ * Appeal review and decision handlers.
+ *
+ * Flow after appeal submission:
+ *   appeal:review:{g}:{c}  button  → ephemeral panel (this file)
+ *   appeal:approve:{g}:{c} button  → approve modal
+ *   appeal:deny:{g}:{c}    button  → deny modal
+ *   appeal:info:{g}:{c}    button  → request-info modal
+ *
+ *   appeal:approve-modal:{g}:{c}  modal submit → write PARDON + archive thread
+ *   appeal:deny-modal:{g}:{c}     modal submit → deny + archive thread
+ *   appeal:info-modal:{g}:{c}     modal submit → post question in thread
+ *
+ * All decision paths call syncQueueMessage to remove (or keep) the Section.
+ * DM failures to the user are always swallowed — .catch(() => null).
+ */
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  ModalBuilder,
+  PermissionFlagsBits,
+  TextInputBuilder,
+  TextInputStyle,
+  type ButtonInteraction,
+  type ModalActionRowComponentBuilder,
+  type ModalSubmitInteraction,
+  type ThreadChannel,
+} from "discord.js";
+import { getAppeal, updateAppeal } from "@/db/repositories/appeals";
+import { getCases, pardon } from "@/features/moderation/service";
+import { syncQueueMessage } from "@/features/moderation/appeals";
+import { renderSanctionHistory } from "@/features/moderation/views";
+import { bus } from "@/core/bus";
+import { container, row, separator, text, v2Message } from "@/ui/v2";
+
+// ---------------------------------------------------------------------------
+// Shared prefix constants
+// ---------------------------------------------------------------------------
+
+export const APPEAL_REVIEW_PREFIX = "appeal:review:";
+export const APPEAL_APPROVE_PREFIX = "appeal:approve:";
+export const APPEAL_DENY_PREFIX = "appeal:deny:";
+export const APPEAL_INFO_PREFIX = "appeal:info:";
+export const APPEAL_APPROVE_MODAL_PREFIX = "appeal:approve-modal:";
+export const APPEAL_DENY_MODAL_PREFIX = "appeal:deny-modal:";
+export const APPEAL_INFO_MODAL_PREFIX = "appeal:info-modal:";
+
+function parseIds(customId: string, prefix: string): { guildId: string; caseId: number } | null {
+  const rest = customId.slice(prefix.length);
+  const idx = rest.lastIndexOf(":");
+  if (idx === -1) return null;
+  const guildId = rest.slice(0, idx);
+  const caseId = Number(rest.slice(idx + 1));
+  if (!guildId || Number.isNaN(caseId)) return null;
+  return { guildId, caseId };
+}
+
+function hasModPerms(interaction: ButtonInteraction | ModalSubmitInteraction): boolean {
+  if (!interaction.memberPermissions) return false;
+  return (
+    interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild) ||
+    interaction.memberPermissions.has(PermissionFlagsBits.ModerateMembers)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Review button → ephemeral panel
+// ---------------------------------------------------------------------------
+
+/**
+ * Opens an ephemeral moderator review panel showing the appeal details,
+ * the user's sanction history, and Approve / Deny / Request-info buttons.
+ */
+export async function handleAppealReview(interaction: ButtonInteraction): Promise<void> {
+  if (!hasModPerms(interaction)) {
+    await interaction.reply({
+      content: "You need Moderate Members or Manage Server to review appeals.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const parsed = parseIds(interaction.customId, APPEAL_REVIEW_PREFIX);
+  if (!parsed) return;
+
+  const { guildId, caseId } = parsed;
+  const appeal = await getAppeal(guildId, caseId);
+
+  if (!appeal || appeal.status !== "pending") {
+    await interaction.reply({
+      content: "This appeal has already been resolved.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const casesResult = await getCases(appeal.userId, guildId);
+  const history = casesResult.isOk() ? casesResult.unwrap().slice(0, 10) : [];
+
+  const approveBtn = new ButtonBuilder()
+    .setCustomId(`${APPEAL_APPROVE_PREFIX}${guildId}:${caseId}`)
+    .setLabel("Approve")
+    .setStyle(ButtonStyle.Success);
+
+  const denyBtn = new ButtonBuilder()
+    .setCustomId(`${APPEAL_DENY_PREFIX}${guildId}:${caseId}`)
+    .setLabel("Deny")
+    .setStyle(ButtonStyle.Danger);
+
+  const infoBtn = new ButtonBuilder()
+    .setCustomId(`${APPEAL_INFO_PREFIX}${guildId}:${caseId}`)
+    .setLabel("Request more info")
+    .setStyle(ButtonStyle.Secondary);
+
+  const ts = Math.floor(new Date(appeal.submittedAt).getTime() / 1000);
+  const detailContainer = container(
+    "info",
+    text(
+      [
+        `## Appeal — Case #${caseId}`,
+        `**User:** <@${appeal.userId}> · \`${appeal.userTag}\``,
+        `**Submitted:** <t:${ts}:F>`,
+        "",
+        "**Appeal reason:**",
+        appeal.reason,
+      ].join("\n"),
+    ),
+  );
+
+  // History container from renderSanctionHistory — take its first component (the ContainerBuilder)
+  const historyContainer =
+    history.length > 0 ? renderSanctionHistory(appeal.userTag, history).components[0] : null;
+
+  const actionRow = row(approveBtn, denyBtn, infoBtn);
+
+  await interaction.reply({
+    // biome-ignore lint/suspicious/noExplicitAny: V2 components valid at runtime; discord.js types lag.
+    components: historyContainer
+      ? ([detailContainer, separator("sm"), historyContainer, actionRow] as any)
+      : ([detailContainer, actionRow] as any),
+    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Approve button → modal
+// ---------------------------------------------------------------------------
+
+export async function handleAppealApproveButton(interaction: ButtonInteraction): Promise<void> {
+  if (!hasModPerms(interaction)) {
+    await interaction.reply({ content: "Permission denied.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const parsed = parseIds(interaction.customId, APPEAL_APPROVE_PREFIX);
+  if (!parsed) return;
+  const { guildId, caseId } = parsed;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`${APPEAL_APPROVE_MODAL_PREFIX}${guildId}:${caseId}`)
+    .setTitle(`Approve Appeal — Case #${caseId}`)
+    .addComponents(
+      new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("reason")
+          .setLabel("Reason for approval")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMinLength(1)
+          .setMaxLength(2000)
+          .setRequired(true),
+      ),
+    );
+
+  await interaction.showModal(modal);
+}
+
+// ---------------------------------------------------------------------------
+// Approve modal submit
+// ---------------------------------------------------------------------------
+
+export async function handleAppealApproveSubmit(
+  interaction: ModalSubmitInteraction,
+): Promise<void> {
+  const parsed = parseIds(interaction.customId, APPEAL_APPROVE_MODAL_PREFIX);
+  if (!parsed) return;
+
+  const { guildId, caseId } = parsed;
+  const reason = interaction.fields.getTextInputValue("reason");
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const appeal = await getAppeal(guildId, caseId);
+  if (!appeal || appeal.status !== "pending") {
+    await interaction.editReply({ content: "This appeal has already been resolved." });
+    return;
+  }
+
+  const guild =
+    interaction.guild ?? (await interaction.client.guilds.fetch(guildId).catch(() => null));
+  if (!guild) return;
+
+  const now = new Date().toISOString();
+
+  await updateAppeal(guildId, caseId, {
+    status: "approved",
+    decision: {
+      reviewerId: interaction.user.id,
+      decidedAt: now,
+      reasonCode: "other",
+      note: reason,
+    },
+  });
+
+  // Record PARDON in sanction history and mod log
+  await pardon(guild, interaction.user.id, appeal.userId, appeal.userTag, reason);
+
+  // Unban if applicable — best-effort, non-fatal
+  await guild.bans.remove(appeal.userId, `Appeal approved: ${reason}`).catch(() => null);
+
+  // DM user — best-effort
+  const targetUser = await interaction.client.users.fetch(appeal.userId).catch(() => null);
+  if (targetUser) {
+    await targetUser
+      .send(
+        `✅ Your appeal for Case #${caseId} in **${guild.name}** has been **approved**.\n> ${reason}`,
+      )
+      .catch(() => null);
+  }
+
+  // Post resolution in thread
+  const thread = (await guild.channels
+    .fetch(appeal.threadId)
+    .catch(() => null)) as ThreadChannel | null;
+  if (thread) {
+    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
+    await thread
+      .send(
+        v2Message(
+          container(
+            "ok",
+            text(`✅ **Appeal approved** by <@${interaction.user.id}>\n**Reason:** ${reason}`),
+          ),
+        ) as any,
+      )
+      .catch(() => null);
+    await thread.setArchived(true).catch(() => null);
+  }
+
+  bus.emit({
+    type: "appeal:decided",
+    guildId,
+    userId: appeal.userId,
+    caseId,
+    reviewerId: interaction.user.id,
+    status: "approved",
+  });
+
+  await syncQueueMessage(guild, interaction.client);
+
+  await interaction.editReply({ content: `✅ Appeal for Case #${caseId} approved.` });
+}
+
+// ---------------------------------------------------------------------------
+// Deny button → modal
+// ---------------------------------------------------------------------------
+
+export async function handleAppealDenyButton(interaction: ButtonInteraction): Promise<void> {
+  if (!hasModPerms(interaction)) {
+    await interaction.reply({ content: "Permission denied.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const parsed = parseIds(interaction.customId, APPEAL_DENY_PREFIX);
+  if (!parsed) return;
+  const { guildId, caseId } = parsed;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`${APPEAL_DENY_MODAL_PREFIX}${guildId}:${caseId}`)
+    .setTitle(`Deny Appeal — Case #${caseId}`)
+    .addComponents(
+      new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("reason")
+          .setLabel("Reason for denial")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMinLength(1)
+          .setMaxLength(2000)
+          .setRequired(true),
+      ),
+    );
+
+  await interaction.showModal(modal);
+}
+
+// ---------------------------------------------------------------------------
+// Deny modal submit
+// ---------------------------------------------------------------------------
+
+export async function handleAppealDenySubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const parsed = parseIds(interaction.customId, APPEAL_DENY_MODAL_PREFIX);
+  if (!parsed) return;
+
+  const { guildId, caseId } = parsed;
+  const reason = interaction.fields.getTextInputValue("reason");
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const appeal = await getAppeal(guildId, caseId);
+  if (!appeal || appeal.status !== "pending") {
+    await interaction.editReply({ content: "This appeal has already been resolved." });
+    return;
+  }
+
+  const guild =
+    interaction.guild ?? (await interaction.client.guilds.fetch(guildId).catch(() => null));
+  if (!guild) return;
+
+  const now = new Date().toISOString();
+
+  await updateAppeal(guildId, caseId, {
+    status: "denied",
+    decision: {
+      reviewerId: interaction.user.id,
+      decidedAt: now,
+      reasonCode: "other",
+      note: reason,
+    },
+  });
+
+  // DM user — best-effort
+  const targetUser = await interaction.client.users.fetch(appeal.userId).catch(() => null);
+  if (targetUser) {
+    await targetUser
+      .send(
+        `❌ Your appeal for Case #${caseId} in **${guild.name}** has been **denied**.\n> ${reason}`,
+      )
+      .catch(() => null);
+  }
+
+  // Post resolution in thread
+  const thread = (await guild.channels
+    .fetch(appeal.threadId)
+    .catch(() => null)) as ThreadChannel | null;
+  if (thread) {
+    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
+    await thread
+      .send(
+        v2Message(
+          container(
+            "danger",
+            text(`❌ **Appeal denied** by <@${interaction.user.id}>\n**Reason:** ${reason}`),
+          ),
+        ) as any,
+      )
+      .catch(() => null);
+    await thread.setArchived(true).catch(() => null);
+  }
+
+  bus.emit({
+    type: "appeal:decided",
+    guildId,
+    userId: appeal.userId,
+    caseId,
+    reviewerId: interaction.user.id,
+    status: "denied",
+  });
+
+  await syncQueueMessage(guild, interaction.client);
+
+  await interaction.editReply({ content: `❌ Appeal for Case #${caseId} denied.` });
+}
+
+// ---------------------------------------------------------------------------
+// Request more info button → modal
+// ---------------------------------------------------------------------------
+
+export async function handleAppealInfoButton(interaction: ButtonInteraction): Promise<void> {
+  if (!hasModPerms(interaction)) {
+    await interaction.reply({ content: "Permission denied.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const parsed = parseIds(interaction.customId, APPEAL_INFO_PREFIX);
+  if (!parsed) return;
+  const { guildId, caseId } = parsed;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`${APPEAL_INFO_MODAL_PREFIX}${guildId}:${caseId}`)
+    .setTitle(`Request Info — Case #${caseId}`)
+    .addComponents(
+      new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("question")
+          .setLabel("What do you need to know?")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMinLength(1)
+          .setMaxLength(2000)
+          .setRequired(true),
+      ),
+    );
+
+  await interaction.showModal(modal);
+}
+
+// ---------------------------------------------------------------------------
+// Request more info modal submit
+// ---------------------------------------------------------------------------
+
+export async function handleAppealInfoSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const parsed = parseIds(interaction.customId, APPEAL_INFO_MODAL_PREFIX);
+  if (!parsed) return;
+
+  const { guildId, caseId } = parsed;
+  const question = interaction.fields.getTextInputValue("question");
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const appeal = await getAppeal(guildId, caseId);
+  if (!appeal || appeal.status === "approved" || appeal.status === "denied") {
+    await interaction.editReply({ content: "This appeal has already been resolved." });
+    return;
+  }
+
+  const guild =
+    interaction.guild ?? (await interaction.client.guilds.fetch(guildId).catch(() => null));
+  if (!guild) return;
+
+  await updateAppeal(guildId, caseId, { status: "info_requested" });
+
+  const thread = (await guild.channels
+    .fetch(appeal.threadId)
+    .catch(() => null)) as ThreadChannel | null;
+  if (thread) {
+    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
+    await thread
+      .send(
+        v2Message(
+          container(
+            "warn",
+            text(
+              `**<@${interaction.user.id}> requested more information:**\n${question}\n\n-# <@${appeal.userId}> — please check your DMs or respond in this thread.`,
+            ),
+          ),
+        ) as any,
+      )
+      .catch(() => null);
+  }
+
+  // DM user with the question — best-effort
+  const targetUser = await interaction.client.users.fetch(appeal.userId).catch(() => null);
+  if (targetUser) {
+    await targetUser
+      .send(
+        `📋 A moderator reviewing your appeal for Case #${caseId} in **${guild.name}** needs more information:\n> ${question}`,
+      )
+      .catch(() => null);
+  }
+  // Queue message stays unchanged — appeal remains pending (status: info_requested)
+
+  await interaction.editReply({ content: "📋 Question sent. The appeal remains open." });
+}
