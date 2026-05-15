@@ -12,19 +12,17 @@
  * Bus event `mod:action` is emitted for cross-feature listeners (e.g. escalation).
  */
 
-import type { Guild, GuildMember, TextChannel, User } from "discord.js";
-import { EmbedBuilder, Colors, PermissionFlagsBits, type PermissionResolvable } from "discord.js";
+import type { Guild, GuildMember, User } from "discord.js";
+import { PermissionFlagsBits, type PermissionResolvable } from "discord.js";
 import { OkResult, ErrResult, type Result } from "@/core/result";
 import { getDb } from "@/core/db";
 import { userStore, updateUserPaths } from "@/db/repositories/users";
 import { getGuild } from "@/db/repositories/guilds";
 import { bus } from "@/core/bus";
-import { createLogger } from "@/core/logger";
 import { missingPermission } from "@/middleware/permissions";
 import { msToHuman } from "@/utils/time";
 import type { SanctionHistoryEntry } from "@/db/schemas/user";
-
-const log = createLogger("moderation");
+import { sendModLog } from "./modlog";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -151,7 +149,7 @@ export async function recordAutomodSystemCase(
     caseId,
   };
 
-  await postModLog(guild, modResult, `AutoMod evidence: ${evidenceSummary.slice(0, 500)}`);
+  await sendModLog(guild, modResult, { note: `AutoMod evidence: ${evidenceSummary.slice(0, 500)}` });
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId, sanctionType: type, caseId });
   return OkResult(modResult);
 }
@@ -174,47 +172,6 @@ function validateTarget(
   return null;
 }
 
-/** Posts a structured embed to the mod log channel. Best-effort — never throws. */
-export async function postModLog(
-  guild: Guild,
-  result: ModerationResult,
-  extra?: string,
-): Promise<void> {
-  try {
-    const guildResult = await getGuild(guild.id);
-    if (guildResult.isErr()) return;
-    const channelId = guildResult.unwrap()?.moderation.modLogChannelId;
-    if (!channelId) return;
-
-    const channel = await guild.channels.fetch(channelId).catch(() => null);
-    if (!channel?.isTextBased() || !("send" in channel)) return;
-
-    const COLOR_MAP: Record<SanctionType, number> = {
-      BAN: Colors.Red,
-      KICK: Colors.Orange,
-      TIMEOUT: Colors.Yellow,
-      WARN: Colors.Yellow,
-      RESTRICT: Colors.Purple,
-      PARDON: Colors.Green,
-    };
-
-    const embed = new EmbedBuilder()
-      .setColor(COLOR_MAP[result.type] ?? Colors.Grey)
-      .setTitle(`${result.type} — Case #${result.caseId}`)
-      .addFields(
-        { name: "User", value: `<@${result.targetId}> (${result.targetTag})`, inline: true },
-        { name: "Moderator", value: `<@${result.moderatorId}>`, inline: true },
-        { name: "Reason", value: result.reason },
-      )
-      .setTimestamp();
-
-    if (extra) embed.addFields({ name: "Note", value: extra });
-
-    await (channel as TextChannel).send({ embeds: [embed] });
-  } catch (err) {
-    log.error("Failed to post mod log", err);
-  }
-}
 
 function checkBotPerms(guild: Guild, ...perms: PermissionResolvable[]): ModerationError | null {
   const bot = guild.members.me;
@@ -285,16 +242,16 @@ export async function ban(
     caseId,
   };
 
-  await postModLog(guild, modResult, duration ? `Temporary ban: expires in ${duration}` : undefined);
+  await sendModLog(guild, modResult, duration ? { duration } : undefined);
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "BAN", caseId });
 
   // Best-effort appeal DM
-  sendBanDm(guild, target, reason).catch(() => {});
+  sendBanDm(guild, target, reason, caseId).catch(() => {});
 
   return OkResult(modResult);
 }
 
-async function sendBanDm(guild: Guild, target: User, reason: string): Promise<void> {
+async function sendBanDm(guild: Guild, target: User, reason: string, caseId: number): Promise<void> {
   try {
     const guildResult = await getGuild(guild.id);
     if (guildResult.isErr()) return;
@@ -305,7 +262,7 @@ async function sendBanDm(guild: Guild, target: User, reason: string): Promise<vo
       const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import("discord.js");
       const row = new ActionRowBuilder<InstanceType<typeof ButtonBuilder>>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`mod:appeal:${guild.id}`)
+          .setCustomId(`mod:appeal:${guild.id}:${caseId}`)
           .setLabel("Appeal Ban")
           .setStyle(ButtonStyle.Secondary),
       );
@@ -350,7 +307,7 @@ export async function kick(
     caseId,
   };
 
-  await postModLog(guild, modResult);
+  await sendModLog(guild, modResult);
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "KICK", caseId });
 
   return OkResult(modResult);
@@ -403,7 +360,7 @@ export async function mute(
     caseId,
   };
 
-  await postModLog(guild, modResult, `Duration: ${msToHuman(durationMs)}`);
+  await sendModLog(guild, modResult, { duration: msToHuman(durationMs) });
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "TIMEOUT", caseId });
 
   return OkResult(modResult);
@@ -434,7 +391,7 @@ export async function warn(
     caseId,
   };
 
-  await postModLog(guild, modResult);
+  await sendModLog(guild, modResult);
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "WARN", caseId });
 
   // Check escalation thresholds after warn
@@ -513,7 +470,7 @@ export async function restrict(
   const caseId = await nextCaseId(guild.id);
   await pushSanction(target.id, guild.id, "RESTRICT", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
   const modResult: ModerationResult = { type: "RESTRICT", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId };
-  await postModLog(guild, modResult);
+  await sendModLog(guild, modResult);
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "RESTRICT", caseId });
   return OkResult(modResult);
 }
@@ -724,7 +681,7 @@ export async function quarantine(
     caseId,
   };
 
-  await postModLog(guild, modResult);
+  await sendModLog(guild, modResult);
   bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "RESTRICT", caseId });
 
   return OkResult(modResult);
@@ -784,7 +741,7 @@ export async function unban(
   const caseId = await nextCaseId(guild.id);
   await pushSanction(targetId, guild.id, "PARDON", reason, moderator.id, caseId).catch(() => {});
   const modResult: ModerationResult = { type: "PARDON", targetId, targetTag: targetTag ?? targetId, reason, moderatorId: moderator.id, caseId };
-  await postModLog(guild, modResult);
+  await sendModLog(guild, modResult);
   bus.emit({ type: "mod:action", guildId: guild.id, userId: targetId, moderatorId: moderator.id, sanctionType: "PARDON", caseId });
   return OkResult(modResult);
 }
@@ -813,4 +770,52 @@ export async function clearWarns(
   } catch (err) {
     return ErrResult(new ModerationError("DB_FAILED", `clearWarns failed: ${err instanceof Error ? err.message : String(err)}`));
   }
+}
+
+// ---------------------------------------------------------------------------
+// pardon (appeal approval)
+// ---------------------------------------------------------------------------
+
+/**
+ * Records a PARDON sanction entry for a user. Called by the appeals workflow
+ * when a moderator approves an appeal. Does not unban — the caller handles
+ * the Discord API unban so it can remain non-fatal and isolated from the
+ * sanction record write.
+ *
+ * A new sequential case ID is issued for the PARDON entry itself so each
+ * case is unique and auditable independently of the original ban case.
+ */
+export async function pardon(
+  guild: Guild,
+  reviewerId: string,
+  targetId: string,
+  targetTag: string,
+  reason: string,
+): Promise<Result<ModerationResult, ModerationError>> {
+  const caseId = await nextCaseId(guild.id);
+
+  await pushSanction(targetId, guild.id, "PARDON", reason, reviewerId, caseId, [], {
+    source: "appeal",
+  });
+
+  const modResult: ModerationResult = {
+    type: "PARDON",
+    targetId,
+    targetTag,
+    reason,
+    moderatorId: reviewerId,
+    caseId,
+  };
+
+  await sendModLog(guild, modResult);
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: targetId,
+    moderatorId: reviewerId,
+    sanctionType: "PARDON",
+    caseId,
+  });
+
+  return OkResult(modResult);
 }
