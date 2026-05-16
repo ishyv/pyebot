@@ -1,19 +1,14 @@
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import { getBalance, MutationError, transfer } from "@/features/economy/mutations";
+import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
-import { transfer, getBalance, MutationError } from "@/features/economy/mutations";
+import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("transfer")
   .setDescription("Transfer coins to another user")
-  .addUserOption((opt) =>
-    opt.setName("user").setDescription("Recipient").setRequired(true),
-  )
+  .addUserOption((opt) => opt.setName("user").setDescription("Recipient").setRequired(true))
   .addIntegerOption((opt) =>
     opt.setName("amount").setDescription("Amount to transfer").setRequired(true).setMinValue(1),
   )
@@ -24,7 +19,7 @@ export const data = new SlashCommandBuilder()
       .setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply();
 
   if (!interaction.guild) {
@@ -40,33 +35,34 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
   const beforeBalance = await getBalance(ctx, senderId, currencyId);
 
   try {
-    const { senderBalance, recipientBalance } = await transfer(ctx, senderId, recipient.id, currencyId, amount);
+    const { senderBalance, recipientBalance } = await transfer(
+      ctx,
+      senderId,
+      recipient.id,
+      currencyId,
+      amount,
+    );
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Blue)
-      .setTitle("💸 Transfer Sent")
-      .addFields(
-        {
-          name: "💰 Your Balance",
-          value: `${coins(beforeBalance, currencyId)} → ${coins(senderBalance, currencyId)}`,
-          inline: true,
-        },
-        { name: "📤 Sent", value: coins(amount, currencyId), inline: true },
-        {
-          name: "📥 Recipient",
-          value: `<@${recipient.id}> now has ${coins(recipientBalance, currencyId)}`,
-          inline: false,
-        },
-      )
-      .setFooter({ text: "💡 /balance • /bank" });
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "ok",
+          text(
+            `## 💸 Transfer Sent\n💰 **Your Balance:** ${coins(beforeBalance, currencyId)} → ${coins(senderBalance, currencyId)}\n📤 **Sent:** ${coins(amount, currencyId)}\n📥 **Recipient:** <@${recipient.id}> now has ${coins(recipientBalance, currencyId)}\n\n-# 💡 /balance • /bank`,
+          ),
+        ),
+      ),
+    );
   } catch (err) {
     const msg = err instanceof MutationError ? err.message : "An error occurred.";
-    const errEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setTitle("❌ Transfer Failed")
-      .setDescription(msg);
-    await interaction.editReply({ embeds: [errEmbed] });
+    await interaction.editReply(
+      v2Message(container("danger", text(`## ❌ Transfer Failed\n${msg}`))),
+    );
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/balance"] },
+  execute,
+});

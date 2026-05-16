@@ -4,15 +4,15 @@
  */
 
 import {
-  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
   type ButtonInteraction,
+  ButtonStyle,
   type MessageActionRowComponentBuilder,
+  MessageFlags,
 } from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
 import { createLogger } from "@/core/logger";
+import { getGuild } from "@/db/repositories/guilds";
 
 const log = createLogger("moderation:verify-button");
 
@@ -29,7 +29,9 @@ async function disableButton(interaction: ButtonInteraction): Promise<void> {
         .setDisabled(true),
     );
     await interaction.message.edit({ components: [row] });
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort */
+  }
 }
 
 export async function handleVerifyButton(interaction: ButtonInteraction): Promise<void> {
@@ -56,7 +58,9 @@ export async function handleVerifyButton(interaction: ButtonInteraction): Promis
 
   const roleId = guildResult.unwrap()!.moderation.verification.roleId;
   if (!roleId) {
-    await interaction.editReply({ content: "Verification role is not configured. Please contact a moderator." });
+    await interaction.editReply({
+      content: "Verification role is not configured. Please contact a moderator.",
+    });
     return;
   }
 

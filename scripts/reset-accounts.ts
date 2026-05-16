@@ -8,7 +8,7 @@
  */
 
 import "dotenv/config";
-import { getDb, disconnectDb } from "../src/core/db";
+import { disconnectDb, getDb } from "../src/core/db";
 
 const HARD = process.argv.includes("--hard");
 
@@ -45,7 +45,9 @@ async function main() {
 
   const achievementProgress = await db.collection("achievementProgress").deleteMany({});
   const achievementUnlocks = await db.collection("achievementUnlocks").deleteMany({});
-  console.log(`[reset] Deleted ${achievementProgress.deletedCount} achievement progress, ${achievementUnlocks.deletedCount} unlocks.`);
+  console.log(
+    `[reset] Deleted ${achievementProgress.deletedCount} achievement progress, ${achievementUnlocks.deletedCount} unlocks.`,
+  );
 
   await disconnectDb();
   console.log("[reset] Done.");

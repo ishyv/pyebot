@@ -1,3 +1,4 @@
+import { defineCommand } from "@/framework";
 /**
  * /ai set-provider <provider> — Set the AI provider for this guild.
  * /ai set-model <model>       — Set the AI model for this guild.
@@ -5,17 +6,16 @@
  */
 
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  PermissionFlagsBits,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
-import { clearMemory } from "@/features/ai/service";
-import { aiConfig } from "@/features/ai/config";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+import { aiConfig } from "@/features/ai/config";
+import { clearMemory } from "@/features/ai/service";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
 // Flatten all model names for the set-model command choices
 const ALL_MODELS = [
@@ -26,7 +26,7 @@ const ALL_MODELS = [
 const DEFAULT_OPENAI_MODEL = aiConfig.providers.openai.low;
 const DEFAULT_GEMINI_MODEL = aiConfig.providers.google.low;
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("ai")
   .setDescription("AI feature configuration")
   .addSubcommand((sub) =>
@@ -53,23 +53,15 @@ export const data = new SlashCommandBuilder()
           .setName("model")
           .setDescription("Model name")
           .setRequired(true)
-          .addChoices(
-          ...[...ALL_MODELS].slice(0,25).map((m) => ({ name: m, value: m })),
-          ),
+          .addChoices(...[...ALL_MODELS].slice(0, 25).map((m) => ({ name: m, value: m }))),
       ),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName("clear-memory")
-      .setDescription("Clear your personal AI conversation history"),
+    sub.setName("clear-memory").setDescription("Clear your personal AI conversation history"),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("panel")
-      .setDescription("Open the AI configuration panel"),
-  );
+  .addSubcommand((sub) => sub.setName("panel").setDescription("Open the AI configuration panel"));
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
   if (sub === "set-provider") {
@@ -93,7 +85,9 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
 
   if (!isAdmin) {
     await interaction.reply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Permission Denied").setDescription("Only admins can change the AI provider.")],
+      ...v2Message(
+        container("danger", text("## Permission Denied\nOnly admins can change the AI provider.")),
+      ),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -110,23 +104,22 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
   });
 
   if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update AI provider.")],
-    });
+    await interaction.editReply(
+      v2Message(container("danger", text("## Failed\nCould not update AI provider."))),
+    );
     return;
   }
 
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Blue)
-        .setTitle("⚙️ AI Provider Updated")
-        .addFields(
-          { name: "Provider", value: provider, inline: true },
-          { name: "Default Model", value: `\`${defaultModel}\``, inline: true },
-        ),
-    ],
-  });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "info",
+        text("## AI Provider Updated"),
+        separator("sm"),
+        text(`**Provider:** ${provider}\n**Default Model:** \`${defaultModel}\``),
+      ),
+    ),
+  );
 }
 
 async function handleSetModel(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -138,7 +131,9 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
 
   if (!isAdmin) {
     await interaction.reply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Permission Denied").setDescription("Only admins can change the AI model.")],
+      ...v2Message(
+        container("danger", text("## Permission Denied\nOnly admins can change the AI model.")),
+      ),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -151,31 +146,39 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
   const result = await updateGuildPaths(interaction.guildId!, { "ai.model": model });
 
   if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription("Could not update AI model.")],
-    });
+    await interaction.editReply(
+      v2Message(container("danger", text("## Failed\nCould not update AI model."))),
+    );
     return;
   }
 
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Blue)
-        .setTitle("⚙️ AI Model Updated")
-        .addFields({ name: "Model", value: `\`${model}\``, inline: true }),
-    ],
-  });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "info",
+        text("## AI Model Updated"),
+        separator("sm"),
+        text(`**Model:** \`${model}\``),
+      ),
+    ),
+  );
 }
 
 async function handleClearMemory(interaction: ChatInputCommandInteraction): Promise<void> {
   clearMemory(interaction.user.id);
   await interaction.reply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Green)
-        .setTitle("🧹 Memory Cleared")
-        .setDescription("Your AI conversation history has been cleared. Fresh start!"),
-    ],
+    ...v2Message(
+      container(
+        "ok",
+        text("## Memory Cleared\nYour AI conversation history has been cleared. Fresh start!"),
+      ),
+    ),
     flags: MessageFlags.Ephemeral,
   });
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/context"] },
+  execute,
+});

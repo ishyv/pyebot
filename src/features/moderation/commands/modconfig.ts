@@ -1,3 +1,4 @@
+import { defineCommand } from "@/framework";
 /**
  * /modconfig — Admin configuration for moderation settings.
  *
@@ -8,18 +9,17 @@
  */
 
 import {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   ChannelType,
   type ChatInputCommandInteraction,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
+import { container, separator, text, v2Message } from "@/ui/v2";
 import { parseDuration } from "@/utils/duration";
 import { msToHuman } from "@/utils/time";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("modconfig")
   .setDescription("Configure moderation settings")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -61,10 +61,7 @@ export const data = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Enable or disable escalation")
           .setRequired(true)
-          .addChoices(
-            { name: "Enable", value: "enable" },
-            { name: "Disable", value: "disable" },
-          ),
+          .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
       )
       .addIntegerOption((opt) =>
         opt
@@ -82,7 +79,7 @@ export const data = new SlashCommandBuilder()
       ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
   if (sub === "modlog") await handleModlog(interaction);
@@ -111,25 +108,17 @@ async function handleModlog(interaction: ChatInputCommandInteraction): Promise<v
   });
 
   if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("Failed")
-          .setDescription("Could not update mod log channel."),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(container("danger", text("## Failed\nCould not update mod log channel."))),
+    );
     return;
   }
 
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Green)
-        .setTitle("Mod Log Channel Set")
-        .setDescription(`Mod log channel set to <#${channel.id}>.`),
-    ],
-  });
+  await interaction.editReply(
+    v2Message(
+      container("ok", text(`## Mod Log Channel Set\nMod log channel set to <#${channel.id}>.`)),
+    ),
+  );
 }
 
 async function handleRestrictRoles(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -148,25 +137,20 @@ async function handleRestrictRoles(interaction: ChatInputCommandInteraction): Pr
   });
 
   if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("Failed")
-          .setDescription("Could not update restriction role."),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(container("danger", text("## Failed\nCould not update restriction role."))),
+    );
     return;
   }
 
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Green)
-        .setTitle("Restriction Role Set")
-        .setDescription(`Restriction role for **${type}** set to <@&${role.id}>.`),
-    ],
-  });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        text(`## Restriction Role Set\nRestriction role for **${type}** set to <@&${role.id}>.`),
+      ),
+    ),
+  );
 }
 
 async function handleEscalation(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -187,14 +171,16 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
   if (durationStr !== null) {
     durationMs = parseDuration(durationStr);
     if (durationMs === null) {
-      await interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(Colors.Red)
-            .setTitle("Invalid Duration")
-            .setDescription("Invalid duration. Valid formats: 10s, 5m, 2h, 3d, 1w (maximum 28 days)"),
-        ],
-      });
+      await interaction.editReply(
+        v2Message(
+          container(
+            "danger",
+            text(
+              "## Invalid Duration\nInvalid duration. Valid formats: 10s, 5m, 2h, 3d, 1w (maximum 28 days)",
+            ),
+          ),
+        ),
+      );
       return;
     }
   }
@@ -214,29 +200,34 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
   const result = await updateGuildPaths(interaction.guild.id, paths);
 
   if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("Failed")
-          .setDescription("Could not update escalation settings."),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(container("danger", text("## Failed\nCould not update escalation settings."))),
+    );
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(enabled ? Colors.Green : Colors.Grey)
-    .setTitle("Escalation Settings Updated")
-    .setDescription(`Auto-escalation is now **${enabled ? "enabled" : "disabled"}**.`);
+  const escalationLines = [
+    threshold !== null ? `**Warn Threshold:** ${threshold}` : null,
+    durationMs !== null ? `**Mute Duration:** ${msToHuman(durationMs)}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  if (threshold !== null) {
-    embed.addFields({ name: "Warn Threshold", value: `${threshold}`, inline: true });
-  }
-
-  if (durationMs !== null) {
-    embed.addFields({ name: "Mute Duration", value: msToHuman(durationMs), inline: true });
-  }
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        enabled ? "ok" : "mute",
+        text(
+          `## Escalation Settings Updated\nAuto-escalation is now **${enabled ? "enabled" : "disabled"}**.`,
+        ),
+        ...(escalationLines ? [separator("sm"), text(escalationLines)] : []),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/modset status", "/mod help"] },
+  execute,
+});

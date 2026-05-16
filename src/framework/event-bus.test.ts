@@ -7,16 +7,24 @@
 import { describe, expect, it } from "bun:test";
 import { EventBus } from "./event-bus";
 
-class EventA { constructor(public n: number) {} }
-class EventB { constructor(public s: string) {} }
+class EventA {
+  constructor(public n: number) {}
+}
+class EventB {
+  constructor(public s: string) {}
+}
 
 describe("EventBus", () => {
   it("invokes listeners registered for the event class only", async () => {
     const bus = new EventBus();
     const seenA: number[] = [];
     const seenB: string[] = [];
-    bus.on(EventA, (e: EventA) => { seenA.push(e.n); });
-    bus.on(EventB, (e: EventB) => { seenB.push(e.s); });
+    bus.on(EventA, (e: EventA) => {
+      seenA.push(e.n);
+    });
+    bus.on(EventB, (e: EventB) => {
+      seenB.push(e.s);
+    });
 
     await bus.emit(new EventA(1), {});
     await bus.emit(new EventB("x"), {});
@@ -28,8 +36,12 @@ describe("EventBus", () => {
   it("calls multiple listeners in registration order", async () => {
     const bus = new EventBus();
     const order: string[] = [];
-    bus.on(EventA, () => { order.push("first"); });
-    bus.on(EventA, () => { order.push("second"); });
+    bus.on(EventA, () => {
+      order.push("first");
+    });
+    bus.on(EventA, () => {
+      order.push("second");
+    });
     await bus.emit(new EventA(0), {});
     expect(order).toEqual(["first", "second"]);
   });
@@ -42,8 +54,12 @@ describe("EventBus", () => {
       await (ctx as { emit: (e: object) => Promise<void> }).emit(new EventB("nested"));
       order.push("A-2");
     });
-    bus.on(EventA, () => { order.push("A-other"); });
-    bus.on(EventB, () => { order.push("B"); });
+    bus.on(EventA, () => {
+      order.push("A-other");
+    });
+    bus.on(EventB, () => {
+      order.push("B");
+    });
 
     // Construct a small ctx-like object that proxies emit back into the bus.
     const ctx = { emit: (e: object) => bus.emit(e, ctx) };
@@ -56,8 +72,12 @@ describe("EventBus", () => {
   it("does not stop on listener errors", async () => {
     const bus = new EventBus();
     const seen: number[] = [];
-    bus.on(EventA, () => { throw new Error("boom"); });
-    bus.on(EventA, (e: EventA) => { seen.push(e.n); });
+    bus.on(EventA, () => {
+      throw new Error("boom");
+    });
+    bus.on(EventA, (e: EventA) => {
+      seen.push(e.n);
+    });
     await bus.emit(new EventA(42), {});
     expect(seen).toEqual([42]);
   });

@@ -5,15 +5,9 @@
  * Calls acceptFight() and transitions session to active, then shows combat move buttons.
  */
 
-import {
-  EmbedBuilder,
-  Colors,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  type ButtonInteraction,
-} from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, type ButtonInteraction, ButtonStyle } from "discord.js";
 import { acceptFight, getFightSession } from "@/features/rpg/combat/fight";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
 export const FIGHT_ACCEPT_PREFIX = "fight_accept:";
 
@@ -52,15 +46,18 @@ export async function handleFightAccept(interaction: ButtonInteraction): Promise
       .setStyle(ButtonStyle.Primary),
   );
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Red)
-    .setTitle("Fight Started!")
-    .setDescription(
-      `<@${session.p1Id}> vs <@${session.p2Id}>\n\n` +
-      `**Round ${session.currentRound}** — Both players must choose a move.\n` +
-      `HP: <@${session.p1Id}> **${session.p1Hp}/${session.p1MaxHp}** | <@${session.p2Id}> **${session.p2Hp}/${session.p2MaxHp}**`,
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed], components: [moveRow] });
+  await interaction.editReply({
+    ...v2Message(
+      container(
+        "danger",
+        text(`## Fight Started!\n<@${session.p1Id}> vs <@${session.p2Id}>`),
+        separator("sm"),
+        text(
+          `**Round ${session.currentRound}** — Both players must choose a move.\n` +
+            `HP: <@${session.p1Id}> **${session.p1Hp}/${session.p1MaxHp}** | <@${session.p2Id}> **${session.p2Hp}/${session.p2MaxHp}**`,
+        ),
+      ),
+    ),
+    components: [moveRow],
+  });
 }

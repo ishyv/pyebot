@@ -1,19 +1,17 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { ban, TEMP_BAN_DURATION_CHOICES } from "@/features/moderation/service";
+import { renderModlogCase } from "@/features/moderation/views";
+import { defineCommand } from "@/framework";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("ban")
   .setDescription("Ban a user from the server")
-  .addUserOption((opt) =>
-    opt.setName("user").setDescription("User to ban").setRequired(true),
-  )
+  .addUserOption((opt) => opt.setName("user").setDescription("User to ban").setRequired(true))
   .addStringOption((opt) =>
     opt.setName("reason").setDescription("Reason for the ban").setRequired(true),
   )
@@ -26,9 +24,12 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .setDMPermission(false);
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild || !interaction.member) {
-    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -46,16 +47,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const { caseId } = result.unwrap();
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Red)
-    .setTitle("User Banned")
-    .setDescription(`**${target.tag}** has been ${duration ? `temporarily banned for **${duration}**` : "permanently banned"}.`)
-    .addFields(
-      { name: "Reason", value: reason },
-      { name: "Case", value: `#${caseId}`, inline: true },
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  const modResult = result.unwrap();
+  await interaction.editReply(
+    renderModlogCase({ result: modResult, extras: duration ? { duration } : undefined }),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

@@ -16,16 +16,16 @@
  * responsibility after receiving a CombatResult.
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
-import { sessions, locks } from "@/core/state";
+import { ErrResult, OkResult, type Result } from "@/core/result";
+import { locks, sessions } from "@/core/state";
 import { ensureRpgProfile, patchRpgProfile } from "@/db/repositories/rpg";
 import {
-  CombatEngine,
-  generateSessionId,
   type ActiveCombatSession,
+  COMBAT_CONFIG,
+  CombatEngine,
   type CombatMove,
   type CombatResult,
-  COMBAT_CONFIG,
+  generateSessionId,
 } from "./engine";
 
 // ---------------------------------------------------------------------------
@@ -131,14 +131,18 @@ export async function initiateFight(
     ensureRpgProfile(targetId),
   ]);
 
-  if (p1Res.isErr()) return ErrResult(new FightError("PROFILE_NOT_FOUND", "Inviter profile not found"));
-  if (p2Res.isErr()) return ErrResult(new FightError("PROFILE_NOT_FOUND", "Target profile not found"));
+  if (p1Res.isErr())
+    return ErrResult(new FightError("PROFILE_NOT_FOUND", "Inviter profile not found"));
+  if (p2Res.isErr())
+    return ErrResult(new FightError("PROFILE_NOT_FOUND", "Target profile not found"));
 
   const p1Profile = p1Res.unwrap();
   const p2Profile = p2Res.unwrap();
 
-  if (p1Profile.isFighting) return ErrResult(new FightError("IN_COMBAT", "You are already in combat"));
-  if (p2Profile.isFighting) return ErrResult(new FightError("IN_COMBAT", "Target is already in combat"));
+  if (p1Profile.isFighting)
+    return ErrResult(new FightError("IN_COMBAT", "You are already in combat"));
+  if (p2Profile.isFighting)
+    return ErrResult(new FightError("IN_COMBAT", "Target is already in combat"));
 
   const p1Stats = defaultStats(options.p1Stats);
   const p2Stats = defaultStats(options.p2Stats);
@@ -237,7 +241,9 @@ export async function submitMove(
       return ErrResult(new FightError("NOT_YOUR_FIGHT", "You are not in this fight"));
     }
     if (session.pendingMoves.has(playerId)) {
-      return ErrResult(new FightError("ALREADY_MOVED", "You have already submitted a move this round"));
+      return ErrResult(
+        new FightError("ALREADY_MOVED", "You have already submitted a move this round"),
+      );
     }
 
     session.pendingMoves.set(playerId, move);

@@ -32,10 +32,14 @@ describe("AppealSchema", () => {
     const { AppealSchema } = await import("../schemas/appeal");
     const result = AppealSchema.safeParse({
       _id: "appeal:g1:1",
-      guildId: "g1", caseId: 1, userId: "u1", userTag: "u",
+      guildId: "g1",
+      caseId: 1,
+      userId: "u1",
+      userTag: "u",
       submittedAt: new Date().toISOString(),
       reason: "x".repeat(2001),
-      threadId: "t1", status: "pending",
+      threadId: "t1",
+      status: "pending",
     });
     expect(result.success).toBe(false);
   });
@@ -44,7 +48,10 @@ describe("AppealSchema", () => {
     const { AppealSchema } = await import("../schemas/appeal");
     const result = AppealSchema.safeParse({
       _id: "appeal:g1:1",
-      guildId: "g1", caseId: 1, userId: "u1", userTag: "u",
+      guildId: "g1",
+      caseId: 1,
+      userId: "u1",
+      userTag: "u",
       submittedAt: new Date().toISOString(),
       reason: "reason",
       threadId: "t1",

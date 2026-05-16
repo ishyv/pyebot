@@ -1,3 +1,4 @@
+import { defineCommand } from "@/framework";
 /**
  * /automod linkspam <enable|disable> [options]
  * /automod whitelist <add|remove> <domain>
@@ -6,16 +7,15 @@
 
 import {
   type ChatInputCommandInteraction,
-  Colors,
-  EmbedBuilder,
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
 import type { CommandContext } from "@/core/feature";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("automod")
   .setDescription("Configure automatic moderation")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -318,7 +318,7 @@ export const data = new SlashCommandBuilder()
     sub.setName("panel").setDescription("Open the automod configuration panel"),
   );
 
-export async function execute(
+async function execute(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
 ): Promise<void> {
@@ -363,29 +363,33 @@ async function handleLinkspam(
   const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await ctx.respond.fail({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("❌ Failed")
-          .setDescription("Could not update configuration."),
-      ],
-    });
+    await ctx.respond.fail(
+      v2Message(container("danger", text("## Failed\nCould not update configuration."))),
+    );
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(enabled ? Colors.Green : Colors.Grey)
-    .setTitle("⚙️ Link Spam Detection Updated")
-    .setDescription(`Link spam detection is now **${enabled ? "enabled" : "disabled"}**.`)
-    .setFooter({ text: "💡 Use /automod status to see full config" });
+  const extraLines = [
+    maxLinks !== null ? `**Max Links:** ${maxLinks}` : null,
+    windowSeconds !== null ? `**Window:** ${windowSeconds}s` : null,
+    response !== null ? `**Action:** ${response}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  if (maxLinks !== null) embed.addFields({ name: "Max Links", value: `${maxLinks}`, inline: true });
-  if (windowSeconds !== null)
-    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
-  if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
-
-  await ctx.respond.send({ embeds: [embed] });
+  await ctx.respond.send(
+    v2Message(
+      container(
+        enabled ? "ok" : "mute",
+        text(
+          `## Link Spam Detection Updated\nLink spam detection is now **${enabled ? "enabled" : "disabled"}**.`,
+        ),
+        ...(extraLines ? [separator("sm"), text(extraLines)] : []),
+        separator("sm"),
+        text("-# Use /automod status to see full config"),
+      ),
+    ),
+  );
 }
 
 async function handleWhitelist(
@@ -435,17 +439,18 @@ async function handleWhitelist(
     return;
   }
 
-  await ctx.respond.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(action === "add" ? Colors.Green : Colors.Orange)
-        .setTitle(`${action === "add" ? "✅ Domain Added" : "🗑️ Domain Removed"}`)
-        .setDescription(
-          `\`${domain}\` has been ${action === "add" ? "added to" : "removed from"} the whitelist.`,
-        )
-        .addFields({ name: "Total Entries", value: `${updated.length}`, inline: true }),
-    ],
-  });
+  await ctx.respond.send(
+    v2Message(
+      container(
+        action === "add" ? "ok" : "warn",
+        text(
+          `## ${action === "add" ? "Domain Added" : "Domain Removed"}\n` +
+            `\`${domain}\` has been ${action === "add" ? "added to" : "removed from"} the whitelist.\n` +
+            `**Total Entries:** ${updated.length}`,
+        ),
+      ),
+    ),
+  );
 }
 
 async function handleReportChannel(
@@ -467,29 +472,26 @@ async function handleReportChannel(
   );
 
   if (result.isErr()) {
-    await ctx.respond.fail({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("❌ Failed")
-          .setDescription("Could not update report channel."),
-      ],
-    });
+    await ctx.respond.fail(
+      v2Message(container("danger", text("## Failed\nCould not update report channel."))),
+    );
     return;
   }
 
-  await ctx.respond.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Blue)
-        .setTitle("⚙️ Report Channel Updated")
-        .setDescription(
-          channelId
-            ? `Automod reports will be sent to <#${channelId}>.`
-            : "Report channel cleared — reports are disabled.",
+  await ctx.respond.send(
+    v2Message(
+      container(
+        "info",
+        text(
+          `## Report Channel Updated\n${
+            channelId
+              ? `Automod reports will be sent to <#${channelId}>.`
+              : "Report channel cleared — reports are disabled."
+          }`,
         ),
-    ],
-  });
+      ),
+    ),
+  );
 }
 
 async function handleStatus(
@@ -571,18 +573,24 @@ async function handlePolicy(
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle("AutoMod Policy Updated")
-    .setDescription("Tiered evidence policy has been updated.");
-  if (preset !== null) embed.addFields({ name: "Preset", value: preset, inline: true });
-  if (aiDetector !== null)
-    embed.addFields({ name: "AI detector", value: aiDetector ? "on" : "off", inline: true });
-  if (staffBypass !== null)
-    embed.addFields({ name: "Staff bypass", value: staffBypass ? "on" : "off", inline: true });
-  if (retentionDays !== null)
-    embed.addFields({ name: "Profile retention", value: `${retentionDays}d`, inline: true });
-  await ctx.respond.send({ embeds: [embed] });
+  const policyLines = [
+    preset !== null ? `**Preset:** ${preset}` : null,
+    aiDetector !== null ? `**AI detector:** ${aiDetector ? "on" : "off"}` : null,
+    staffBypass !== null ? `**Staff bypass:** ${staffBypass ? "on" : "off"}` : null,
+    retentionDays !== null ? `**Profile retention:** ${retentionDays}d` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  await ctx.respond.send(
+    v2Message(
+      container(
+        "info",
+        text("## AutoMod Policy Updated\nTiered evidence policy has been updated."),
+        ...(policyLines ? [separator("sm"), text(policyLines)] : []),
+      ),
+    ),
+  );
 }
 
 async function handleCrossChannel(
@@ -613,40 +621,37 @@ async function handleCrossChannel(
   const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await ctx.respond.fail({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("❌ Failed")
-          .setDescription("Could not update configuration."),
-      ],
-    });
+    await ctx.respond.fail(
+      v2Message(container("danger", text("## Failed\nCould not update configuration."))),
+    );
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(enabled ? Colors.Green : Colors.Grey)
-    .setTitle("⚙️ Cross-Channel Spam Detection Updated")
-    .setDescription(`Cross-channel spam detection is now **${enabled ? "enabled" : "disabled"}**.`)
-    .setFooter({ text: "💡 Use /automod status to see full config" });
+  const crossChannelLines = [
+    minChannels !== null ? `**Min Channels:** ${minChannels}` : null,
+    windowSeconds !== null ? `**Window:** ${windowSeconds}s` : null,
+    autoTimeout !== null ? `**Auto-timeout:** ${autoTimeout ? "on" : "off"}` : null,
+    timeoutSeconds !== null ? `**Timeout Duration:** ${timeoutSeconds}s` : null,
+    reportChannel !== undefined
+      ? `**Report Channel:** ${reportChannel ? `<#${reportChannel.id}>` : "cleared"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  if (minChannels !== null)
-    embed.addFields({ name: "Min Channels", value: `${minChannels}`, inline: true });
-  if (windowSeconds !== null)
-    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
-  if (autoTimeout !== null)
-    embed.addFields({ name: "Auto-timeout", value: autoTimeout ? "on" : "off", inline: true });
-  if (timeoutSeconds !== null)
-    embed.addFields({ name: "Timeout Duration", value: `${timeoutSeconds}s`, inline: true });
-  if (reportChannel !== undefined) {
-    embed.addFields({
-      name: "Report Channel",
-      value: reportChannel ? `<#${reportChannel.id}>` : "cleared",
-      inline: true,
-    });
-  }
-
-  await ctx.respond.send({ embeds: [embed] });
+  await ctx.respond.send(
+    v2Message(
+      container(
+        enabled ? "ok" : "mute",
+        text(
+          `## Cross-Channel Spam Detection Updated\nCross-channel spam detection is now **${enabled ? "enabled" : "disabled"}**.`,
+        ),
+        ...(crossChannelLines ? [separator("sm"), text(crossChannelLines)] : []),
+        separator("sm"),
+        text("-# Use /automod status to see full config"),
+      ),
+    ),
+  );
 }
 
 async function handleMentionSpam(
@@ -674,32 +679,34 @@ async function handleMentionSpam(
   const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await ctx.respond.fail({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("❌ Failed")
-          .setDescription("Could not update configuration."),
-      ],
-    });
+    await ctx.respond.fail(
+      v2Message(container("danger", text("## Failed\nCould not update configuration."))),
+    );
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(enabled ? Colors.Green : Colors.Grey)
-    .setTitle("⚙️ Mention Spam Detection Updated")
-    .setDescription(`Mention spam detection is now **${enabled ? "enabled" : "disabled"}**.`)
-    .setFooter({ text: "💡 Use /automod status to see full config" });
+  const mentionLines = [
+    maxMentions !== null ? `**Max Mentions:** ${maxMentions}` : null,
+    windowSeconds !== null ? `**Window:** ${windowSeconds}s` : null,
+    response !== null ? `**Action:** ${response}` : null,
+    timeoutSeconds !== null ? `**Timeout Duration:** ${timeoutSeconds}s` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  if (maxMentions !== null)
-    embed.addFields({ name: "Max Mentions", value: `${maxMentions}`, inline: true });
-  if (windowSeconds !== null)
-    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
-  if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
-  if (timeoutSeconds !== null)
-    embed.addFields({ name: "Timeout Duration", value: `${timeoutSeconds}s`, inline: true });
-
-  await ctx.respond.send({ embeds: [embed] });
+  await ctx.respond.send(
+    v2Message(
+      container(
+        enabled ? "ok" : "mute",
+        text(
+          `## Mention Spam Detection Updated\nMention spam detection is now **${enabled ? "enabled" : "disabled"}**.`,
+        ),
+        ...(mentionLines ? [separator("sm"), text(mentionLines)] : []),
+        separator("sm"),
+        text("-# Use /automod status to see full config"),
+      ),
+    ),
+  );
 }
 
 async function handleSlowmode(
@@ -727,33 +734,34 @@ async function handleSlowmode(
   const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await ctx.respond.fail({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("❌ Failed")
-          .setDescription("Could not update configuration."),
-      ],
-    });
+    await ctx.respond.fail(
+      v2Message(container("danger", text("## Failed\nCould not update configuration."))),
+    );
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(enabled ? Colors.Green : Colors.Grey)
-    .setTitle("⚙️ Auto-Slowmode Updated")
-    .setDescription(`Automatic slowmode is now **${enabled ? "enabled" : "disabled"}**.`)
-    .setFooter({ text: "💡 Use /automod status to see full config" });
+  const slowmodeLines = [
+    messagesPerWindow !== null ? `**Trigger:** ${messagesPerWindow} messages` : null,
+    windowSeconds !== null ? `**Window:** ${windowSeconds}s` : null,
+    slowmodeSeconds !== null ? `**Slowmode Rate:** ${slowmodeSeconds}s` : null,
+    releaseAfter !== null ? `**Release After:** ${releaseAfter}s` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  if (messagesPerWindow !== null)
-    embed.addFields({ name: "Trigger", value: `${messagesPerWindow} messages`, inline: true });
-  if (windowSeconds !== null)
-    embed.addFields({ name: "Window", value: `${windowSeconds}s`, inline: true });
-  if (slowmodeSeconds !== null)
-    embed.addFields({ name: "Slowmode Rate", value: `${slowmodeSeconds}s`, inline: true });
-  if (releaseAfter !== null)
-    embed.addFields({ name: "Release After", value: `${releaseAfter}s`, inline: true });
-
-  await ctx.respond.send({ embeds: [embed] });
+  await ctx.respond.send(
+    v2Message(
+      container(
+        enabled ? "ok" : "mute",
+        text(
+          `## Auto-Slowmode Updated\nAutomatic slowmode is now **${enabled ? "enabled" : "disabled"}**.`,
+        ),
+        ...(slowmodeLines ? [separator("sm"), text(slowmodeLines)] : []),
+        separator("sm"),
+        text("-# Use /automod status to see full config"),
+      ),
+    ),
+  );
 }
 
 async function handleRaid(
@@ -782,37 +790,36 @@ async function handleRaid(
   const result = await updateGuildPaths(guildId, paths, { upsert: true });
 
   if (result.isErr()) {
-    await ctx.respond.fail({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("❌ Failed")
-          .setDescription("Could not update configuration."),
-      ],
-    });
+    await ctx.respond.fail(
+      v2Message(container("danger", text("## Failed\nCould not update configuration."))),
+    );
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(enabled ? Colors.Green : Colors.Grey)
-    .setTitle("⚙️ Raid Detection Updated")
-    .setDescription(`Raid detection is now **${enabled ? "enabled" : "disabled"}**.`)
-    .setFooter({ text: "💡 Use /automod status to see full config" });
+  const raidLines = [
+    joinsPerMinute !== null ? `**Join Rate:** ${joinsPerMinute}/min` : null,
+    minAccountAge !== null ? `**Min Account Age:** ${minAccountAge}d` : null,
+    response !== null ? `**Action:** ${response}` : null,
+    reportChannel !== undefined
+      ? `**Report Channel:** ${reportChannel ? `<#${reportChannel.id}>` : "cleared"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  if (joinsPerMinute !== null)
-    embed.addFields({ name: "Join Rate", value: `${joinsPerMinute}/min`, inline: true });
-  if (minAccountAge !== null)
-    embed.addFields({ name: "Min Account Age", value: `${minAccountAge}d`, inline: true });
-  if (response !== null) embed.addFields({ name: "Action", value: response, inline: true });
-  if (reportChannel !== undefined) {
-    embed.addFields({
-      name: "Report Channel",
-      value: reportChannel ? `<#${reportChannel.id}>` : "cleared",
-      inline: true,
-    });
-  }
-
-  await ctx.respond.send({ embeds: [embed] });
+  await ctx.respond.send(
+    v2Message(
+      container(
+        enabled ? "ok" : "mute",
+        text(
+          `## Raid Detection Updated\nRaid detection is now **${enabled ? "enabled" : "disabled"}**.`,
+        ),
+        ...(raidLines ? [separator("sm"), text(raidLines)] : []),
+        separator("sm"),
+        text("-# Use /automod status to see full config"),
+      ),
+    ),
+  );
 }
 
 async function handlePattern(
@@ -873,14 +880,11 @@ async function handlePattern(
     }
     const { invalidatePatternCache } = await import("@/features/automod/service");
     invalidatePatternCache(guildId);
-    await ctx.respond.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Orange)
-          .setTitle("🗑️ Pattern Removed")
-          .setDescription(`Pattern \`${name}\` has been removed.`),
-      ],
-    });
+    await ctx.respond.send(
+      v2Message(
+        container("warn", text(`## Pattern Removed\nPattern \`${name}\` has been removed.`)),
+      ),
+    );
     return;
   }
 
@@ -934,16 +938,20 @@ async function handlePattern(
   const { invalidatePatternCache } = await import("@/features/automod/service");
   invalidatePatternCache(guildId);
 
-  await ctx.respond.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Green)
-        .setTitle("✅ Pattern Added")
-        .setDescription(`Pattern \`${name}\` has been added.`)
-        .addFields(
-          { name: "Regex", value: `\`/${regex}/${flags}\``, inline: true },
-          { name: "Action", value: response, inline: true },
+  await ctx.respond.send(
+    v2Message(
+      container(
+        "ok",
+        text(
+          `## Pattern Added\nPattern \`${name}\` has been added.\n\n**Regex:** \`/${regex}/${flags}\`\n**Action:** ${response}`,
         ),
-    ],
-  });
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/mod help"] },
+  execute,
+});

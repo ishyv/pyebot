@@ -6,10 +6,10 @@
  * to avoid Bun module mock cross-contamination with mutations.test.ts and minigames.test.ts.
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { OkResult } from "@/core/result";
-import type { User } from "@/db/schemas/user";
 import type { MarketListingDoc } from "@/db/schemas/market";
+import type { User } from "@/db/schemas/user";
 
 // ---------------------------------------------------------------------------
 // Cooldown spies used by the ctx stub.
@@ -22,7 +22,15 @@ const mockSetCooldown = mock((_userId: string, _key: string, _ms: number) => {})
 const NOW = new Date("2026-01-01T00:00:00.000Z");
 
 function makeAccountValue(status: "ok" | "blocked" | "banned" = "ok") {
-  return { status, createdAt: NOW, updatedAt: NOW, lastActivityAt: NOW, version: 0, dailyStreak: 0, lastDailyAt: null };
+  return {
+    status,
+    createdAt: NOW,
+    updatedAt: NOW,
+    lastActivityAt: NOW,
+    version: 0,
+    dailyStreak: 0,
+    lastDailyAt: null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +55,9 @@ function makeUser(currency: Record<string, number> = { coins: 500 }): User {
 
 const mockUserGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
 const mockUserEnsure = mock(async (_id: string) => OkResult(makeUser()));
-const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) => OkResult(undefined as void));
+const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
+  OkResult(undefined as void),
+);
 
 mock.module("@/db/repositories/users", () => ({
   userStore: {
@@ -108,17 +118,28 @@ mock.module("@/db/repositories/economy", () => ({
     get: mockMarketGet,
     set: mockMarketSet,
     replaceIfMatch: mockMarketReplaceIfMatch,
-    collection: mock(async () => { throw new Error("collection() not mocked"); }),
+    collection: mock(async () => {
+      throw new Error("collection() not mocked");
+    }),
   },
   findActiveListings: mockFindActiveListings,
   countActiveListings: mockCountActiveListings,
   // achievement store stubs (not used in market tests)
-  achievementProgressStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
-  achievementUnlocksStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  achievementProgressStore: {
+    get: mock(async () => OkResult(null)),
+    set: mock(async () => OkResult(null)),
+  },
+  achievementUnlocksStore: {
+    get: mock(async () => OkResult(null)),
+    set: mock(async () => OkResult(null)),
+  },
   getUnlocksForUser: mock(async () => OkResult([])),
   getProgressForUser: mock(async () => OkResult([])),
   // quest store stubs (not used in market tests)
-  questProgressStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  questProgressStore: {
+    get: mock(async () => OkResult(null)),
+    set: mock(async () => OkResult(null)),
+  },
   getActiveQuestsForUser: mock(async () => OkResult([])),
 }));
 
@@ -146,7 +167,7 @@ function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
       }
 
       const bal = walletStore[id];
-      return bal ? { balances: bal, bankBalances: {} } as never : null;
+      return bal ? ({ balances: bal, bankBalances: {} } as never) : null;
     },
     ensure: async (id: string, component: { collection?: string }) => {
       if (component.collection === "economy_accounts") {
@@ -159,7 +180,9 @@ function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
     patch: async (id: string, _: unknown, fn: unknown) => {
       if (!walletStore[id]) walletStore[id] = { coins: 0 };
       const cur = { balances: walletStore[id], bankBalances: {} };
-      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as { balances?: Record<string, number> };
+      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
+        balances?: Record<string, number>;
+      };
       if (patch.balances) walletStore[id] = patch.balances;
     },
     set: async () => {},
@@ -172,8 +195,9 @@ function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
 // Import AFTER mocking
 // ---------------------------------------------------------------------------
 
-const { createListing, buyListing, cancelListing, browseListings, MarketError } =
-  await import("./market");
+const { createListing, buyListing, cancelListing, browseListings, MarketError } = await import(
+  "./market"
+);
 
 // ---------------------------------------------------------------------------
 // Reset helpers
@@ -296,7 +320,12 @@ describe("buyListing", () => {
     // buyer has 500 coins, cost = 5 * 10 * 1.02 = 51
     mockUserEnsure.mockImplementation(async () => OkResult(makeUser({ coins: 500 })));
 
-    const result = await buyListing(makeCtx({ "buyer-1": { coins: 500 } }), "buyer-1", "listing:test-1", 5);
+    const result = await buyListing(
+      makeCtx({ "buyer-1": { coins: 500 } }),
+      "buyer-1",
+      "listing:test-1",
+      5,
+    );
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -315,7 +344,12 @@ describe("buyListing", () => {
     listingStore.set("listing:test-1", makeListing({ quantity: 10 }));
     mockUserEnsure.mockImplementation(async () => OkResult(makeUser({ coins: 1000 })));
 
-    const result = await buyListing(makeCtx({ "buyer-1": { coins: 1000 } }), "buyer-1", "listing:test-1", 10);
+    const result = await buyListing(
+      makeCtx({ "buyer-1": { coins: 1000 } }),
+      "buyer-1",
+      "listing:test-1",
+      10,
+    );
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap().listingRemaining).toBe(0);
@@ -363,7 +397,12 @@ describe("buyListing", () => {
     mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser({ coins: 50 })));
     mockUserEnsure.mockImplementation(async () => OkResult(makeUser({ coins: 50 })));
 
-    const result = await buyListing(makeCtx({ "buyer-1": { coins: 50 } }), "buyer-1", "listing:test-1", 5);
+    const result = await buyListing(
+      makeCtx({ "buyer-1": { coins: 50 } }),
+      "buyer-1",
+      "listing:test-1",
+      5,
+    );
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("INSUFFICIENT_FUNDS");
@@ -404,7 +443,9 @@ describe("cancelListing", () => {
   test("moderator can cancel with allowModeratorOverride", async () => {
     listingStore.set("listing:test-1", makeListing({ sellerId: "seller-1" }));
 
-    const result = await cancelListing(makeCtx(), "mod-1", "listing:test-1", { allowModeratorOverride: true });
+    const result = await cancelListing(makeCtx(), "mod-1", "listing:test-1", {
+      allowModeratorOverride: true,
+    });
     expect(result.isOk()).toBe(true);
   });
 
@@ -460,7 +501,10 @@ describe("browseListings", () => {
     const result = await browseListings(makeCtx(), "guild-1", { itemId: "wood" });
 
     expect(result.isOk()).toBe(true);
-    expect(mockFindActiveListings).toHaveBeenCalledWith("guild-1", expect.objectContaining({ itemId: "wood" }));
+    expect(mockFindActiveListings).toHaveBeenCalledWith(
+      "guild-1",
+      expect.objectContaining({ itemId: "wood" }),
+    );
   });
 
   test("supports pagination via page and pageSize", async () => {
@@ -470,6 +514,9 @@ describe("browseListings", () => {
     const data = result.unwrap();
     expect(data.page).toBe(2);
     expect(data.pageSize).toBe(5);
-    expect(mockFindActiveListings).toHaveBeenCalledWith("guild-1", expect.objectContaining({ skip: 10, limit: 5 }));
+    expect(mockFindActiveListings).toHaveBeenCalledWith(
+      "guild-1",
+      expect.objectContaining({ skip: 10, limit: 5 }),
+    );
   });
 });

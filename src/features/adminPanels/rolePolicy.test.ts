@@ -30,4 +30,3 @@ describe("role policy helpers", () => {
     expect(formatLimit(undefined)).toBe("No limit");
   });
 });
-

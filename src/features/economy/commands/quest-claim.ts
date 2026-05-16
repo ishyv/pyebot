@@ -1,21 +1,17 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { claimRewards } from "@/features/economy/quests";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("quest-claim")
   .setDescription("Claim rewards for a completed quest")
   .addStringOption((opt) =>
     opt.setName("quest_id").setDescription("Quest ID to claim rewards for").setRequired(true),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -35,18 +31,24 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
 
   const { rewards } = result.unwrap();
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Gold)
-    .setTitle("Rewards Claimed!")
-    .setDescription(`Quest **${questId}** rewards collected.`);
+  const rewardLines = rewards.map(
+    (r) => `**${r.type === "currency" ? "Currency" : "XP"}:** ${r.description}`,
+  );
 
-  for (const reward of rewards) {
-    embed.addFields({
-      name: reward.type === "currency" ? "Currency" : "XP",
-      value: reward.description,
-      inline: true,
-    });
-  }
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        text(
+          `## Rewards Claimed!\nQuest **${questId}** rewards collected.\n\n${rewardLines.join("\n")}`,
+        ),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/quest-list", "/balance"] },
+  execute,
+});

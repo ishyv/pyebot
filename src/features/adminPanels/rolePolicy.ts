@@ -1,4 +1,9 @@
-import type { GuildRoleRecord, LimitWindow, RoleCommandOverride, RoleLimitRecord } from "@/db/schemas/guild";
+import type {
+  GuildRoleRecord,
+  LimitWindow,
+  RoleCommandOverride,
+  RoleLimitRecord,
+} from "@/db/schemas/guild";
 
 export const MODERATION_ACTIONS = [
   { key: "timeout", label: "Timeout" },
@@ -9,10 +14,15 @@ export const MODERATION_ACTIONS = [
 ] as const;
 
 export function normalizeActionKey(input: string): string {
-  return input.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
 }
 
-export function parseLimitWindow(input: string): { ok: true; value: LimitWindow | null; seconds: number | null } | { ok: false; error: string } {
+export function parseLimitWindow(
+  input: string,
+): { ok: true; value: LimitWindow | null; seconds: number | null } | { ok: false; error: string } {
   const normalized = input.trim().toLowerCase();
   if (!normalized || normalized.startsWith("0")) {
     return { ok: true, value: null, seconds: null };
@@ -40,7 +50,11 @@ export function formatLimit(limit: RoleLimitRecord | undefined): string {
   return `${limit.limit} use(s)${limit.window ? ` per ${limit.window}` : ""}`;
 }
 
-export function createRoleRecord(roleId: string, label: string, updatedBy: string): GuildRoleRecord {
+export function createRoleRecord(
+  roleId: string,
+  label: string,
+  updatedBy: string,
+): GuildRoleRecord {
   return {
     label,
     discordRoleId: roleId,
@@ -50,4 +64,3 @@ export function createRoleRecord(roleId: string, label: string, updatedBy: strin
     updatedAt: new Date().toISOString(),
   };
 }
-

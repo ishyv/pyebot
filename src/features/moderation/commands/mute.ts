@@ -1,23 +1,22 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
+import { sendModLog } from "@/features/moderation/modlog";
+import { dmUser } from "@/features/moderation/notifications";
 import { mute } from "@/features/moderation/service";
+import { renderModlogCase } from "@/features/moderation/views";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
 import { parseDuration } from "@/utils/duration";
 import { msToHuman } from "@/utils/time";
-import { dmUser } from "@/features/moderation/notifications";
-import { sendModLog } from "@/features/moderation/modlog";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("mute")
   .setDescription("Timeout (mute) a member")
-  .addUserOption((opt) =>
-    opt.setName("user").setDescription("Member to mute").setRequired(true),
-  )
+  .addUserOption((opt) => opt.setName("user").setDescription("Member to mute").setRequired(true))
   .addStringOption((opt) =>
     opt
       .setName("duration")
@@ -30,9 +29,12 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setDMPermission(false);
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -44,14 +46,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const durationMs = parseDuration(durationStr);
   if (durationMs === null) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setTitle("Invalid Duration")
-          .setDescription("Invalid duration. Valid formats: 10s, 5m, 2h, 3d, 1w (maximum 28 days)"),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "danger",
+          text(
+            "**Invalid duration.** Valid formats: `10s`, `5m`, `2h`, `3d`, `1w` — maximum 28 days.",
+          ),
+        ),
+      ),
+    );
     return;
   }
 
@@ -80,15 +84,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     sendModLog(interaction.guild, modResult, { duration: humanDuration }),
   ]);
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Yellow)
-    .setTitle("Member Muted")
-    .setDescription(`**${targetUser.tag}** has been timed out for **${humanDuration}**.`)
-    .addFields(
-      { name: "Reason", value: reason },
-      { name: "Case ID", value: `#${modResult.caseId}` },
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    renderModlogCase({ result: modResult, extras: { duration: humanDuration } }),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

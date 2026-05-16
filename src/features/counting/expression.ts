@@ -26,7 +26,11 @@ const MAX_EXPRESSION_LENGTH = 80;
 
 export function evaluateIntegerExpression(input: string): Result<number, ExpressionError> {
   if (input.length > MAX_EXPRESSION_LENGTH) {
-    return ErrResult({ code: "too_long", message: "Expression is too long.", position: MAX_EXPRESSION_LENGTH });
+    return ErrResult({
+      code: "too_long",
+      message: "Expression is too long.",
+      position: MAX_EXPRESSION_LENGTH,
+    });
   }
 
   const parser = new ArithmeticParser(input);
@@ -35,7 +39,11 @@ export function evaluateIntegerExpression(input: string): Result<number, Express
 
   const value = result.unwrap();
   if (!Number.isSafeInteger(value)) {
-    return ErrResult({ code: "unsafe_result", message: "Expression result must be a safe integer.", position: input.length });
+    return ErrResult({
+      code: "unsafe_result",
+      message: "Expression result must be a safe integer.",
+      position: input.length,
+    });
   }
 
   return OkResult(value);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { AutoroleRuleValue } from "@/components/autorole-rule";
 import {
   AUTOROLE_TOGGLE_PREFIX,
   autoroleButtonId,
@@ -10,7 +11,6 @@ import {
   parseDurationMs,
   timedGrantId,
 } from "./rules";
-import type { AutoroleRuleValue } from "@/components/autorole-rule";
 
 function rule(
   name: string,
@@ -48,7 +48,10 @@ describe("autorole rule helpers", () => {
     const rules = [
       rule("hit", { trigger: { type: "onReact", messageId: "m1", emoji: "✅" }, roleId: "r1" }),
       rule("wildcard", { trigger: { type: "onReact", messageId: "m1", emoji: "*" }, roleId: "r2" }),
-      rule("wrong-message", { trigger: { type: "onReact", messageId: "m2", emoji: "✅" }, roleId: "r3" }),
+      rule("wrong-message", {
+        trigger: { type: "onReact", messageId: "m2", emoji: "✅" },
+        roleId: "r3",
+      }),
       rule("disabled", {
         enabled: false,
         trigger: { type: "onReact", messageId: "m1", emoji: "✅" },
@@ -80,8 +83,14 @@ describe("autorole rule helpers", () => {
 
     const rules = [
       rule("hit", { trigger: { type: "onButton", messageId: "m1", label: "Join" }, roleId: "r1" }),
-      rule("wrong-role", { trigger: { type: "onButton", messageId: "m1", label: "Join" }, roleId: "r2" }),
-      rule("wrong-message", { trigger: { type: "onButton", messageId: "m2", label: "Join" }, roleId: "r1" }),
+      rule("wrong-role", {
+        trigger: { type: "onButton", messageId: "m1", label: "Join" },
+        roleId: "r2",
+      }),
+      rule("wrong-message", {
+        trigger: { type: "onButton", messageId: "m2", label: "Join" },
+        roleId: "r1",
+      }),
     ];
 
     expect(findButtonRules(rules, customId).map((r) => r.name)).toEqual(["hit"]);

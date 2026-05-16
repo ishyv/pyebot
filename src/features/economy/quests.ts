@@ -9,16 +9,13 @@
  *       Progress events are called from event handlers (gather, fight, craft, market commands).
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
-import type { Ctx } from "@/framework/types";
+import { ErrResult, OkResult, type Result } from "@/core/result";
 import { locks } from "@/core/state";
-import { adjustBalance } from "@/features/economy/mutations";
-import {
-  questProgressStore,
-  getActiveQuestsForUser,
-} from "@/db/repositories/economy";
-import { buildProgressId } from "@/utils/ids";
+import { getActiveQuestsForUser, questProgressStore } from "@/db/repositories/economy";
 import type { QuestProgressDoc } from "@/db/schemas/quest";
+import { adjustBalance } from "@/features/economy/mutations";
+import type { Ctx } from "@/framework/types";
+import { buildProgressId } from "@/utils/ids";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -174,7 +171,9 @@ export async function acceptQuest(
   if (existing.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", existing.error.message));
 
   if (existing.unwrap() && !existing.unwrap()!.rewardsClaimed) {
-    return ErrResult(new QuestError("QUEST_ALREADY_ACTIVE", "This quest is already active or completed"));
+    return ErrResult(
+      new QuestError("QUEST_ALREADY_ACTIVE", "This quest is already active or completed"),
+    );
   }
 
   const now = new Date();
@@ -230,10 +229,16 @@ export async function progressQuest(
     if (current >= step.qty) continue; // already done
 
     const matches =
-      (step.kind === "gather_item" && event.kind === "gather_item" && step.itemId === event.itemId) ||
+      (step.kind === "gather_item" &&
+        event.kind === "gather_item" &&
+        step.itemId === event.itemId) ||
       (step.kind === "fight_win" && event.kind === "fight_win") ||
-      (step.kind === "craft_recipe" && event.kind === "craft_recipe" && step.recipeId === event.recipeId) ||
-      (step.kind === "market_buy_item" && event.kind === "market_buy_item" && step.itemId === event.itemId);
+      (step.kind === "craft_recipe" &&
+        event.kind === "craft_recipe" &&
+        step.recipeId === event.recipeId) ||
+      (step.kind === "market_buy_item" &&
+        event.kind === "market_buy_item" &&
+        step.itemId === event.itemId);
 
     if (matches) {
       const increment = event.qty ?? 1;
@@ -304,8 +309,10 @@ export async function claimRewards(
 
     const doc = existing.unwrap();
     if (!doc) return ErrResult(new QuestError("QUEST_NOT_STARTED", "Quest not started"));
-    if (!doc.completed) return ErrResult(new QuestError("QUEST_NOT_COMPLETED", "Quest not yet completed"));
-    if (doc.rewardsClaimed) return ErrResult(new QuestError("REWARDS_ALREADY_CLAIMED", "Rewards already claimed"));
+    if (!doc.completed)
+      return ErrResult(new QuestError("QUEST_NOT_COMPLETED", "Quest not yet completed"));
+    if (doc.rewardsClaimed)
+      return ErrResult(new QuestError("REWARDS_ALREADY_CLAIMED", "Rewards already claimed"));
 
     const appliedRewards: ClaimedQuestReward[] = [];
 
@@ -313,17 +320,31 @@ export async function claimRewards(
     for (const reward of def.rewards.currency ?? []) {
       try {
         await adjustBalance(ctx, userId, reward.currencyId, reward.amount);
-        appliedRewards.push({ type: "currency", description: `${reward.amount} ${reward.currencyId}`, amount: reward.amount });
-      } catch { /* skip reward on mutation failure */ }
+        appliedRewards.push({
+          type: "currency",
+          description: `${reward.amount} ${reward.currencyId}`,
+          amount: reward.amount,
+        });
+      } catch {
+        /* skip reward on mutation failure */
+      }
     }
 
     // Note XP rewards (pending progression module)
     if (def.rewards.xp) {
-      appliedRewards.push({ type: "xp", description: `${def.rewards.xp} XP (pending progression module)`, amount: def.rewards.xp });
+      appliedRewards.push({
+        type: "xp",
+        description: `${def.rewards.xp} XP (pending progression module)`,
+        amount: def.rewards.xp,
+      });
     }
 
     // Mark claimed
-    await questProgressStore.set(docId, { ...doc, rewardsClaimed: true, rewardsClaimedAt: new Date() });
+    await questProgressStore.set(docId, {
+      ...doc,
+      rewardsClaimed: true,
+      rewardsClaimedAt: new Date(),
+    });
 
     return OkResult({ rewards: appliedRewards });
   } finally {
@@ -347,9 +368,7 @@ export interface QuestView {
   readonly startedAt: Date;
 }
 
-export async function getActiveQuests(
-  userId: string,
-): Promise<Result<QuestView[], QuestError>> {
+export async function getActiveQuests(userId: string): Promise<Result<QuestView[], QuestError>> {
   const activeRes = await getActiveQuestsForUser(userId);
   if (activeRes.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", activeRes.error.message));
 

@@ -6,12 +6,7 @@
  * IDs, or intra-pack references drift. Runtime validation still runs at startup
  * for cross-record invariants that are clearer outside the type system.
  */
-import type {
-  DropTableDef,
-  ItemDef,
-  LocationDef,
-  RecipeDef,
-} from "@/content/schemas";
+
 import type {
   LoadedContentPacks,
   SourcedDropTableDef,
@@ -19,6 +14,7 @@ import type {
   SourcedLocationDef,
   SourcedRecipeDef,
 } from "@/content/loader";
+import type { DropTableDef, ItemDef, LocationDef, RecipeDef } from "@/content/schemas";
 
 type StringKeyOf<T> = Extract<keyof T, string>;
 
@@ -36,11 +32,13 @@ type AuthorDropEntry<ItemId extends string> = Omit<DropTableDef["entries"][numbe
   readonly itemId: ItemId;
 };
 
-type AuthorDropTable<ItemId extends string, LocationId extends string> =
-  Omit<DropTableDef, "entries" | "locationId"> & {
-    readonly locationId?: LocationId;
-    readonly entries: readonly AuthorDropEntry<ItemId>[];
-  };
+type AuthorDropTable<ItemId extends string, LocationId extends string> = Omit<
+  DropTableDef,
+  "entries" | "locationId"
+> & {
+  readonly locationId?: LocationId;
+  readonly entries: readonly AuthorDropEntry<ItemId>[];
+};
 
 type AuthorLocation<ItemId extends string> = Omit<LocationDef, "materials"> & {
   readonly materials?: readonly ItemId[];
@@ -112,13 +110,17 @@ export function defineDropTables<
 export function defineContentPack<
   const Items extends Record<string, ItemDef>,
   const Locations extends Record<string, AuthorLocation<StringKeyOf<Items>>>,
-  const DropTables extends Record<string, AuthorDropTable<StringKeyOf<Items>, StringKeyOf<Locations>>>,
+  const DropTables extends Record<
+    string,
+    AuthorDropTable<StringKeyOf<Items>, StringKeyOf<Locations>>
+  >,
   const Recipes extends Record<string, AuthorRecipe<StringKeyOf<Items>>>,
 >(pack: {
   readonly id: string;
   readonly items: Items & ItemMap<Items>;
   readonly locations: Locations & LocationMap<StringKeyOf<Items>, Locations>;
-  readonly dropTables: DropTables & DropTableMap<StringKeyOf<Items>, StringKeyOf<Locations>, DropTables>;
+  readonly dropTables: DropTables &
+    DropTableMap<StringKeyOf<Items>, StringKeyOf<Locations>, DropTables>;
   readonly recipes: Recipes & RecipeMap<StringKeyOf<Items>, Recipes>;
 }): DefinedContentPack<Items, Recipes, Locations, DropTables> {
   return pack;

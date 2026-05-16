@@ -14,7 +14,7 @@
  * and we honour the newest intent.
  */
 
-import { generateNodes, MAX_DEPTH, type Biome, type Depth, type ExpeditionNode } from "./world";
+import { type Biome, type Depth, type ExpeditionNode, generateNodes, MAX_DEPTH } from "./world";
 
 export interface ExpeditionState {
   readonly userId: string;

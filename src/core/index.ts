@@ -1,26 +1,33 @@
-export { Ok, Err, OkResult, ErrResult, type Result } from "./result";
-export { createLogger, type Logger } from "./logger";
-export { CooldownManager, SessionManager, LockSet, cooldowns, locks } from "./state";
-export { getDb, getMongoClient, disconnectDb } from "./db";
+export { type BusEvent, bus } from "./bus";
 export { createClient } from "./client";
-export { bus, type BusEvent } from "./bus";
+export { disconnectDb, getDb, getMongoClient } from "./db";
+export { createDispatcher } from "./dispatcher";
+export type {
+  CommandContext,
+  ComponentHandler,
+  EventRegistration,
+  FeatureCommand,
+  MiddlewareFn,
+  RuntimeFeature,
+} from "./feature";
+export { listConfigurableFeatures, listFeatureCatalog, setFeatureCatalog } from "./featureCatalog";
 export {
   booleanConfigField,
   buildConfigFieldPatch,
   channelConfigField,
   defineFeatureConfig,
+  type FeatureConfigDefinition,
+  type FeatureConfigField,
+  type FeatureConfigValidationIssue,
   getConfigPathValue,
   numberConfigField,
   resolveConfiguredChannel,
   selectConfigField,
   stringConfigField,
   validateFeatureConfig,
-  type FeatureConfigDefinition,
-  type FeatureConfigField,
-  type FeatureConfigValidationIssue,
 } from "./featureConfig";
-export { listConfigurableFeatures, listFeatureCatalog, setFeatureCatalog } from "./featureCatalog";
-export type { RuntimeFeature, FeatureCommand, ComponentHandler, EventRegistration, CommandContext, MiddlewareFn } from "./feature";
-export { FeatureRegistry } from "./registry";
+export { createLogger, type Logger } from "./logger";
 export { runMiddleware } from "./middleware";
-export { createDispatcher } from "./dispatcher";
+export { FeatureRegistry } from "./registry";
+export { Err, ErrResult, Ok, OkResult, type Result } from "./result";
+export { CooldownManager, cooldowns, LockSet, locks, SessionManager } from "./state";

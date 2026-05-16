@@ -17,12 +17,14 @@ import { component } from "@/framework/component";
 
 const StackEntry = z.object({ qty: z.number().int().nonnegative().catch(0) });
 const InstanceEntry = z.object({
-  instances: z.array(
-    z.object({
-      instanceId: z.string(),
-      durability: z.number().int().nonnegative().catch(0),
-    }),
-  ).catch(() => []),
+  instances: z
+    .array(
+      z.object({
+        instanceId: z.string(),
+        durability: z.number().int().nonnegative().catch(0),
+      }),
+    )
+    .catch(() => []),
 });
 
 export const InventorySlot = z.union([StackEntry, InstanceEntry]);

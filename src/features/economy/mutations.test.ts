@@ -4,41 +4,62 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { Ctx } from "@/framework/types";
-import { UserCurrency } from "@/components/user-currency";
 import { EconomyAccount } from "@/components/economy-account";
-import { getBalance, adjustBalance, transfer, MutationError } from "./mutations";
+import { UserCurrency } from "@/components/user-currency";
+import type { Ctx } from "@/framework/types";
+import { adjustBalance, getBalance, MutationError, transfer } from "./mutations";
 
 // ---------------------------------------------------------------------------
 // In-memory Ctx stub
 // ---------------------------------------------------------------------------
 
 type WalletMap = Map<string, { balances: Record<string, number> }>;
-type AccountMap = Map<string, { status: string; createdAt: Date; updatedAt: Date; lastActivityAt: Date; version: number }>;
+type AccountMap = Map<
+  string,
+  { status: string; createdAt: Date; updatedAt: Date; lastActivityAt: Date; version: number }
+>;
 
-function makeCtx(opts: {
-  wallets?: Record<string, Record<string, number>>;
-  accounts?: Record<string, "ok" | "blocked" | "banned">;
-} = {}): Ctx {
+function makeCtx(
+  opts: {
+    wallets?: Record<string, Record<string, number>>;
+    accounts?: Record<string, "ok" | "blocked" | "banned">;
+  } = {},
+): Ctx {
   const wallets: WalletMap = new Map(
     Object.entries(opts.wallets ?? {}).map(([id, b]) => [id, { balances: b }]),
   );
   const accounts: AccountMap = new Map(
     Object.entries(opts.accounts ?? {}).map(([id, status]) => [
       id,
-      { status, createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0 },
+      {
+        status,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastActivityAt: new Date(),
+        version: 0,
+      },
     ]),
   );
 
-  function getWallet(id: string) { return wallets.get(id) ?? null; }
+  function getWallet(id: string) {
+    return wallets.get(id) ?? null;
+  }
   function ensureWallet(id: string) {
     if (!wallets.has(id)) wallets.set(id, { balances: {} });
     return wallets.get(id)!;
   }
-  function getAccount(id: string) { return accounts.get(id) ?? null; }
+  function getAccount(id: string) {
+    return accounts.get(id) ?? null;
+  }
   function ensureAccountDoc(id: string) {
     if (!accounts.has(id)) {
-      accounts.set(id, { status: "ok", createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0 });
+      accounts.set(id, {
+        status: "ok",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastActivityAt: new Date(),
+        version: 0,
+      });
     }
     return accounts.get(id)!;
   }
@@ -57,17 +78,25 @@ function makeCtx(opts: {
     async patch(id: string, component: unknown, patchOrFn: unknown) {
       if (component === UserCurrency) {
         const current = ensureWallet(id);
-        const delta = typeof patchOrFn === "function" ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current) : patchOrFn as Partial<typeof current>;
+        const delta =
+          typeof patchOrFn === "function"
+            ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current)
+            : (patchOrFn as Partial<typeof current>);
         if (delta.balances) current.balances = delta.balances;
       } else if (component === EconomyAccount) {
         const current = ensureAccountDoc(id);
-        const delta = typeof patchOrFn === "function" ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current) : patchOrFn as Partial<typeof current>;
+        const delta =
+          typeof patchOrFn === "function"
+            ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current)
+            : (patchOrFn as Partial<typeof current>);
         Object.assign(current, delta);
       }
     },
     async set() {},
     async delete() {},
-    async query() { return []; },
+    async query() {
+      return [];
+    },
     async emit() {},
     client: null as any,
     logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as any,
@@ -162,7 +191,13 @@ describe("transfer", () => {
     const ctx = makeCtx({
       wallets: { sender: { coins: 200 }, recipient: { coins: 50 } },
     });
-    const { senderBalance, recipientBalance } = await transfer(ctx, "sender", "recipient", "coins", 100);
+    const { senderBalance, recipientBalance } = await transfer(
+      ctx,
+      "sender",
+      "recipient",
+      "coins",
+      100,
+    );
     expect(senderBalance).toBe(100);
     expect(recipientBalance).toBe(150);
   });

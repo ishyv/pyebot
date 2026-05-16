@@ -1,30 +1,31 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { kick } from "@/features/moderation/service";
-import { dmUser } from "../notifications";
+import { defineCommand } from "@/framework";
 import { sendModLog } from "../modlog";
+import { dmUser } from "../notifications";
+import { renderModlogCase } from "../views";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("kick")
   .setDescription("Kick a member from the server")
-  .addUserOption((opt) =>
-    opt.setName("user").setDescription("Member to kick").setRequired(true),
-  )
+  .addUserOption((opt) => opt.setName("user").setDescription("Member to kick").setRequired(true))
   .addStringOption((opt) =>
     opt.setName("reason").setDescription("Reason for the kick").setRequired(true),
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
   .setDMPermission(false);
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -55,15 +56,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await dmUser(targetMember.user, "KICK", interaction.guild.name, reason, sanctionResult.caseId);
   await sendModLog(interaction.guild, sanctionResult);
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Orange)
-    .setTitle("Member Kicked")
-    .setDescription(`**${targetUser.tag}** has been kicked.`)
-    .addFields(
-      { name: "Reason", value: reason },
-      { name: "Case ID", value: `#${sanctionResult.caseId}`, inline: true },
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(renderModlogCase({ result: sanctionResult }));
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

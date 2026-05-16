@@ -12,30 +12,24 @@
  * rather than a thread of messages.
  */
 
+import { ActionRowBuilder, ButtonBuilder, type ButtonInteraction, ButtonStyle } from "discord.js";
 import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  Colors,
-  type ButtonInteraction,
-} from "discord.js";
-import {
-  startSession,
-  getSession,
   advance,
-  regenNodes,
-  endSession,
   type ExpeditionState,
+  endSession,
+  getSession,
+  regenNodes,
+  startSession,
 } from "@/features/rpg/expedition/session";
 import {
+  actionForBiome,
+  type Biome,
   locationForBiomeDepth,
   locationNameForBiomeDepth,
-  actionForBiome,
   MAX_DEPTH,
-  type Biome,
 } from "@/features/rpg/expedition/world";
 import { gatherAtLocation, getEquippedToolTier } from "@/features/rpg/gathering";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
 const PREFIX = "expedition:";
 
@@ -48,37 +42,30 @@ export function isExpeditionButton(customId: string): boolean {
 // ---------------------------------------------------------------------------
 
 const BIOME_EMOJI: Record<Biome, string> = { mine: "⛏️", forest: "🌲" };
-const BIOME_COLOR: Record<Biome, number> = {
-  mine:   Colors.DarkGrey,
-  forest: Colors.DarkGreen,
-};
 
 /**
- * Builds the expedition embed and button rows for the current session state.
+ * Builds the expedition v2 message and button rows for the current session state.
  * Row 1: one button per visible node.
  * Row 2: Go Deeper (gated by tool tier) + Leave.
  */
-function renderExpedition(
-  state: ExpeditionState,
-  toolTier: number,
-  gatherLine?: string,
-): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
+function renderExpedition(state: ExpeditionState, toolTier: number, gatherLine?: string) {
   const locationName = locationNameForBiomeDepth(state.biome, state.depth);
   const emoji = BIOME_EMOJI[state.biome];
 
-  const nodeList = state.nodes
-    .map((n) => `**${n.display}** — *${n.flavor}*`)
-    .join("\n");
+  const nodeList = state.nodes.map((n) => `**${n.display}** — *${n.flavor}*`).join("\n");
 
-  const description = gatherLine ? `${gatherLine}\n\n${nodeList}` : nodeList;
+  const bodyText = gatherLine ? `${gatherLine}\n\n${nodeList}` : nodeList;
 
-  const embed = new EmbedBuilder()
-    .setColor(BIOME_COLOR[state.biome])
-    .setTitle(`${emoji} ${locationName} — Depth ${state.depth}`)
-    .setDescription(description)
-    .setFooter({
-      text: `Tool tier: ${toolTier} | Depth ${state.depth}/${MAX_DEPTH} | 💡 /craft • /equip`,
-    });
+  const v2 = v2Message(
+    container(
+      "info",
+      text(`## ${emoji} ${locationName} — Depth ${state.depth}`),
+      separator("sm"),
+      text(bodyText),
+      separator("sm"),
+      text(`-# Tool tier: ${toolTier} | Depth ${state.depth}/${MAX_DEPTH} | 💡 /craft • /equip`),
+    ),
+  );
 
   const nodeButtons = state.nodes.map((node) =>
     new ButtonBuilder()
@@ -102,7 +89,7 @@ function renderExpedition(
       .setStyle(ButtonStyle.Danger),
   );
 
-  return { embeds: [embed], components: [nodeRow, navRow] };
+  return { ...v2, _rows: [nodeRow, navRow] };
 }
 
 // ---------------------------------------------------------------------------
@@ -122,8 +109,8 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
     const userId = interaction.user.id;
     const state = startSession(userId, biome);
     const toolTier = await getEquippedToolTier(userId);
-    const { embeds, components } = renderExpedition(state, toolTier);
-    await interaction.editReply({ embeds, components });
+    const { _rows, ...v2Payload } = renderExpedition(state, toolTier);
+    await interaction.editReply({ ...v2Payload, components: [...v2Payload.components, ..._rows] });
     return;
   }
 
@@ -160,9 +147,10 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
       const err = result.error;
       let msg: string;
       if (err.code === "NO_TOOL_EQUIPPED") {
-        msg = state.biome === "mine"
-          ? "You need a pickaxe equipped. Use `/equip` to select one."
-          : "You need an axe equipped. Use `/equip` to select one.";
+        msg =
+          state.biome === "mine"
+            ? "You need a pickaxe equipped. Use `/equip` to select one."
+            : "You need an axe equipped. Use `/equip` to select one.";
       } else if (err.code === "INSUFFICIENT_TOOL_TIER") {
         msg = `🔒 Your tool isn't strong enough here (needs tier ${state.depth}). Craft a better one with \`/craft\`.`;
       } else {
@@ -181,8 +169,8 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
 
     const newState = regenNodes(userId) ?? state;
     const toolTier = await getEquippedToolTier(userId);
-    const { embeds, components } = renderExpedition(newState, toolTier, gatherLine);
-    await interaction.editReply({ embeds, components });
+    const { _rows, ...v2Payload } = renderExpedition(newState, toolTier, gatherLine);
+    await interaction.editReply({ ...v2Payload, components: [...v2Payload.components, ..._rows] });
     return;
   }
 
@@ -199,8 +187,8 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
       return;
     }
     const toolTier = await getEquippedToolTier(userId);
-    const { embeds, components } = renderExpedition(newState, toolTier);
-    await interaction.editReply({ embeds, components });
+    const { _rows, ...v2Payload } = renderExpedition(newState, toolTier);
+    await interaction.editReply({ ...v2Payload, components: [...v2Payload.components, ..._rows] });
     return;
   }
 
@@ -208,13 +196,16 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
   if (cid === "expedition:leave") {
     await interaction.deferUpdate();
     endSession(interaction.user.id);
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Grey)
-      .setTitle("🚪 Expedition Ended")
-      .setDescription(
-        "You leave the area and return to safety.\n\nUse `/expedition` to venture out again.",
-      )
-      .setFooter({ text: "💡 /inventory • /process • /craft" });
-    await interaction.editReply({ embeds: [embed], components: [] });
+    await interaction.editReply({
+      ...v2Message(
+        container(
+          "mute",
+          text(
+            "## 🚪 Expedition Ended\nYou leave the area and return to safety.\n\nUse `/expedition` to venture out again.\n\n-# 💡 /inventory • /process • /craft",
+          ),
+        ),
+      ),
+      components: [],
+    });
   }
 }

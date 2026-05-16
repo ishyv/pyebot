@@ -1,14 +1,10 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { createListing } from "@/features/economy/market";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("market-list")
   .setDescription("List an item for sale on the market")
   .addStringOption((opt) =>
@@ -18,14 +14,10 @@ export const data = new SlashCommandBuilder()
     opt.setName("quantity").setDescription("Quantity to sell").setRequired(true).setMinValue(1),
   )
   .addIntegerOption((opt) =>
-    opt
-      .setName("price")
-      .setDescription("Price per unit in coins")
-      .setRequired(true)
-      .setMinValue(1),
+    opt.setName("price").setDescription("Price per unit in coins").setRequired(true).setMinValue(1),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -46,10 +38,18 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle("Listing Created")
-    .setDescription(`Listed **${quantity}x ${itemId}** for **${price} coins** each`);
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        text(`## Listing Created\nListed **${quantity}x ${itemId}** for **${price} coins** each`),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/market-browse", "/balance"] },
+  execute,
+});

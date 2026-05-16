@@ -1,6 +1,6 @@
 <script lang="ts">
-	import '../app.css';
-	import { Toast, Vignette } from '@hyvnt/hyvui';
+import "../app.css";
+import { Toast, Vignette } from "@hyvnt/hyvui";
 </script>
 
 <Vignette />

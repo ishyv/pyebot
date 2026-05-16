@@ -12,33 +12,30 @@
  *   - "appeal:deny-modal:"    → deny modal submit (DMs user)
  *   - "appeal:info-modal:"    → info-request modal submit (DMs user, posts in thread)
  */
-import type {
-  ButtonInteraction,
-  ModalSubmitInteraction,
-} from "discord.js";
+import type { ButtonInteraction, ModalSubmitInteraction } from "discord.js";
 import { Handle } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import {
-  handleAppealButton,
-  handleAppealSubmit,
   APPEAL_BUTTON_PREFIX,
   APPEAL_SUBMIT_PREFIX,
+  handleAppealButton,
+  handleAppealSubmit,
 } from "./handlers/appealButton";
 import {
-  handleAppealReview,
-  handleAppealApproveButton,
-  handleAppealDenyButton,
-  handleAppealInfoButton,
-  handleAppealApproveSubmit,
-  handleAppealDenySubmit,
-  handleAppealInfoSubmit,
-  APPEAL_REVIEW_PREFIX,
-  APPEAL_APPROVE_PREFIX,
-  APPEAL_DENY_PREFIX,
-  APPEAL_INFO_PREFIX,
   APPEAL_APPROVE_MODAL_PREFIX,
+  APPEAL_APPROVE_PREFIX,
   APPEAL_DENY_MODAL_PREFIX,
+  APPEAL_DENY_PREFIX,
   APPEAL_INFO_MODAL_PREFIX,
+  APPEAL_INFO_PREFIX,
+  APPEAL_REVIEW_PREFIX,
+  handleAppealApproveButton,
+  handleAppealApproveSubmit,
+  handleAppealDenyButton,
+  handleAppealDenySubmit,
+  handleAppealInfoButton,
+  handleAppealInfoSubmit,
+  handleAppealReview,
 } from "./handlers/appealReview";
 
 export default class ModerationHandlers {

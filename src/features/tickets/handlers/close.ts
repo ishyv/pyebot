@@ -5,9 +5,9 @@
  * Deletes the channel and removes it from the guild's pendingTickets.
  */
 
-import { MessageFlags, type ButtonInteraction } from "discord.js";
-import { closeTicket } from "@/features/tickets/service";
+import { type ButtonInteraction, MessageFlags } from "discord.js";
 import { TICKET_CLOSE_BUTTON_PREFIX } from "@/features/tickets/commands/ticket";
+import { closeTicket } from "@/features/tickets/service";
 
 export function isTicketCloseButton(customId: string): boolean {
   return customId.startsWith(TICKET_CLOSE_BUTTON_PREFIX);
@@ -22,7 +22,10 @@ export async function handleTicketClose(interaction: ButtonInteraction): Promise
 
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.reply({ content: "Cannot close ticket outside of a server.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "Cannot close ticket outside of a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

@@ -3,14 +3,14 @@
  */
 
 import {
-  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
+  type ButtonInteraction,
   ButtonStyle,
   ChannelType,
-  type ButtonInteraction,
-  type TextChannel,
   type MessageActionRowComponentBuilder,
+  MessageFlags,
+  type TextChannel,
 } from "discord.js";
 import { createLogger } from "@/core/logger";
 import { guardModerationComponentAction } from "@/features/moderation/authorization";
@@ -38,7 +38,9 @@ async function disableButtons(interaction: ButtonInteraction): Promise<void> {
         .setDisabled(true),
     );
     await interaction.message.edit({ components: [row] });
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort */
+  }
 }
 
 export async function handleRaidLockdown(interaction: ButtonInteraction): Promise<void> {
@@ -65,7 +67,9 @@ export async function handleRaidLockdown(interaction: ButtonInteraction): Promis
           { reason: `Raid lockdown — actioned by ${interaction.user.tag}` },
         );
         updated++;
-      } catch { /* channel may lack perms */ }
+      } catch {
+        /* channel may lack perms */
+      }
     }),
   );
 

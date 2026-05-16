@@ -9,19 +9,13 @@
  * OCR/image analysis is intentionally excluded.
  */
 
-import {
-  Colors,
-  EmbedBuilder,
-  type GuildMember,
-  type Message,
-  PermissionFlagsBits,
-  type TextChannel,
-} from "discord.js";
+import { type GuildMember, type Message, PermissionFlagsBits, type TextChannel } from "discord.js";
 import { getDb } from "@/core/db";
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import type { AutomodConfig } from "@/db/schemas/guild";
 import { recordAutomodSystemCase } from "@/features/moderation/service";
+import { container, separator, text, v2Message } from "@/ui/v2";
 import { type AutomodIncident, recordAutomodIncident } from "./incidents";
 import { type AutomodPolicyDecision, evaluateAutomodPolicy } from "./policy";
 import { type AutomodProfile, updateAutomodProfile } from "./profile";
@@ -300,6 +294,23 @@ export async function processAutomodSignals(
     channelId: message.channelId,
   });
 
+  return applyAutomodDecision(message, config, decision, signals);
+}
+
+/**
+ * Performs the Discord side effects for an already-decided AutoMod outcome.
+ * Global policy and temp-role rules both use this so delete/report/timeout
+ * behavior stays in one place.
+ */
+export async function applyAutomodDecision(
+  message: Message,
+  config: AutomodConfig,
+  decision: AutomodPolicyDecision,
+  signals: readonly AutomodSignal[],
+  options: { readonly reportChannelId?: string | null; readonly timeoutMs?: number } = {},
+): Promise<CheckResult> {
+  if (!message.guild || !message.member || signals.length === 0) return { action: "none" };
+  const now = new Date();
   if (decision.signal) {
     const incident = recordAutomodIncident(automodIncidents, decision.signal, {
       now,
@@ -312,7 +323,7 @@ export async function processAutomodSignals(
 
   if (decision.action === "none") return { action: "none", reason: decision.reason };
 
-  const reportChannelId = reportChannelForSignals(config, signals);
+  const reportChannelId = options.reportChannelId ?? reportChannelForSignals(config, signals);
   if (
     decision.action === "report" ||
     decision.tier === "lockdown-request" ||
@@ -352,7 +363,11 @@ export async function processAutomodSignals(
   }
 
   if (decision.action === "timeout") {
-    await applyTimeout(message.member, timeoutMsForSignals(config, signals), decision.reason);
+    await applyTimeout(
+      message.member,
+      options.timeoutMs ?? timeoutMsForSignals(config, signals),
+      decision.reason,
+    );
     await recordAutomodSystemCase(
       message.guild,
       message.member,
@@ -716,18 +731,22 @@ async function reportToChannel(
     const channel = await message.guild.channels.fetch(channelId);
     if (!channel?.isTextBased() || !("send" in channel)) return;
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setTitle("Automod Action")
-      .setDescription(`**Reason:** ${reason}`)
-      .addFields(
-        { name: "User", value: `<@${message.author.id}> (${message.author.tag})`, inline: true },
-        { name: "Channel", value: `<#${message.channelId}>`, inline: true },
-        { name: "Content", value: message.content.slice(0, 500) || "(empty)" },
-      )
-      .setTimestamp();
-
-    await (channel as TextChannel).send({ embeds: [embed] });
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+    await (channel as TextChannel).send(
+      v2Message(
+        container(
+          "danger",
+          text("## Automod Action"),
+          separator("sm"),
+          text(
+            `**Reason:** ${reason}\n` +
+              `**User:** <@${message.author.id}> (${message.author.tag})\n` +
+              `**Channel:** <#${message.channelId}>\n` +
+              `**Content:** ${message.content.slice(0, 500) || "(empty)"}`,
+          ),
+        ),
+      ) as any,
+    );
   } catch (err) {
     log.error("Failed to report to automod channel", err);
   }

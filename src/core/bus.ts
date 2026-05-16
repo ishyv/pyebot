@@ -28,14 +28,21 @@ const log = createLogger("bus");
 // ---------------------------------------------------------------------------
 
 export type BusEvent =
-  | { type: "item:gathered";  userId: string; itemId: string; qty: number }
-  | { type: "fight:won";      userId: string; opponentId: string }
+  | { type: "item:gathered"; userId: string; itemId: string; qty: number }
+  | { type: "fight:won"; userId: string; opponentId: string }
   | { type: "recipe:crafted"; userId: string; recipeId: string; qty: number }
-  | { type: "daily:claimed";  userId: string; streak: number }
-  | { type: "coinflip:won";   userId: string }
-  | { type: "trivia:won";     userId: string }
+  | { type: "daily:claimed"; userId: string; streak: number }
+  | { type: "coinflip:won"; userId: string }
+  | { type: "trivia:won"; userId: string }
   | { type: "quest:completed"; userId: string; questId: string }
-  | { type: "mod:action"; guildId: string; userId: string; moderatorId: string; sanctionType: "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON"; caseId: number }
+  | {
+      type: "mod:action";
+      guildId: string;
+      userId: string;
+      moderatorId: string;
+      sanctionType: "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON";
+      caseId: number;
+    }
   | {
       type: "appeal:decided";
       guildId: string;

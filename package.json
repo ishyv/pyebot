@@ -10,6 +10,7 @@
     "start": "bun src/index.ts",
     "tx": "bun scripts/cli.ts",
     "migrate": "bun scripts/migrate-to-components.ts",
+    "glyphs:sync": "bun scripts/glyphs-sync.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "fmt": "biome format --write .",

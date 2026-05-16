@@ -2,11 +2,11 @@
  * Daily reward service.
  */
 
-import type { Ctx } from "@/framework/types";
-import { adjustBalance } from "@/features/economy/mutations";
-import { ensureAccount } from "@/features/economy/account";
 import { EconomyAccount } from "@/components/economy-account";
 import { GuildEconomy } from "@/components/guild-economy";
+import { ensureAccount } from "@/features/economy/account";
+import { adjustBalance } from "@/features/economy/mutations";
+import type { Ctx } from "@/framework/types";
 
 export class DailyError extends Error {
   constructor(
@@ -49,11 +49,15 @@ export async function claimDaily(ctx: Ctx, userId: string, guildId: string): Pro
   if (lastDailyAt) {
     const elapsed = now - lastDailyAt.getTime();
     if (elapsed < cooldownMs) {
-      throw new DailyError("ON_COOLDOWN", "Daily reward on cooldown", lastDailyAt.getTime() + cooldownMs);
+      throw new DailyError(
+        "ON_COOLDOWN",
+        "Daily reward on cooldown",
+        lastDailyAt.getTime() + cooldownMs,
+      );
     }
   }
 
-  const resetStreak = lastDailyAt ? (now - lastDailyAt.getTime()) > 48 * 60 * 60 * 1000 : false;
+  const resetStreak = lastDailyAt ? now - lastDailyAt.getTime() > 48 * 60 * 60 * 1000 : false;
   const newStreak = resetStreak ? 1 : currentStreak + 1;
   const bonus = streakBonus * Math.min(newStreak, streakCap);
   const total = baseReward + bonus;
@@ -62,5 +66,13 @@ export async function claimDaily(ctx: Ctx, userId: string, guildId: string): Pro
 
   await ctx.patch(userId, EconomyAccount, { dailyStreak: newStreak, lastDailyAt: new Date(now) });
 
-  return { base: baseReward, streakBonus: bonus, total, newBalance, streak: newStreak, currencyId, nextAt: now + cooldownMs };
+  return {
+    base: baseReward,
+    streakBonus: bonus,
+    total,
+    newBalance,
+    streak: newStreak,
+    currencyId,
+    nextAt: now + cooldownMs,
+  };
 }

@@ -1,20 +1,14 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import { listRpgQuests, acceptRpgQuest, claimRewards } from "@/features/rpg/quests";
-import { getHints } from "@/utils/command-registry";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { acceptRpgQuest, claimRewards, listRpgQuests } from "@/features/rpg/quests";
+import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
+import { container, separator, text, v2Message } from "@/ui/v2";
+import { getHints } from "@/utils/command-registry";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("rpg-quest")
   .setDescription("RPG quest commands")
-  .addSubcommand((sub) =>
-    sub.setName("list").setDescription("Browse available RPG quests"),
-  )
+  .addSubcommand((sub) => sub.setName("list").setDescription("Browse available RPG quests"))
   .addSubcommand((sub) =>
     sub
       .setName("accept")
@@ -28,11 +22,14 @@ export const data = new SlashCommandBuilder()
       .setName("claim")
       .setDescription("Claim rewards for a completed quest")
       .addStringOption((opt) =>
-        opt.setName("quest_id").setDescription("The quest ID to claim rewards for").setRequired(true),
+        opt
+          .setName("quest_id")
+          .setDescription("The quest ID to claim rewards for")
+          .setRequired(true),
       ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -46,13 +43,9 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
   if (subcommand === "list") {
     const quests = listRpgQuests().slice(0, 10);
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Blurple)
-      .setTitle("RPG Quests")
-      .setFooter({ text: getHints("rpg-quest") });
-
+    let bodyText: string;
     if (quests.length === 0) {
-      embed.setDescription("No RPG quests are currently available.");
+      bodyText = "No RPG quests are currently available.";
     } else {
       const lines = quests.map(({ quest, professionRequired }) => {
         let line = `**${quest.title}** (${quest.difficulty}) — ${quest.description}`;
@@ -61,10 +54,12 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
         }
         return line;
       });
-      embed.setDescription(lines.join("\n\n"));
+      bodyText = lines.join("\n\n");
     }
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(container("info", text(`## RPG Quests\n${bodyText}\n-# ${getHints("rpg-quest")}`))),
+    );
     return;
   }
 
@@ -73,14 +68,9 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
     const result = await acceptRpgQuest(userId, questId);
 
     if (result.isErr()) {
-      await interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(Colors.Red)
-            .setTitle("❌ Quest Not Accepted")
-            .setDescription(result.error.message),
-        ],
-      });
+      await interaction.editReply(
+        v2Message(container("danger", text(`## ❌ Quest Not Accepted\n${result.error.message}`))),
+      );
       return;
     }
 
@@ -88,10 +78,7 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
     const { RPG_QUEST_DEFINITIONS } = await import("@/features/rpg/quests");
     const def = RPG_QUEST_DEFINITIONS.find((q) => q.id === questId);
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Blue)
-      .setTitle("📋 Quest Accepted!")
-      .setDescription(def?.description ?? `Quest **${questId}** accepted.`);
+    const descriptionText = def?.description ?? `Quest **${questId}** accepted.`;
 
     if (def) {
       const stepLines = def.steps.map((s, i) => {
@@ -99,21 +86,40 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
         if (s.kind === "fight_win") return `${i + 1}. Win **${s.qty}** fights`;
         return `${i + 1}. ${s.kind}`;
       });
-      embed.addFields({ name: "📝 Objectives", value: stepLines.join("\n") });
 
       const rewardLines: string[] = [];
       for (const r of def.rewards.currency ?? []) {
         rewardLines.push(`💰 ${r.amount.toLocaleString()} ${r.currencyId}`);
       }
       if (def.rewards.xp) rewardLines.push(`✨ ${def.rewards.xp} XP`);
-      if (rewardLines.length > 0) {
-        embed.addFields({ name: "🎁 Rewards", value: rewardLines.join("\n") });
-      }
+
+      const rewardsText =
+        rewardLines.length > 0 ? `\n\n**🎁 Rewards**\n${rewardLines.join("\n")}` : "";
+
+      await interaction.editReply(
+        v2Message(
+          container(
+            "ok",
+            text(`## 📋 Quest Accepted!\n${descriptionText}`),
+            separator("sm"),
+            text(
+              `**📝 Objectives**\n${stepLines.join("\n")}${rewardsText}\n\n-# 💡 Use /rpg-quest claim when complete`,
+            ),
+          ),
+        ),
+      );
+    } else {
+      await interaction.editReply(
+        v2Message(
+          container(
+            "ok",
+            text(
+              `## 📋 Quest Accepted!\n${descriptionText}\n\n-# 💡 Use /rpg-quest claim when complete`,
+            ),
+          ),
+        ),
+      );
     }
-
-    embed.setFooter({ text: "💡 Use /rpg-quest claim when complete" });
-
-    await interaction.editReply({ embeds: [embed] });
     return;
   }
 
@@ -128,32 +134,46 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
 
     const { rewards } = result.unwrap();
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Gold)
-      .setTitle("Quest Rewards Claimed!")
-      .setFooter({ text: getHints("rpg-quest") });
-
     if (rewards.length === 0) {
-      embed.setDescription("No rewards were granted.");
-    } else {
-      for (const reward of rewards) {
-        if (reward.type === "currency") {
-          embed.addFields({
-            name: "Currency",
-            value: reward.amount != null ? `${reward.amount} coins` : reward.description,
-            inline: true,
-          });
-        } else if (reward.type === "xp") {
-          embed.addFields({
-            name: "XP",
-            value: reward.amount != null ? `${reward.amount}` : reward.description,
-            inline: true,
-          });
-        }
-      }
+      await interaction.editReply(
+        v2Message(
+          container(
+            "ok",
+            text(
+              `## Quest Rewards Claimed!\nNo rewards were granted.\n-# ${getHints("rpg-quest")}`,
+            ),
+          ),
+        ),
+      );
+      return;
     }
 
-    await interaction.editReply({ embeds: [embed] });
+    const rewardLines = rewards
+      .map((reward) => {
+        if (reward.type === "currency") {
+          return `**Currency:** ${reward.amount != null ? `${reward.amount} coins` : reward.description}`;
+        }
+        if (reward.type === "xp") {
+          return `**XP:** ${reward.amount != null ? `${reward.amount}` : reward.description}`;
+        }
+        return "";
+      })
+      .filter(Boolean);
+
+    await interaction.editReply(
+      v2Message(
+        container(
+          "ok",
+          text(`## Quest Rewards Claimed!\n${rewardLines.join("\n")}\n-# ${getHints("rpg-quest")}`),
+        ),
+      ),
+    );
     return;
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/rpg-profile", "/expedition", "/inventory"] },
+  execute,
+});

@@ -1,13 +1,13 @@
-import { MongoStore } from "@/db/store";
-import { MarketListingSchema, type MarketListingDoc } from "@/db/schemas/market";
-import {
-  AchievementProgressSchema,
-  UnlockedAchievementSchema,
-  type AchievementProgressDoc,
-  type UnlockedAchievementDoc,
-} from "@/db/schemas/achievement";
-import { QuestProgressSchema, type QuestProgressDoc } from "@/db/schemas/quest";
 import { ErrResult, OkResult, type Result } from "@/core/result";
+import {
+  type AchievementProgressDoc,
+  AchievementProgressSchema,
+  type UnlockedAchievementDoc,
+  UnlockedAchievementSchema,
+} from "@/db/schemas/achievement";
+import { type MarketListingDoc, MarketListingSchema } from "@/db/schemas/market";
+import { type QuestProgressDoc, QuestProgressSchema } from "@/db/schemas/quest";
+import { MongoStore } from "@/db/store";
 
 // ---------------------------------------------------------------------------
 // Achievement stores
@@ -29,7 +29,9 @@ export async function getUnlocksForUser(userId: string): Promise<Result<Unlocked
 }
 
 /** Returns all progress records for a user. */
-export async function getProgressForUser(userId: string): Promise<Result<AchievementProgressDoc[]>> {
+export async function getProgressForUser(
+  userId: string,
+): Promise<Result<AchievementProgressDoc[]>> {
   return achievementProgressStore.find({ userId } as any);
 }
 
@@ -61,9 +63,7 @@ export async function findActiveListings(
 
   try {
     const col = await marketStore.collection();
-    const cursor = col
-      .find(filter as any)
-      .sort({ pricePerUnit: 1, createdAt: 1 });
+    const cursor = col.find(filter as any).sort({ pricePerUnit: 1, createdAt: 1 });
     if (options.skip) cursor.skip(options.skip);
     if (options.limit) cursor.limit(options.limit);
     const docs = await cursor.toArray();

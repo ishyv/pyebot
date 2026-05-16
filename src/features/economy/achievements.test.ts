@@ -3,10 +3,10 @@
  * Mocks economy repo and db/repositories/users — no real DB required.
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { OkResult } from "@/core/result";
-import type { User } from "@/db/schemas/user";
 import type { AchievementProgressDoc, UnlockedAchievementDoc } from "@/db/schemas/achievement";
+import type { User } from "@/db/schemas/user";
 
 // ---------------------------------------------------------------------------
 // Mock @/db/repositories/users BEFORE importing achievements
@@ -30,7 +30,9 @@ function makeUser(currency: Record<string, number> = { coins: 100 }): User {
 
 const mockUserGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
 const mockUserEnsure = mock(async (_id: string) => OkResult(makeUser()));
-const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) => OkResult(undefined as void));
+const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
+  OkResult(undefined as void),
+);
 
 mock.module("@/db/repositories/users", () => ({
   userStore: {
@@ -87,11 +89,18 @@ mock.module("@/db/repositories/economy", () => ({
     OkResult(Array.from(progressStore.values()).filter((p) => p.userId === _userId)),
   ),
   // market store stubs (not used in achievements tests)
-  marketStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)), replaceIfMatch: mock(async () => OkResult(null)) },
+  marketStore: {
+    get: mock(async () => OkResult(null)),
+    set: mock(async () => OkResult(null)),
+    replaceIfMatch: mock(async () => OkResult(null)),
+  },
   findActiveListings: mock(async () => OkResult([])),
   countActiveListings: mock(async () => OkResult(0)),
   // quest store stubs (not used in achievements tests)
-  questProgressStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  questProgressStore: {
+    get: mock(async () => OkResult(null)),
+    set: mock(async () => OkResult(null)),
+  },
   getActiveQuestsForUser: mock(async () => OkResult([])),
 }));
 
@@ -124,7 +133,7 @@ function makeCtx() {
     emit: async () => {},
     get: async (id: string) => {
       const bal = wallets[id];
-      return bal ? { balances: bal, bankBalances: {} } as never : null;
+      return bal ? ({ balances: bal, bankBalances: {} } as never) : null;
     },
     ensure: async (id: string) => {
       if (!wallets[id]) wallets[id] = { coins: 1000 };
@@ -133,7 +142,9 @@ function makeCtx() {
     patch: async (id: string, _: unknown, fn: unknown) => {
       if (!wallets[id]) wallets[id] = { coins: 1000 };
       const cur = { balances: wallets[id], bankBalances: {} };
-      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as { balances?: Record<string, number> };
+      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
+        balances?: Record<string, number>;
+      };
       if (patch.balances) wallets[id] = patch.balances;
     },
     set: async () => {},

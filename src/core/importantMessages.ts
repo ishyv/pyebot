@@ -14,8 +14,8 @@
  * any error is logged and the re-post is abandoned rather than retried.
  */
 import type { Client, Message, TextChannel } from "discord.js";
-import { createLogger } from "./logger";
 import type { V2Payload } from "@/ui/views";
+import { createLogger } from "./logger";
 
 const log = createLogger("importantMessages");
 

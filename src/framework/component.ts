@@ -44,9 +44,6 @@ import type { Component } from "./types";
  * Type parameter `T` is inferred from the Zod schema you pass in — you do
  * not write it manually.
  */
-export function component<T>(def: {
-  collection: string;
-  schema: ZodType<T>;
-}): Component<T> {
+export function component<T>(def: { collection: string; schema: ZodType<T> }): Component<T> {
   return def;
 }

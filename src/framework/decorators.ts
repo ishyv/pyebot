@@ -71,9 +71,13 @@ export interface ListenMetadataEntry {
  *   }
  */
 export function On<E>(eventClass: EventConstructor<E>) {
-  return function (target: object, propertyKey: string): void {
-    const list = ((target as Record<symbol, unknown>)[ON_METADATA] as OnMetadataEntry[] | undefined) ?? [];
-    const entry: OnMetadataEntry = { event: eventClass as EventConstructor, methodKey: propertyKey };
+  return (target: object, propertyKey: string): void => {
+    const list =
+      ((target as Record<symbol, unknown>)[ON_METADATA] as OnMetadataEntry[] | undefined) ?? [];
+    const entry: OnMetadataEntry = {
+      event: eventClass as EventConstructor,
+      methodKey: propertyKey,
+    };
     (target as Record<symbol, unknown>)[ON_METADATA] = [...list, entry];
   };
 }
@@ -93,8 +97,9 @@ export function On<E>(eventClass: EventConstructor<E>) {
  * and `"market:confirm:"` can coexist and the more specific one wins.
  */
 export function Handle(prefix: string) {
-  return function (target: object, propertyKey: string): void {
-    const list = ((target as Record<symbol, unknown>)[ON_HANDLE] as HandleMetadataEntry[] | undefined) ?? [];
+  return (target: object, propertyKey: string): void => {
+    const list =
+      ((target as Record<symbol, unknown>)[ON_HANDLE] as HandleMetadataEntry[] | undefined) ?? [];
     const entry: HandleMetadataEntry = { prefix, methodKey: propertyKey };
     (target as Record<symbol, unknown>)[ON_HANDLE] = [...list, entry];
   };
@@ -117,8 +122,9 @@ export function Handle(prefix: string) {
  *   }
  */
 export function Listen(event: string) {
-  return function (target: object, propertyKey: string): void {
-    const list = ((target as Record<symbol, unknown>)[ON_LISTEN] as ListenMetadataEntry[] | undefined) ?? [];
+  return (target: object, propertyKey: string): void => {
+    const list =
+      ((target as Record<symbol, unknown>)[ON_LISTEN] as ListenMetadataEntry[] | undefined) ?? [];
     const entry: ListenMetadataEntry = { event, methodKey: propertyKey };
     (target as Record<symbol, unknown>)[ON_LISTEN] = [...list, entry];
   };

@@ -14,21 +14,18 @@
  * - Inventory items are stored as numeric quantities at `inventory.<MaterialId>`.
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
+import { ErrResult, OkResult, type Result } from "@/core/result";
 import { ensureRpgProfile, patchRpgProfile } from "@/db/repositories/rpg";
-import { updateUserPaths, getUser } from "@/db/repositories/users";
+import { getUser, updateUserPaths } from "@/db/repositories/users";
 import type { GatherAction } from "@/features/rpg/content/actions";
+import { LOCATIONS, type LocationId } from "@/features/rpg/content/locations";
+import type { MaterialId } from "@/features/rpg/content/materials";
 import {
-  LOCATIONS,
-  type LocationId,
-} from "@/features/rpg/content/locations";
-import {
-  TOOL_TIER_FALLBACK,
   requiredToolKindFor,
+  TOOL_TIER_FALLBACK,
   toolKind,
   toolTier,
 } from "@/features/rpg/content/tools";
-import type { MaterialId } from "@/features/rpg/content/materials";
 
 export { TOOL_TIER_FALLBACK };
 
@@ -81,9 +78,7 @@ function randomInt(min: number, max: number): number {
  * ever ran with the (never-installed) content registry, so the single-material
  * roll is the actual behavior users see today.
  */
-function rollDrops(
-  materials: readonly MaterialId[],
-): Array<{ id: MaterialId; quantity: number }> {
+function rollDrops(materials: readonly MaterialId[]): Array<{ id: MaterialId; quantity: number }> {
   const id = materials[Math.floor(Math.random() * materials.length)];
   if (!id) return [];
   return [{ id, quantity: randomInt(2, 5) }];

@@ -14,7 +14,14 @@ import { z } from "zod";
 import { component } from "@/framework/component";
 
 export const EquipmentSlot = z.enum([
-  "weapon", "shield", "helmet", "chest", "pants", "boots", "ring", "necklace",
+  "weapon",
+  "shield",
+  "helmet",
+  "chest",
+  "pants",
+  "boots",
+  "ring",
+  "necklace",
 ]);
 export type EquipmentSlotValue = z.infer<typeof EquipmentSlot>;
 
@@ -38,7 +45,16 @@ export const Loadout = z.object({
 export type LoadoutValue = z.infer<typeof Loadout>;
 
 export function defaultLoadout(): LoadoutValue {
-  return { weapon: null, shield: null, helmet: null, chest: null, pants: null, boots: null, ring: null, necklace: null };
+  return {
+    weapon: null,
+    shield: null,
+    helmet: null,
+    chest: null,
+    pants: null,
+    boots: null,
+    ring: null,
+    necklace: null,
+  };
 }
 
 export const StarterKitType = z.enum(["miner", "lumber"]);

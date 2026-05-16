@@ -1,17 +1,17 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
-import { warn, getCases, removeWarn, clearWarns } from "@/features/moderation/service";
-import { dmUser } from "../notifications";
-import { sendModLog } from "../modlog";
+import { clearWarns, getCases, removeWarn, warn } from "@/features/moderation/service";
+import { defineCommand } from "@/framework";
 import { hasPermission } from "@/middleware/permissions";
+import { sendModLog } from "../modlog";
+import { dmUser } from "../notifications";
+import { renderModlogCase, renderSanctionHistory } from "../views";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("warn")
   .setDescription("Manage member warnings")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -43,10 +43,7 @@ export const data = new SlashCommandBuilder()
         opt.setName("user").setDescription("Member whose warning to remove").setRequired(true),
       )
       .addStringOption((opt) =>
-        opt
-          .setName("warn_id")
-          .setDescription("Case number")
-          .setRequired(true),
+        opt.setName("warn_id").setDescription("Case number").setRequired(true),
       ),
   )
   .addSubcommand((sub) =>
@@ -58,9 +55,12 @@ export const data = new SlashCommandBuilder()
       ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild || !interaction.member) {
-    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -95,21 +95,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await dmUser(targetMember.user, "WARN", interaction.guild.name, reason, sanctionResult.caseId);
     await sendModLog(interaction.guild, sanctionResult);
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Yellow)
-      .setTitle("Warning Issued")
-      .setDescription(`**${targetUser.tag}** has been warned.`)
-      .addFields(
-        { name: "Reason", value: reason },
-        { name: "Case ID", value: `#${sanctionResult.caseId}`, inline: true },
-      )
-      .setTimestamp();
-
-    if (sanctionResult.escalated) {
-      embed.addFields({ name: "Note", value: "⚠️ Member auto-escalated: timeout applied" });
-    }
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(renderModlogCase({ result: sanctionResult }));
     return;
   }
 
@@ -120,29 +106,23 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const casesResult = await getCases(targetUser.id, interaction.guild.id);
 
     if (casesResult.isErr()) {
-      await interaction.editReply({ content: `Failed to fetch cases: ${casesResult.error.message}` });
+      await interaction.editReply({
+        content: `Failed to fetch cases: ${casesResult.error.message}`,
+      });
       return;
     }
 
-    const warns = casesResult.unwrap().filter((e) => e.type === "WARN").slice(0, 15);
+    const warns = casesResult
+      .unwrap()
+      .filter((e) => e.type === "WARN")
+      .slice(0, 15);
 
     if (warns.length === 0) {
       await interaction.editReply({ content: "No warnings on record." });
       return;
     }
 
-    const lines = warns.map((entry) => {
-      const timestamp = entry.date ? Math.floor(new Date(entry.date).getTime() / 1000) : 0;
-      return `⚠️ #${entry.caseId ?? "???"} — ${entry.description} — <@${entry.moderatorId ?? "unknown"}> — <t:${timestamp}:d>`;
-    });
-
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Yellow)
-      .setTitle(`Warnings for ${targetUser.tag}`)
-      .setDescription(lines.join("\n"))
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(renderSanctionHistory(targetUser.tag, warns));
     return;
   }
 
@@ -151,7 +131,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   // ---------------------------------------------------------------------------
   if (subcommand === "remove") {
     if (!hasPermission(callerMember, PermissionFlagsBits.KickMembers)) {
-      await interaction.editReply({ content: "You need the **Kick Members** permission to remove warnings." });
+      await interaction.editReply({
+        content: "You need the **Kick Members** permission to remove warnings.",
+      });
       return;
     }
 
@@ -178,7 +160,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   // ---------------------------------------------------------------------------
   if (subcommand === "clear") {
     if (!hasPermission(callerMember, PermissionFlagsBits.KickMembers)) {
-      await interaction.editReply({ content: "You need the **Kick Members** permission to clear warnings." });
+      await interaction.editReply({
+        content: "You need the **Kick Members** permission to clear warnings.",
+      });
       return;
     }
 
@@ -190,7 +174,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
 
     const count = result.unwrap();
-    await interaction.editReply({ content: `Cleared ${count} warning(s) for <@${targetUser.id}>.` });
+    await interaction.editReply({
+      content: `Cleared ${count} warning(s) for <@${targetUser.id}>.`,
+    });
     return;
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

@@ -1,14 +1,15 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { quarantine, release } from "@/features/moderation/service";
+import { renderModlogCase } from "@/features/moderation/views";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("quarantine")
   .setDescription("Quarantine or release a member")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -17,17 +18,21 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("add")
       .setDescription("Place a member in quarantine")
-      .addUserOption((o) => o.setName("user").setDescription("Member to quarantine").setRequired(true))
+      .addUserOption((o) =>
+        o.setName("user").setDescription("Member to quarantine").setRequired(true),
+      )
       .addStringOption((o) => o.setName("reason").setDescription("Reason").setRequired(true)),
   )
   .addSubcommand((sub) =>
     sub
       .setName("release")
       .setDescription("Release a member from quarantine, restoring their roles")
-      .addUserOption((o) => o.setName("user").setDescription("Member to release").setRequired(true)),
+      .addUserOption((o) =>
+        o.setName("user").setDescription("Member to release").setRequired(true),
+      ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
     await interaction.reply({ content: "Server only.", flags: MessageFlags.Ephemeral });
     return;
@@ -56,19 +61,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       return;
     }
 
-    const { caseId } = result.unwrap();
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Purple)
-      .setTitle("Member Quarantined")
-      .setDescription(`**${targetUser.tag}** has been placed in quarantine.`)
-      .addFields(
-        { name: "Reason", value: reason },
-        { name: "Case", value: `#${caseId}`, inline: true },
-      )
-      .setFooter({ text: "Use /quarantine release to restore their roles." })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(renderModlogCase({ result: result.unwrap() }));
     return;
   }
 
@@ -81,13 +74,21 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
 
     const { restoredRoles } = result.unwrap();
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Green)
-      .setTitle("Member Released")
-      .setDescription(`**${targetUser.tag}** has been released from quarantine.`)
-      .addFields({ name: "Roles Restored", value: `${restoredRoles}`, inline: true })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "ok",
+          text(
+            `**${targetUser.tag}** released from quarantine.\n**Roles restored:** ${restoredRoles}`,
+          ),
+        ),
+      ),
+    );
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

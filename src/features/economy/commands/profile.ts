@@ -1,23 +1,20 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
-import { EconomyAccount } from "@/components/economy-account";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { UserCurrency } from "@/components/user-currency";
+import { ensureAccount } from "@/features/economy/account";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import type { AccentKey } from "@/ui/theme";
+import { container, section, separator, text, thumb, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("eco-profile")
   .setDescription("View your economy profile")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to view (defaults to you)").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -28,39 +25,44 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
   const target = interaction.options.getUser("user") ?? interaction.user;
 
   const [account, wallet] = await Promise.all([
-    ctx.get(target.id, EconomyAccount),
+    ensureAccount(ctx, target.id),
     ctx.get(target.id, UserCurrency),
   ]);
-
-  if (!account) {
-    await interaction.editReply({
-      content: `**${target.username}** doesn't have an economy account yet.`,
-    });
-    return;
-  }
 
   const handCoins = wallet?.balances["coins"] ?? 0;
   const bankCoins = wallet?.bankBalances["coins"] ?? 0;
 
-  const statusColor =
-    account.status === "ok" ? Colors.Green : account.status === "blocked" ? Colors.Yellow : Colors.Red;
+  const statusAccent: AccentKey =
+    account.status === "ok" ? "ok" : account.status === "blocked" ? "warn" : "danger";
 
-  const embed = new EmbedBuilder()
-    .setColor(statusColor)
-    .setTitle(`👤 Economy Profile — ${target.username}`)
-    .setThumbnail(target.displayAvatarURL())
-    .addFields(
-      { name: "💰 In Hand", value: coins(handCoins), inline: true },
-      { name: "🏦 In Bank", value: coins(bankCoins), inline: true },
-      { name: "📊 Total", value: coins(handCoins + bankCoins), inline: true },
-      {
-        name: "📅 Status",
-        value: account.status === "ok" ? "✅ Active" : account.status === "blocked" ? "⚠️ Blocked" : "🚫 Banned",
-        inline: true,
-      },
-      { name: "🗓️ Member Since", value: `<t:${Math.floor(account.createdAt.getTime() / 1000)}:D>`, inline: true },
-    )
-    .setFooter({ text: "💡 /balance • /bank • /work" });
+  const statusLabel =
+    account.status === "ok"
+      ? "✅ Active"
+      : account.status === "blocked"
+        ? "⚠️ Blocked"
+        : "🚫 Banned";
 
-  await interaction.editReply({ embeds: [embed] });
+  const memberSince = `<t:${Math.floor(account.createdAt.getTime() / 1000)}:D>`;
+
+  await interaction.editReply(
+    v2Message(
+      container(
+        statusAccent,
+        section(
+          `## 👤 Economy Profile — ${target.username}`,
+          thumb(target.displayAvatarURL(), "avatar"),
+        ),
+        separator("sm"),
+        text(
+          `💰 **In Hand:** ${coins(handCoins)}\n🏦 **In Bank:** ${coins(bankCoins)}\n📊 **Total:** ${coins(handCoins + bankCoins)}\n📅 **Status:** ${statusLabel}\n🗓️ **Member Since:** ${memberSince}\n\n-# 💡 /balance • /bank • /work`,
+        ),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/balance", "/inventory"] },
+  execute,
+});

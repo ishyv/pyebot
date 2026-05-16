@@ -22,12 +22,12 @@ export const MAX_DEPTH: Depth = 4;
 
 /** Static biome → depth → LocationId. Derived from LOCATIONS. */
 const BIOME_DEPTH_LOCATION = {
-  mine:   { 1: "stone_mine",    2: "copper_mine",   3: "iron_mine",   4: "silver_mine"  },
-  forest: { 1: "oak_forest",    2: "spruce_forest",  3: "palm_forest", 4: "pine_forest"  },
+  mine: { 1: "stone_mine", 2: "copper_mine", 3: "iron_mine", 4: "silver_mine" },
+  forest: { 1: "oak_forest", 2: "spruce_forest", 3: "palm_forest", 4: "pine_forest" },
 } as const satisfies Record<Biome, Record<Depth, LocationId>>;
 
 const BIOME_ACTION: Record<Biome, GatherAction> = {
-  mine:   "mine",
+  mine: "mine",
   forest: "forest",
 };
 
@@ -60,14 +60,46 @@ export interface ExpeditionNode {
 
 /** Flavor text pools keyed by MaterialId. Falls back to a generic line. */
 const NODE_FLAVOR: Partial<Record<MaterialId, readonly string[]>> = {
-  stone:        ["Rough grey stone juts from the wall.", "A plain cluster, solid but workable.", "Common stone, easy to break away."],
-  copper_ore:   ["A faint orange glimmer in the rock.", "Copper threads run through the stone face.", "The ore shimmers faintly in the dim light."],
-  iron_ore:     ["Dense dark ore packed into the wall.", "Heavy iron veins criss-cross the surface.", "Cold iron, waiting to be claimed."],
-  silver_ore:   ["A rare streak of silver catches your lantern light.", "Pure silver, deep in the mountain's heart.", "The most precious ore at this depth."],
-  oak_wood:     ["A stout oak, good for planks.", "Thick bark and solid heartwood.", "An old oak, wide and steady."],
-  spruce_wood:  ["Tall and straight — ideal for lumber.", "A spruce with dense, tight grain.", "The air smells of pine resin."],
-  palm_wood:    ["A tall palm sways in the warm air.", "Fibrous wood, useful for crafting.", "Tropical warmth radiates from the bark."],
-  pine_wood:    ["An ancient pine towers overhead.", "Sticky with resin, rich with grain.", "The rarest timber in the forest."],
+  stone: [
+    "Rough grey stone juts from the wall.",
+    "A plain cluster, solid but workable.",
+    "Common stone, easy to break away.",
+  ],
+  copper_ore: [
+    "A faint orange glimmer in the rock.",
+    "Copper threads run through the stone face.",
+    "The ore shimmers faintly in the dim light.",
+  ],
+  iron_ore: [
+    "Dense dark ore packed into the wall.",
+    "Heavy iron veins criss-cross the surface.",
+    "Cold iron, waiting to be claimed.",
+  ],
+  silver_ore: [
+    "A rare streak of silver catches your lantern light.",
+    "Pure silver, deep in the mountain's heart.",
+    "The most precious ore at this depth.",
+  ],
+  oak_wood: [
+    "A stout oak, good for planks.",
+    "Thick bark and solid heartwood.",
+    "An old oak, wide and steady.",
+  ],
+  spruce_wood: [
+    "Tall and straight — ideal for lumber.",
+    "A spruce with dense, tight grain.",
+    "The air smells of pine resin.",
+  ],
+  palm_wood: [
+    "A tall palm sways in the warm air.",
+    "Fibrous wood, useful for crafting.",
+    "Tropical warmth radiates from the bark.",
+  ],
+  pine_wood: [
+    "An ancient pine towers overhead.",
+    "Sticky with resin, rich with grain.",
+    "The rarest timber in the forest.",
+  ],
 };
 
 function nodeInfoFor(itemId: MaterialId): { display: string; flavor: string } {

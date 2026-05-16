@@ -1,20 +1,16 @@
+import { defineCommand } from "@/framework";
 /**
  * /offer create <title> <description> [requirements] [salary] [contact]
  * /offer withdraw
  * /offer edit <field> <value>
  */
 
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import { createOffer, withdrawOffer, OfferError } from "@/features/offers/service";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+import { createOffer, type OfferError, withdrawOffer } from "@/features/offers/service";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("offer")
   .setDescription("Manage job/service offers")
   .addSubcommand((sub) =>
@@ -25,7 +21,11 @@ export const data = new SlashCommandBuilder()
         o.setName("title").setDescription("Offer title").setRequired(true).setMaxLength(100),
       )
       .addStringOption((o) =>
-        o.setName("description").setDescription("Full description").setRequired(true).setMaxLength(1000),
+        o
+          .setName("description")
+          .setDescription("Full description")
+          .setRequired(true)
+          .setMaxLength(1000),
       )
       .addStringOption((o) =>
         o.setName("requirements").setDescription("Requirements (optional)").setMaxLength(500),
@@ -37,18 +37,12 @@ export const data = new SlashCommandBuilder()
         o.setName("contact").setDescription("How to contact you (optional)").setMaxLength(200),
       ),
   )
+  .addSubcommand((sub) => sub.setName("withdraw").setDescription("Withdraw your active offer"))
   .addSubcommand((sub) =>
-    sub
-      .setName("withdraw")
-      .setDescription("Withdraw your active offer"),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName("panel")
-      .setDescription("Open the offers configuration panel"),
+    sub.setName("panel").setDescription("Open the offers configuration panel"),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
   if (sub === "create") await handleCreate(interaction);
@@ -91,15 +85,16 @@ async function handleCreate(interaction: ChatInputCommandInteraction): Promise<v
   }
 
   const offer = result.unwrap();
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Yellow)
-    .setTitle("Offer Submitted")
-    .setDescription(
-      `Your offer **${offer.details.title}** has been submitted for review.\nOffer ID: \`${offer._id}\``,
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "warn",
+        text(
+          `## Offer Submitted\nYour offer **${offer.details.title}** has been submitted for review.\nOffer ID: \`${offer._id}\``,
+        ),
+      ),
+    ),
+  );
 }
 
 async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -114,20 +109,35 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise
   const result = await withdrawOffer(guildId, interaction.user.id);
 
   if (result.isErr()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Red).setTitle("❌ Failed").setDescription(`Could not withdraw offer: ${result.error.message}`)],
-    });
+    await interaction.editReply(
+      v2Message(
+        container("danger", text(`## Failed\nCould not withdraw offer: ${result.error.message}`)),
+      ),
+    );
     return;
   }
 
   if (!result.unwrap()) {
-    await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(Colors.Yellow).setTitle("Nothing to Withdraw").setDescription("You don't have an active offer to withdraw.")],
-    });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "warn",
+          text("## Nothing to Withdraw\nYou don't have an active offer to withdraw."),
+        ),
+      ),
+    );
     return;
   }
 
-  await interaction.editReply({
-    embeds: [new EmbedBuilder().setColor(Colors.Green).setTitle("✅ Offer Withdrawn").setDescription("Your offer has been removed from review.")],
-  });
+  await interaction.editReply(
+    v2Message(
+      container("ok", text("## Offer Withdrawn\nYour offer has been removed from review.")),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: [] },
+  execute,
+});

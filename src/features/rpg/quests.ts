@@ -19,16 +19,16 @@ import { getRpgProfile } from "@/db/repositories/rpg";
 import type { QuestProgressDoc } from "@/db/schemas/quest";
 import {
   acceptQuest,
+  type ClaimedQuestReward,
   claimRewards,
   progressAllQuests,
   type QuestDef,
   type QuestError,
-  type ClaimedQuestReward,
 } from "@/features/economy/quests";
 
-// Re-export the shared functions so RPG callers only need one import.
-export { progressAllQuests, claimRewards };
 export type { ClaimedQuestReward, QuestProgressDoc };
+// Re-export the shared functions so RPG callers only need one import.
+export { claimRewards, progressAllQuests };
 
 // ---------------------------------------------------------------------------
 // RPG quest definitions

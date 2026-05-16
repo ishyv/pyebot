@@ -16,7 +16,7 @@ const PARTIALS = [
   Partials.Channel,
   Partials.Reaction,
   Partials.GuildMember,
-  Partials.User,  // required for partial DM reaction users
+  Partials.User, // required for partial DM reaction users
 ];
 
 /**

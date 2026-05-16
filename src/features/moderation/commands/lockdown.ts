@@ -1,16 +1,16 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   ChannelType,
   type ChatInputCommandInteraction,
-  type TextChannel,
+  MessageFlags,
   type NewsChannel,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+  type TextChannel,
 } from "discord.js";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("lockdown")
   .setDescription("Lock or unlock channels to prevent members from sending messages")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
@@ -22,7 +22,9 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName("reason").setDescription("Reason for lockdown")),
   )
   .addSubcommand((sub) =>
-    sub.setName("off").setDescription("Unlock all text channels (restores @everyone Send Messages)"),
+    sub
+      .setName("off")
+      .setDescription("Unlock all text channels (restores @everyone Send Messages)"),
   )
   .addSubcommand((sub) =>
     sub
@@ -45,7 +47,7 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName("reason").setDescription("Reason")),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
     await interaction.reply({ content: "Server only.", flags: MessageFlags.Ephemeral });
     return;
@@ -68,26 +70,35 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (sub === "channel") {
     const channel = interaction.options.getChannel("channel", true) as TextChannel | NewsChannel;
     const action = interaction.options.getString("action", true);
-    const reason = interaction.options.getString("reason") ?? (action === "lock" ? "Channel locked" : "Channel unlocked");
+    const reason =
+      interaction.options.getString("reason") ??
+      (action === "lock" ? "Channel locked" : "Channel unlocked");
     const deny = action === "lock" ? false : null;
 
     try {
-      await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
-        SendMessages: deny,
-      }, { reason: `${reason} — by ${interaction.user.tag}` });
+      await channel.permissionOverwrites.edit(
+        interaction.guild.roles.everyone,
+        {
+          SendMessages: deny,
+        },
+        { reason: `${reason} — by ${interaction.user.tag}` },
+      );
     } catch {
       await interaction.editReply({ content: "Failed to update channel permissions." });
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(action === "lock" ? Colors.Red : Colors.Green)
-      .setTitle(action === "lock" ? "Channel Locked" : "Channel Unlocked")
-      .setDescription(`<#${channel.id}> is now ${action === "lock" ? "🔒 locked" : "🔓 unlocked"}.`)
-      .addFields({ name: "Reason", value: reason })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+    const isLocking = action === "lock";
+    await interaction.editReply(
+      v2Message(
+        container(
+          isLocking ? "danger" : "ok",
+          text(
+            `**${isLocking ? "🔒 Channel Locked" : "🔓 Channel Unlocked"}** — <#${channel.id}>\n**Reason:** ${reason}`,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -120,16 +131,22 @@ async function setEveryoneSendMessages(
   );
 
   const isLocking = value === false;
-  const embed = new EmbedBuilder()
-    .setColor(isLocking ? Colors.Red : Colors.Green)
-    .setTitle(isLocking ? "🔒 Server Locked Down" : "🔓 Lockdown Lifted")
-    .addFields(
-      { name: "Channels Updated", value: `${updated}`, inline: true },
-      { name: "Failed", value: `${failed}`, inline: true },
-      { name: "Reason", value: reason },
-    )
-    .setFooter({ text: `By ${interaction.user.tag}` })
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  const failedNote = failed > 0 ? `\n**Failed:** ${failed}` : "";
+  await interaction.editReply(
+    v2Message(
+      container(
+        isLocking ? "danger" : "ok",
+        text(
+          `**${isLocking ? "🔒 Server Locked Down" : "🔓 Lockdown Lifted"}**\n` +
+            `**Channels updated:** ${updated}${failedNote}\n**Reason:** ${reason}`,
+        ),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/mod help"] },
+  execute,
+});

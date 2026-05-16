@@ -7,16 +7,15 @@
  */
 
 import {
-  MessageFlags,
-  EmbedBuilder,
-  Colors,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
   type ButtonInteraction,
+  ButtonStyle,
+  MessageFlags,
 } from "discord.js";
-import { submitMove, getFightSession } from "@/features/rpg/combat/fight";
 import type { CombatMove } from "@/features/rpg/combat/engine";
+import { getFightSession, submitMove } from "@/features/rpg/combat/fight";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
 export const FIGHT_MOVE_PREFIX = "fight_move:";
 
@@ -58,18 +57,6 @@ export async function handleCombatMove(interaction: ButtonInteraction): Promise<
 
   if (data.combatEnded && data.combatResult) {
     const { winnerId, loserId, totalRounds } = data.combatResult;
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Gold)
-      .setTitle("Combat Ended!")
-      .setDescription(
-        `**Winner:** <@${winnerId}> 🏆\n` +
-        `**Loser:** <@${loserId}>\n` +
-        `**Total Rounds:** ${totalRounds}`,
-      )
-      .addFields(
-        { name: "Final HP", value: `Winner: ${data.combatResult.finalHp.winner} | Loser: ${data.combatResult.finalHp.loser}`, inline: false },
-      )
-      .setTimestamp();
 
     // Edit the original fight message to remove buttons
     try {
@@ -78,7 +65,20 @@ export async function handleCombatMove(interaction: ButtonInteraction): Promise<
       // Original message may be gone
     }
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "ok",
+          text(
+            `## Combat Ended!\n**Winner:** <@${winnerId}> 🏆\n**Loser:** <@${loserId}>\n**Total Rounds:** ${totalRounds}`,
+          ),
+          separator("sm"),
+          text(
+            `**Final HP**\nWinner: ${data.combatResult.finalHp.winner} | Loser: ${data.combatResult.finalHp.loser}`,
+          ),
+        ),
+      ),
+    );
     return;
   }
 
@@ -94,18 +94,20 @@ export async function handleCombatMove(interaction: ButtonInteraction): Promise<
       .setStyle(ButtonStyle.Primary),
   );
 
-  const roundEmbed = new EmbedBuilder()
-    .setColor(Colors.Orange)
-    .setTitle(`Round ${round.roundNumber} Results`)
-    .setDescription(
-      `<@${session?.p1Id}> used **${round.p1Move}** — took **${round.p1Damage}** damage (${session?.p1Hp}/${session?.p1MaxHp} HP)\n` +
-      `<@${session?.p2Id}> used **${round.p2Move}** — took **${round.p2Damage}** damage (${session?.p2Hp}/${session?.p2MaxHp} HP)`,
-    )
-    .setFooter({ text: `Round ${(session?.currentRound ?? round.roundNumber + 1)} — choose your next move` })
-    .setTimestamp();
+  const roundSummary = v2Message(
+    container(
+      "warn",
+      text(
+        `## Round ${round.roundNumber} Results\n` +
+          `<@${session?.p1Id}> used **${round.p1Move}** — took **${round.p1Damage}** damage (${session?.p1Hp}/${session?.p1MaxHp} HP)\n` +
+          `<@${session?.p2Id}> used **${round.p2Move}** — took **${round.p2Damage}** damage (${session?.p2Hp}/${session?.p2MaxHp} HP)\n\n` +
+          `-# Round ${session?.currentRound ?? round.roundNumber + 1} — choose your next move`,
+      ),
+    ),
+  );
 
   try {
-    await interaction.message.edit({ embeds: [roundEmbed], components: [moveRow] });
+    await interaction.message.edit({ ...roundSummary, components: [moveRow] });
   } catch {
     // Fall back to ephemeral reply
   }

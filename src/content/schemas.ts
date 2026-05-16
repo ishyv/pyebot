@@ -7,10 +7,7 @@ export const CONTENT_ID_REGEX = /^[a-z0-9_]+$/;
 
 export const ContentIdSchema = z
   .string()
-  .regex(
-    CONTENT_ID_REGEX,
-    "Invalid id. Expected pattern ^[a-z0-9_]+$",
-  );
+  .regex(CONTENT_ID_REGEX, "Invalid id. Expected pattern ^[a-z0-9_]+$");
 
 export const ProfessionSchema = z.enum(["miner", "lumber"]);
 export type Profession = z.infer<typeof ProfessionSchema>;

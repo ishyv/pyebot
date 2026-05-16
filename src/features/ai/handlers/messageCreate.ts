@@ -7,8 +7,8 @@
  */
 
 import type { Client, Message } from "discord.js";
-import { generateResponse } from "@/features/ai/service";
 import { createLogger } from "@/core/logger";
+import { generateResponse } from "@/features/ai/service";
 
 const log = createLogger("ai:message");
 
@@ -23,9 +23,7 @@ function isAIMessage(content: string): boolean {
 }
 
 function stripBotMention(content: string, botId: string): string {
-  return content
-    .replace(new RegExp(`<@!?${botId}>`, "g"), "")
-    .trim();
+  return content.replace(new RegExp(`<@!?${botId}>`, "g"), "").trim();
 }
 
 async function resolveReplyContext(
@@ -104,7 +102,9 @@ export function register(client: Client): void {
         if (i === 0) {
           await message.reply({ content });
         } else if ("send" in message.channel) {
-          await (message.channel as { send(opts: { content: string }): Promise<unknown> }).send({ content });
+          await (message.channel as { send(opts: { content: string }): Promise<unknown> }).send({
+            content,
+          });
         }
       }
     } catch (err) {

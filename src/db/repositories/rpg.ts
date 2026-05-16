@@ -1,5 +1,5 @@
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { RpgProfileSchema, type RpgProfileData } from "@/db/schemas/rpg-profile";
+import { type RpgProfileData, RpgProfileSchema } from "@/db/schemas/rpg-profile";
 import { userStore } from "./users";
 
 // NOTE: rpgStore is userStore (users collection) re-exported for convenience.

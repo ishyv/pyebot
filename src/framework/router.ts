@@ -17,14 +17,15 @@
 
 import type {
   ButtonInteraction,
+  ChannelSelectMenuInteraction,
+  MentionableSelectMenuInteraction,
+  ModalSubmitInteraction,
+  RoleSelectMenuInteraction,
   StringSelectMenuInteraction,
+  UserSelectMenuInteraction,
 } from "discord.js";
 import { getHandleMetadata } from "./decorators";
-import type {
-  BoundComponentHandler,
-  Ctx,
-  LoadedFeature,
-} from "./types";
+import type { BoundComponentHandler, Ctx, LoadedFeature } from "./types";
 
 interface Route {
   readonly prefix: string;
@@ -49,7 +50,9 @@ export class ComponentRouter {
     for (const entry of entries) {
       const method = (feature.handlers as Record<string, unknown>)[entry.methodKey];
       if (typeof method !== "function") continue;
-      const bound = (method as (...a: unknown[]) => unknown).bind(feature.handlers) as BoundComponentHandler;
+      const bound = (method as (...a: unknown[]) => unknown).bind(
+        feature.handlers,
+      ) as BoundComponentHandler;
       this.add(entry.prefix, feature.descriptor.id, bound);
     }
   }
@@ -61,13 +64,21 @@ export class ComponentRouter {
    */
   resolve(customId: string): { handler: BoundComponentHandler; featureId: string } | null {
     for (const route of this.routes) {
-      if (customId.startsWith(route.prefix)) return { handler: route.handler, featureId: route.featureId };
+      if (customId.startsWith(route.prefix))
+        return { handler: route.handler, featureId: route.featureId };
     }
     return null;
   }
 
   async dispatch(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
+    interaction:
+      | ButtonInteraction
+      | StringSelectMenuInteraction
+      | ChannelSelectMenuInteraction
+      | MentionableSelectMenuInteraction
+      | RoleSelectMenuInteraction
+      | UserSelectMenuInteraction
+      | ModalSubmitInteraction,
     ctx: Ctx,
   ): Promise<boolean> {
     const route = this.resolve(interaction.customId);

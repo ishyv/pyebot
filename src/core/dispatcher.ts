@@ -18,11 +18,8 @@
  * Both paths share the same top-level error handler (best-effort reply).
  */
 
-import { MessageFlags, type Interaction } from "discord.js";
-import {
-  createInteractionResponder,
-  type InteractionResponder,
-} from "@/core/interactionResponder";
+import { type Interaction, MessageFlags } from "discord.js";
+import { createInteractionResponder, type InteractionResponder } from "@/core/interactionResponder";
 import { createLogger } from "@/core/logger";
 import { runMiddleware } from "@/core/middleware";
 import type { FeatureRegistry } from "@/core/registry";
@@ -103,13 +100,13 @@ export function createDispatcher(registry: FeatureRegistry) {
       // Component interactions (buttons, select menus, modals)
       // -----------------------------------------------------------------
       if (
-        interaction.isButton()
-        || interaction.isStringSelectMenu()
-        || interaction.isChannelSelectMenu()
-        || interaction.isMentionableSelectMenu()
-        || interaction.isRoleSelectMenu()
-        || interaction.isUserSelectMenu()
-        || interaction.isModalSubmit()
+        interaction.isButton() ||
+        interaction.isStringSelectMenu() ||
+        interaction.isChannelSelectMenu() ||
+        interaction.isMentionableSelectMenu() ||
+        interaction.isRoleSelectMenu() ||
+        interaction.isUserSelectMenu() ||
+        interaction.isModalSubmit()
       ) {
         const customId = interaction.customId;
         const entry = registry.getComponentHandler(customId);
@@ -125,7 +122,10 @@ export function createDispatcher(registry: FeatureRegistry) {
             const enabled = (cfg.features as Record<string, boolean>)[feature.featureGate];
             if (enabled === false) {
               try {
-                await interaction.reply({ content: "This feature is disabled.", flags: MessageFlags.Ephemeral });
+                await interaction.reply({
+                  content: "This feature is disabled.",
+                  flags: MessageFlags.Ephemeral,
+                });
               } catch {
                 // ignore
               }

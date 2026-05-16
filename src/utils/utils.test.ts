@@ -1,8 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { buildCorrelationId, buildCompositeId, buildProgressId, buildAchievementId, buildListingId } from "./ids";
-import { msToHuman, getCooldownExpiry, isCooldownExpired, minutesToMs, hoursToMs, daysToMs } from "./time";
-import { formatAmount, applyTaxRate, clamp, formatCurrencyAmount, isValidAmount } from "./currency";
+import { applyTaxRate, clamp, formatAmount, formatCurrencyAmount, isValidAmount } from "./currency";
 import { parseDuration } from "./duration";
+import {
+  buildAchievementId,
+  buildCompositeId,
+  buildCorrelationId,
+  buildListingId,
+  buildProgressId,
+} from "./ids";
+import {
+  daysToMs,
+  getCooldownExpiry,
+  hoursToMs,
+  isCooldownExpired,
+  minutesToMs,
+  msToHuman,
+} from "./time";
 
 describe("ids", () => {
   test("buildCorrelationId returns a non-empty string", () => {

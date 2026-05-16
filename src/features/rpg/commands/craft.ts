@@ -1,15 +1,15 @@
 import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
   type AutocompleteInteraction,
+  type ChatInputCommandInteraction,
+  SlashCommandBuilder,
 } from "discord.js";
-import { craft } from "@/features/rpg/crafting";
 import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
+import { craft } from "@/features/rpg/crafting";
+import { defineCommand } from "@/framework";
+import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("craft")
   .setDescription("Craft an item using materials from your inventory")
   .addStringOption((opt) =>
@@ -28,7 +28,7 @@ export const data = new SlashCommandBuilder()
       .setMaxValue(99),
   );
 
-export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
   const choices = Object.keys(CRAFTING_RECIPES)
     .filter((key) => key.toLowerCase().includes(focused))
@@ -37,7 +37,7 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   await interaction.respond(choices);
 }
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -65,11 +65,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       description = err.message;
     }
 
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription(description)
-      .setFooter({ text: getHints("craft") });
-    await interaction.editReply({ embeds: [errorEmbed] });
+    await interaction.editReply(
+      v2Message(container("danger", text(`${description}\n-# ${getHints("craft")}`))),
+    );
     return;
   }
 
@@ -79,12 +77,21 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .map(([material, amount]) => `${amount}x ${material}`)
     .join("\n");
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Gold)
-    .setTitle("Crafted!")
-    .setDescription(`You crafted ${quantity}x \`${itemId}\``)
-    .addFields({ name: "Materials Used", value: materialsText || "None" })
-    .setFooter({ text: getHints("craft") });
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        text(`## Crafted!\nYou crafted ${quantity}x \`${itemId}\``),
+        separator("sm"),
+        text(`**Materials Used**\n${materialsText || "None"}\n-# ${getHints("craft")}`),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/equip", "/inventory", "/expedition"] },
+  autocomplete,
+  execute,
+});

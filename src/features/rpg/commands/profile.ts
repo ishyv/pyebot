@@ -1,24 +1,24 @@
 import {
-  SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Colors,
   type ChatInputCommandInteraction,
+  SlashCommandBuilder,
 } from "discord.js";
-import type { Ctx } from "@/framework/types";
 import { RpgProfile } from "@/components/rpg-profile";
 import { ONBOARD_PREFIX } from "@/features/rpg/handlers/onboard";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, section, text, thumb, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("rpg-profile")
   .setDescription("View an RPG profile")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to view (defaults to you)").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -35,42 +35,56 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Blurple)
-      .setTitle("⚔️ Choose Your Path")
-      .setDescription(
-        "Welcome to the RPG! Pick a profession to get started.\n\n" +
-        "**⛏️ Miner** — Mine ore, smelt ingots, craft pickaxes.\n" +
-        "**🪓 Lumberjack** — Chop wood, process planks, craft axes.",
-      );
+    const minerButton = new ButtonBuilder()
+      .setCustomId(`${ONBOARD_PREFIX}miner`)
+      .setLabel("⛏️ Miner")
+      .setStyle(ButtonStyle.Primary);
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${ONBOARD_PREFIX}miner`)
-        .setLabel("⛏️ Miner")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`${ONBOARD_PREFIX}lumber`)
-        .setLabel("🪓 Lumberjack")
-        .setStyle(ButtonStyle.Success),
+    const lumberButton = new ButtonBuilder()
+      .setCustomId(`${ONBOARD_PREFIX}lumber`)
+      .setLabel("🪓 Lumberjack")
+      .setStyle(ButtonStyle.Success);
+
+    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      minerButton,
+      lumberButton,
     );
 
-    await interaction.editReply({ embeds: [embed], components: [row] });
+    await interaction.editReply({
+      ...v2Message(
+        container(
+          "info",
+          text(
+            "## ⚔️ Choose Your Path\nWelcome to the RPG! Pick a profession to get started.\n\n" +
+              "**⛏️ Miner** — Mine ore, smelt ingots, craft pickaxes.\n" +
+              "**🪓 Lumberjack** — Chop wood, process planks, craft axes.",
+          ),
+        ),
+      ),
+      components: [buttonRow],
+    });
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blurple)
-    .setTitle(`${target.username}'s RPG Profile`)
-    .addFields(
-      { name: "HP", value: `${profile.hpCurrent}`, inline: true },
-      { name: "Wins", value: `${profile.wins}`, inline: true },
-      { name: "Losses", value: `${profile.losses}`, inline: true },
-    );
+  const avatarUrl = target.displayAvatarURL({ size: 128 });
+  const professionLine = profile.starterKitType
+    ? `\n**Profession:** ${profile.starterKitType}`
+    : "";
 
-  if (profile.starterKitType) {
-    embed.addFields({ name: "Profession", value: profile.starterKitType, inline: true });
-  }
+  const statsText =
+    `## ⚔️ ${target.username}'s RPG Profile\n` +
+    `**HP:** ${profile.hpCurrent}/100\n` +
+    `**Wins:** ${profile.wins}\n` +
+    `**Losses:** ${profile.losses}` +
+    professionLine;
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(container("info", section(statsText, thumb(avatarUrl, "avatar")))),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/expedition", "/fight", "/rpg-quest list"] },
+  execute,
+});

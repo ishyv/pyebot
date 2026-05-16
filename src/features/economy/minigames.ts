@@ -6,9 +6,9 @@
  * interaction boundary.
  */
 
-import type { Ctx } from "@/framework/types";
-import { getBalance, adjustBalance } from "@/features/economy/mutations";
 import { ensureAccount, isAccountActive } from "@/features/economy/account";
+import { adjustBalance, getBalance } from "@/features/economy/mutations";
+import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -140,21 +140,126 @@ export interface RobResult {
 // ---------------------------------------------------------------------------
 
 const TRIVIA_QUESTIONS: TriviaQuestion[] = [
-  { id: "q1", question: "What is 2 + 2?", options: ["3", "4", "5", "6"], correctIndex: 1, category: "math", difficulty: 1 },
-  { id: "q2", question: "What color is the sky on a clear day?", options: ["Green", "Blue", "Red", "Yellow"], correctIndex: 1, category: "general", difficulty: 1 },
-  { id: "q3", question: "How many sides does a triangle have?", options: ["2", "3", "4", "5"], correctIndex: 1, category: "math", difficulty: 1 },
-  { id: "q4", question: "What is the capital of France?", options: ["London", "Berlin", "Paris", "Rome"], correctIndex: 2, category: "geography", difficulty: 1 },
-  { id: "q5", question: "What is 7 * 8?", options: ["54", "56", "58", "60"], correctIndex: 1, category: "math", difficulty: 2 },
-  { id: "q6", question: "How many planets are in our solar system?", options: ["7", "8", "9", "10"], correctIndex: 1, category: "science", difficulty: 2 },
-  { id: "q7", question: "What is the chemical symbol for water?", options: ["O2", "CO2", "H2O", "HO"], correctIndex: 2, category: "science", difficulty: 2 },
-  { id: "q8", question: "Who wrote Romeo and Juliet?", options: ["Dickens", "Tolkien", "Shakespeare", "Austen"], correctIndex: 2, category: "literature", difficulty: 2 },
-  { id: "q9", question: "What is the square root of 144?", options: ["10", "11", "12", "13"], correctIndex: 2, category: "math", difficulty: 2 },
-  { id: "q10", question: "What year did World War II end?", options: ["1943", "1944", "1945", "1946"], correctIndex: 2, category: "history", difficulty: 2 },
-  { id: "q11", question: "What is the largest ocean on Earth?", options: ["Atlantic", "Indian", "Arctic", "Pacific"], correctIndex: 3, category: "geography", difficulty: 1 },
-  { id: "q12", question: "How many bones are in the adult human body?", options: ["196", "206", "216", "226"], correctIndex: 1, category: "science", difficulty: 3 },
-  { id: "q13", question: "What is the speed of light in km/s (approx)?", options: ["200,000", "300,000", "400,000", "500,000"], correctIndex: 1, category: "science", difficulty: 3 },
-  { id: "q14", question: "In what year was the Eiffel Tower built?", options: ["1879", "1885", "1889", "1895"], correctIndex: 2, category: "history", difficulty: 3 },
-  { id: "q15", question: "What is the atomic number of gold?", options: ["47", "72", "79", "83"], correctIndex: 2, category: "science", difficulty: 3 },
+  {
+    id: "q1",
+    question: "What is 2 + 2?",
+    options: ["3", "4", "5", "6"],
+    correctIndex: 1,
+    category: "math",
+    difficulty: 1,
+  },
+  {
+    id: "q2",
+    question: "What color is the sky on a clear day?",
+    options: ["Green", "Blue", "Red", "Yellow"],
+    correctIndex: 1,
+    category: "general",
+    difficulty: 1,
+  },
+  {
+    id: "q3",
+    question: "How many sides does a triangle have?",
+    options: ["2", "3", "4", "5"],
+    correctIndex: 1,
+    category: "math",
+    difficulty: 1,
+  },
+  {
+    id: "q4",
+    question: "What is the capital of France?",
+    options: ["London", "Berlin", "Paris", "Rome"],
+    correctIndex: 2,
+    category: "geography",
+    difficulty: 1,
+  },
+  {
+    id: "q5",
+    question: "What is 7 * 8?",
+    options: ["54", "56", "58", "60"],
+    correctIndex: 1,
+    category: "math",
+    difficulty: 2,
+  },
+  {
+    id: "q6",
+    question: "How many planets are in our solar system?",
+    options: ["7", "8", "9", "10"],
+    correctIndex: 1,
+    category: "science",
+    difficulty: 2,
+  },
+  {
+    id: "q7",
+    question: "What is the chemical symbol for water?",
+    options: ["O2", "CO2", "H2O", "HO"],
+    correctIndex: 2,
+    category: "science",
+    difficulty: 2,
+  },
+  {
+    id: "q8",
+    question: "Who wrote Romeo and Juliet?",
+    options: ["Dickens", "Tolkien", "Shakespeare", "Austen"],
+    correctIndex: 2,
+    category: "literature",
+    difficulty: 2,
+  },
+  {
+    id: "q9",
+    question: "What is the square root of 144?",
+    options: ["10", "11", "12", "13"],
+    correctIndex: 2,
+    category: "math",
+    difficulty: 2,
+  },
+  {
+    id: "q10",
+    question: "What year did World War II end?",
+    options: ["1943", "1944", "1945", "1946"],
+    correctIndex: 2,
+    category: "history",
+    difficulty: 2,
+  },
+  {
+    id: "q11",
+    question: "What is the largest ocean on Earth?",
+    options: ["Atlantic", "Indian", "Arctic", "Pacific"],
+    correctIndex: 3,
+    category: "geography",
+    difficulty: 1,
+  },
+  {
+    id: "q12",
+    question: "How many bones are in the adult human body?",
+    options: ["196", "206", "216", "226"],
+    correctIndex: 1,
+    category: "science",
+    difficulty: 3,
+  },
+  {
+    id: "q13",
+    question: "What is the speed of light in km/s (approx)?",
+    options: ["200,000", "300,000", "400,000", "500,000"],
+    correctIndex: 1,
+    category: "science",
+    difficulty: 3,
+  },
+  {
+    id: "q14",
+    question: "In what year was the Eiffel Tower built?",
+    options: ["1879", "1885", "1889", "1895"],
+    correctIndex: 2,
+    category: "history",
+    difficulty: 3,
+  },
+  {
+    id: "q15",
+    question: "What is the atomic number of gold?",
+    options: ["47", "72", "79", "83"],
+    correctIndex: 2,
+    category: "science",
+    difficulty: 3,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -181,7 +286,10 @@ export async function coinflip(
   }
   if (ctx.cooldowns.isOnCooldown(userId, "coinflip")) {
     const remaining = ctx.cooldowns.getRemainingMs(userId, "coinflip");
-    throw new MinigameError("COOLDOWN_ACTIVE", `Coinflip is on cooldown. Try again in ${remaining}ms`);
+    throw new MinigameError(
+      "COOLDOWN_ACTIVE",
+      `Coinflip is on cooldown. Try again in ${remaining}ms`,
+    );
   }
 
   const account = await ensureAccount(ctx, userId);
@@ -191,7 +299,10 @@ export async function coinflip(
 
   const balance = await getBalance(ctx, userId, cfg.currencyId);
   if (balance < betAmount) {
-    throw new MinigameError("INSUFFICIENT_FUNDS", `You need at least ${betAmount} ${cfg.currencyId} to play`);
+    throw new MinigameError(
+      "INSUFFICIENT_FUNDS",
+      `You need at least ${betAmount} ${cfg.currencyId} to play`,
+    );
   }
 
   const outcome: "heads" | "tails" = Math.random() < 0.5 ? "heads" : "tails";
@@ -225,7 +336,10 @@ export async function startTrivia(
 ): Promise<TriviaStartResult> {
   if (ctx.cooldowns.isOnCooldown(userId, "trivia")) {
     const remaining = ctx.cooldowns.getRemainingMs(userId, "trivia");
-    throw new MinigameError("COOLDOWN_ACTIVE", `Trivia is on cooldown. Try again in ${remaining}ms`);
+    throw new MinigameError(
+      "COOLDOWN_ACTIVE",
+      `Trivia is on cooldown. Try again in ${remaining}ms`,
+    );
   }
 
   const account = await ensureAccount(ctx, userId);
@@ -317,7 +431,10 @@ export async function rob(
   }
   if (ctx.cooldowns.isOnCooldown(robberId, `rob:${targetId}`)) {
     const remaining = ctx.cooldowns.getRemainingMs(robberId, `rob:${targetId}`);
-    throw new MinigameError("COOLDOWN_ACTIVE", `You recently robbed this person. Try again in ${remaining}ms`);
+    throw new MinigameError(
+      "COOLDOWN_ACTIVE",
+      `You recently robbed this person. Try again in ${remaining}ms`,
+    );
   }
 
   const robberAccount = await ensureAccount(ctx, robberId);
@@ -327,7 +444,10 @@ export async function rob(
 
   const targetBalance = await getBalance(ctx, targetId, cfg.currencyId);
   if (targetBalance < cfg.minTargetBalance) {
-    throw new MinigameError("TARGET_INSUFFICIENT_FUNDS", `Target doesn't have enough ${cfg.currencyId} to rob`);
+    throw new MinigameError(
+      "TARGET_INSUFFICIENT_FUNDS",
+      `Target doesn't have enough ${cfg.currencyId} to rob`,
+    );
   }
 
   const stealAmount = Math.min(Math.floor(targetBalance * cfg.maxStealPct), cfg.maxStealAmount);
@@ -339,7 +459,13 @@ export async function rob(
   if (!failed) {
     const robberNewBalance = await adjustBalance(ctx, robberId, cfg.currencyId, stealAmount);
     const targetNewBalance = await adjustBalance(ctx, targetId, cfg.currencyId, -stealAmount);
-    return { success: true, stolenAmount: stealAmount, fineAmount: 0, robberNewBalance, targetNewBalance };
+    return {
+      success: true,
+      stolenAmount: stealAmount,
+      fineAmount: 0,
+      robberNewBalance,
+      targetNewBalance,
+    };
   }
 
   // Robbery failed — apply fine to robber (best effort, no throw on insufficient)
@@ -352,5 +478,11 @@ export async function rob(
   }
 
   const robberNewBalance = await getBalance(ctx, robberId, cfg.currencyId);
-  return { success: false, stolenAmount: 0, fineAmount, robberNewBalance, targetNewBalance: targetBalance };
+  return {
+    success: false,
+    stolenAmount: 0,
+    fineAmount,
+    robberNewBalance,
+    targetNewBalance: targetBalance,
+  };
 }

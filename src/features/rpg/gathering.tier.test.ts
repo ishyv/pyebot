@@ -3,10 +3,10 @@
  * Mocks @/db/repositories/users — no real DB required.
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
-import { OkResult, ErrResult } from "@/core/result";
-import type { User } from "@/db/schemas/user";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { ErrResult, OkResult } from "@/core/result";
 import type { Loadout } from "@/db/schemas/rpg-profile";
+import type { User } from "@/db/schemas/user";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test
@@ -29,9 +29,9 @@ mock.module("@/db/repositories/rpg", () => ({
 // Import SUT after mocks
 // ---------------------------------------------------------------------------
 
-import { getEquippedToolTier, TOOL_TIER_FALLBACK } from "./gathering";
-import { toolTier, parseToolId } from "@/features/rpg/content/tools";
 import { parseLocationForAction, parseLocationId } from "@/features/rpg/content/locations";
+import { parseToolId, toolTier } from "@/features/rpg/content/tools";
+import { getEquippedToolTier, TOOL_TIER_FALLBACK } from "./gathering";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -177,7 +177,9 @@ describe("getEquippedToolTier", () => {
 
   test("loadout.weapon = stone_pickaxe → returns 2", async () => {
     mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ instanceId: "inst-1", itemId: "stone_pickaxe", durability: 50 })),
+      OkResult<User | null>(
+        makeUser({ instanceId: "inst-1", itemId: "stone_pickaxe", durability: 50 }),
+      ),
     );
     const tier = await getEquippedToolTier("user-1");
     expect(tier).toBe(2);
@@ -185,7 +187,9 @@ describe("getEquippedToolTier", () => {
 
   test("loadout.weapon = copper_axe → returns 3", async () => {
     mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ instanceId: "inst-2", itemId: "copper_axe", durability: 30 })),
+      OkResult<User | null>(
+        makeUser({ instanceId: "inst-2", itemId: "copper_axe", durability: 30 }),
+      ),
     );
     const tier = await getEquippedToolTier("user-1");
     expect(tier).toBe(3);
@@ -193,7 +197,9 @@ describe("getEquippedToolTier", () => {
 
   test("loadout.weapon = unknown_item → returns TOOL_TIER_FALLBACK", async () => {
     mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ instanceId: "inst-3", itemId: "unknown_item", durability: 10 })),
+      OkResult<User | null>(
+        makeUser({ instanceId: "inst-3", itemId: "unknown_item", durability: 10 }),
+      ),
     );
     const tier = await getEquippedToolTier("user-1");
     expect(tier).toBe(TOOL_TIER_FALLBACK);

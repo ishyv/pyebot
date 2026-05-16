@@ -3,11 +3,11 @@
  * Mocks @/db/repositories/users — no real DB required.
  */
 
-import { describe, it, expect, mock, beforeEach } from "bun:test";
-import { OkResult, ErrResult, Err } from "@/core/result";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { type Err, ErrResult, OkResult } from "@/core/result";
 import type { User } from "@/db/schemas/user";
-import type { CraftingError as CraftingErrorType, CraftingResult } from "./crafting";
 import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
+import type { CraftingError as CraftingErrorType, CraftingResult } from "./crafting";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test
@@ -95,9 +95,7 @@ describe("craft()", () => {
 
   // Test 3: Insufficient materials
   it("returns INSUFFICIENT_MATERIALS when not enough materials (need 3 stone, have 2)", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ stone: 2 })),
-    );
+    mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUser({ stone: 2 })));
     const result = await craft("user-1", "stone_pickaxe");
     expect(result.isErr()).toBe(true);
     const err = (result as Err<CraftingResult, CraftingErrorType>).error;
@@ -109,9 +107,7 @@ describe("craft()", () => {
 
   // Test 4: Exact materials available → success
   it("succeeds with exact materials and returns correct materialsConsumed", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ stone: 3 })),
-    );
+    mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUser({ stone: 3 })));
     const result = await craft("user-1", "stone_pickaxe");
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -132,19 +128,14 @@ describe("craft()", () => {
 
   // Test 5: Quantity > 1 (craft 2 stone_pickaxe)
   it("doubles material consumption when quantity=2", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ stone: 7 })),
-    );
+    mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUser({ stone: 7 })));
     const result = await craft("user-1", "stone_pickaxe", 2);
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
     expect(data.quantity).toBe(2);
     expect(data.materialsConsumed).toEqual({ stone: 6 }); // 3 * 2
 
-    const [, calledPaths] = mockUpdateUserPaths.mock.calls[0] as [
-      string,
-      Record<string, number>,
-    ];
+    const [, calledPaths] = mockUpdateUserPaths.mock.calls[0] as [string, Record<string, number>];
     expect(calledPaths["inventory.stone"]).toBe(1); // 7 - 6 = 1
     expect(calledPaths["inventory.stone_pickaxe"]).toBe(2);
   });
@@ -160,19 +151,14 @@ describe("craft()", () => {
     expect(data.itemId).toBe("copper_pickaxe");
     expect(data.materialsConsumed).toEqual({ copper_ingot: 3 });
 
-    const [, calledPaths] = mockUpdateUserPaths.mock.calls[0] as [
-      string,
-      Record<string, number>,
-    ];
+    const [, calledPaths] = mockUpdateUserPaths.mock.calls[0] as [string, Record<string, number>];
     expect(calledPaths["inventory.copper_ingot"]).toBe(2); // 5 - 3 = 2
     expect(calledPaths["inventory.copper_pickaxe"]).toBe(1);
   });
 
   // Additional: insufficient for quantity > 1
   it("returns INSUFFICIENT_MATERIALS when quantity*required exceeds inventory", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ stone: 5 })),
-    );
+    mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUser({ stone: 5 })));
     const result = await craft("user-1", "stone_pickaxe", 2); // needs 6, have 5
     expect(result.isErr()).toBe(true);
     const err = (result as Err<CraftingResult, CraftingErrorType>).error;
@@ -181,9 +167,7 @@ describe("craft()", () => {
 
   // UPDATE_FAILED: updateUserPaths returns an error
   it("returns UPDATE_FAILED when updateUserPaths fails", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(makeUser({ stone: 3 })),
-    );
+    mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUser({ stone: 3 })));
     mockUpdateUserPaths.mockImplementation(async () => ErrResult(new Error("db write failed")));
     const result = await craft("user-1", "stone_pickaxe");
     expect(result.isErr()).toBe(true);

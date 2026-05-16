@@ -1,21 +1,21 @@
 import {
-  SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
+  type ChatInputCommandInteraction,
+  SlashCommandBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
 } from "discord.js";
 import { getUser } from "@/db/repositories/users";
-import { getHints } from "@/utils/command-registry";
 import { EQUIPABLE_TOOLS } from "@/features/rpg/handlers/equip";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
+import { getHints } from "@/utils/command-registry";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("equip")
   .setDescription("Equip a tool from your inventory");
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -44,14 +44,17 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .filter(([itemId, qty]) => EQUIPABLE_TOOLS.has(itemId) && typeof qty === "number" && qty >= 1)
     .map(([itemId, qty]) => ({ itemId, qty: qty as number }));
 
-  const footer = { text: getHints("equip") };
-
   if (availableTools.length === 0) {
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Orange)
-      .setDescription("You don't have any tools in your inventory. Craft one with `/craft`.")
-      .setFooter(footer);
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "warn",
+          text(
+            `You don't have any tools in your inventory. Craft one with \`/craft\`.\n-# ${getHints("equip")}`,
+          ),
+        ),
+      ),
+    );
     return;
   }
 
@@ -68,7 +71,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return new StringSelectMenuOptionBuilder()
       .setValue(itemId)
       .setLabel(itemId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
-      .setDescription(isEquipped ? `×${qty} in inventory (currently equipped)` : `×${qty} in inventory`)
+      .setDescription(
+        isEquipped ? `×${qty} in inventory (currently equipped)` : `×${qty} in inventory`,
+      )
       .setDefault(isEquipped);
   });
 
@@ -77,17 +82,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setPlaceholder("Choose a tool to equip…")
     .addOptions(options);
 
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+  const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle("🗡️ Equip a Tool")
-    .setDescription(
-      currentItemId
-        ? `Currently equipped: \`${currentItemId}\`\n\nSelect a tool from the dropdown to equip it.`
-        : "Select a tool from the dropdown to equip it.",
-    )
-    .setFooter(footer);
+  const bodyText = currentItemId
+    ? `## 🗡️ Equip a Tool\nCurrently equipped: \`${currentItemId}\`\n\nSelect a tool from the dropdown to equip it.\n-# ${getHints("equip")}`
+    : `## 🗡️ Equip a Tool\nSelect a tool from the dropdown to equip it.\n-# ${getHints("equip")}`;
 
-  await interaction.editReply({ embeds: [embed], components: [row] });
+  await interaction.editReply({
+    ...v2Message(container("info", text(bodyText))),
+    components: [selectRow],
+  });
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/expedition", "/rpg-profile"] },
+  execute,
+});

@@ -1,21 +1,17 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { browseListings } from "@/features/economy/market";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("market-browse")
   .setDescription("Browse active market listings")
   .addStringOption((opt) =>
     opt.setName("item_id").setDescription("Filter by item ID").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -35,20 +31,22 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
 
   const { listings } = result.unwrap();
 
-  const embed = new EmbedBuilder().setColor(Colors.Blue).setTitle("Market Listings");
-
+  let body: string;
   if (listings.length === 0) {
-    embed.setDescription("No listings found.");
+    body = "## Market Listings\nNo listings found.";
   } else {
-    for (const listing of listings) {
+    const lines = listings.map((listing) => {
       const shortId = listing._id.slice(-8);
-      embed.addFields({
-        name: `#${shortId}`,
-        value: `${listing.quantity}x **${listing.itemId}** @ ${listing.pricePerUnit}/ea — <@${listing.sellerId}>`,
-        inline: false,
-      });
-    }
+      return `**#${shortId}** — ${listing.quantity}x **${listing.itemId}** @ ${listing.pricePerUnit}/ea — <@${listing.sellerId}>`;
+    });
+    body = `## Market Listings\n${lines.join("\n")}`;
   }
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(v2Message(container("info", text(body))));
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/market-buy", "/market-list"] },
+  execute,
+});

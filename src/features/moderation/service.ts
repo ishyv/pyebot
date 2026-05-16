@@ -14,14 +14,14 @@
 
 import type { Guild, GuildMember, User } from "discord.js";
 import { PermissionFlagsBits, type PermissionResolvable } from "discord.js";
-import { OkResult, ErrResult, type Result } from "@/core/result";
-import { getDb } from "@/core/db";
-import { userStore, updateUserPaths } from "@/db/repositories/users";
-import { getGuild } from "@/db/repositories/guilds";
 import { bus } from "@/core/bus";
+import { getDb } from "@/core/db";
+import { ErrResult, OkResult, type Result } from "@/core/result";
+import { getGuild } from "@/db/repositories/guilds";
+import { updateUserPaths, userStore } from "@/db/repositories/users";
+import type { SanctionHistoryEntry } from "@/db/schemas/user";
 import { missingPermission } from "@/middleware/permissions";
 import { msToHuman } from "@/utils/time";
-import type { SanctionHistoryEntry } from "@/db/schemas/user";
 import { sendModLog } from "./modlog";
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,6 @@ export interface SanctionEntry {
   readonly evidenceSummary?: string;
 }
 
-
 export interface ModerationResult {
   readonly type: SanctionType;
   readonly targetId: string;
@@ -80,11 +79,12 @@ export interface ModerationResult {
 async function nextCaseId(guildId: string): Promise<number> {
   try {
     const db = await getDb();
-    const result = await db.collection("guilds").findOneAndUpdate(
-      { _id: guildId } as never,
-      { $inc: { nextCaseId: 1 } } as never,
-      { returnDocument: "before", upsert: true },
-    );
+    const result = await db
+      .collection("guilds")
+      .findOneAndUpdate({ _id: guildId } as never, { $inc: { nextCaseId: 1 } } as never, {
+        returnDocument: "before",
+        upsert: true,
+      });
     return (result as { nextCaseId?: number } | null)?.nextCaseId ?? 1;
   } catch {
     return Date.now(); // fallback — guaranteed unique, just not sequential
@@ -149,13 +149,24 @@ export async function recordAutomodSystemCase(
     caseId,
   };
 
-  await sendModLog(guild, modResult, { note: `AutoMod evidence: ${evidenceSummary.slice(0, 500)}` });
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId, sanctionType: type, caseId });
+  await sendModLog(guild, modResult, {
+    note: `AutoMod evidence: ${evidenceSummary.slice(0, 500)}`,
+  });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: target.id,
+    moderatorId,
+    sanctionType: type,
+    caseId,
+  });
   return OkResult(modResult);
 }
 
 function moderationRoleSnapshot(member: GuildMember): string[] {
-  return [...member.roles.cache.filter((role) => !role.managed && role.id !== member.guild.id).keys()];
+  return [
+    ...member.roles.cache.filter((role) => !role.managed && role.id !== member.guild.id).keys(),
+  ];
 }
 
 function validateTarget(
@@ -172,12 +183,15 @@ function validateTarget(
   return null;
 }
 
-
 function checkBotPerms(guild: Guild, ...perms: PermissionResolvable[]): ModerationError | null {
   const bot = guild.members.me;
   if (!bot) return new ModerationError("INSUFFICIENT_PERMISSIONS", "Bot is not a guild member");
   const missing = missingPermission(bot, ...perms);
-  if (missing) return new ModerationError("INSUFFICIENT_PERMISSIONS", `Bot missing permission: ${String(missing)}`);
+  if (missing)
+    return new ModerationError(
+      "INSUFFICIENT_PERMISSIONS",
+      `Bot missing permission: ${String(missing)}`,
+    );
   return null;
 }
 
@@ -186,12 +200,12 @@ function checkBotPerms(guild: Guild, ...perms: PermissionResolvable[]): Moderati
 // ---------------------------------------------------------------------------
 
 const TEMP_BAN_DURATION_MAP: Record<string, number> = {
-  "1h":  1 * 60 * 60 * 1000,
-  "6h":  6 * 60 * 60 * 1000,
+  "1h": 1 * 60 * 60 * 1000,
+  "6h": 6 * 60 * 60 * 1000,
   "12h": 12 * 60 * 60 * 1000,
-  "1d":  24 * 60 * 60 * 1000,
-  "3d":  3 * 24 * 60 * 60 * 1000,
-  "7d":  7 * 24 * 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+  "3d": 3 * 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
   "30d": 30 * 24 * 60 * 60 * 1000,
 };
 
@@ -213,12 +227,25 @@ export async function ban(
   try {
     await guild.members.ban(target.id, { reason: `${reason} | by ${moderator.user.tag}` });
   } catch (err) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Ban failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DISCORD_API_FAILED",
+        `Ban failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   const caseId = await nextCaseId(guild.id);
   const durationLabel = duration ? ` (${duration})` : "";
-  await pushSanction(target.id, guild.id, "BAN", `${reason}${durationLabel}`, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
+  await pushSanction(
+    target.id,
+    guild.id,
+    "BAN",
+    `${reason}${durationLabel}`,
+    moderator.id,
+    caseId,
+    moderationRoleSnapshot(moderator),
+  ).catch(() => {});
 
   // Schedule auto-unban if duration provided
   if (duration && TEMP_BAN_DURATION_MAP[duration]) {
@@ -243,7 +270,14 @@ export async function ban(
   };
 
   await sendModLog(guild, modResult, duration ? { duration } : undefined);
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "BAN", caseId });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: target.id,
+    moderatorId: moderator.id,
+    sanctionType: "BAN",
+    caseId,
+  });
 
   // Best-effort appeal DM
   sendBanDm(guild, target, reason, caseId).catch(() => {});
@@ -251,7 +285,12 @@ export async function ban(
   return OkResult(modResult);
 }
 
-async function sendBanDm(guild: Guild, target: User, reason: string, caseId: number): Promise<void> {
+async function sendBanDm(
+  guild: Guild,
+  target: User,
+  reason: string,
+  caseId: number,
+): Promise<void> {
   try {
     const guildResult = await getGuild(guild.id);
     if (guildResult.isErr()) return;
@@ -270,7 +309,9 @@ async function sendBanDm(guild: Guild, target: User, reason: string, caseId: num
     } else {
       await target.send(msg);
     }
-  } catch { /* DMs may be closed */ }
+  } catch {
+    /* DMs may be closed */
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,11 +333,24 @@ export async function kick(
   try {
     await target.kick(`${reason} | by ${moderator.user.tag}`);
   } catch (err) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Kick failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DISCORD_API_FAILED",
+        `Kick failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "KICK", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
+  await pushSanction(
+    target.id,
+    guild.id,
+    "KICK",
+    reason,
+    moderator.id,
+    caseId,
+    moderationRoleSnapshot(moderator),
+  ).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "KICK",
@@ -308,7 +362,14 @@ export async function kick(
   };
 
   await sendModLog(guild, modResult);
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "KICK", caseId });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: target.id,
+    moderatorId: moderator.id,
+    sanctionType: "KICK",
+    caseId,
+  });
 
   return OkResult(modResult);
 }
@@ -319,15 +380,14 @@ export async function kick(
 
 export const DURATION_MAP: Record<string, number> = {
   "10m": 10 * 60 * 1000,
-  "1h":  60 * 60 * 1000,
-  "6h":  6 * 60 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "6h": 6 * 60 * 60 * 1000,
   "12h": 12 * 60 * 60 * 1000,
-  "1d":  24 * 60 * 60 * 1000,
-  "7d":  7 * 24 * 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
 };
 
 export const MUTE_DURATION_CHOICES = Object.keys(DURATION_MAP);
-
 
 export async function mute(
   guild: Guild,
@@ -345,11 +405,24 @@ export async function mute(
   try {
     await target.timeout(durationMs, `${reason} | by ${moderator.user.tag}`);
   } catch (err) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Mute failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DISCORD_API_FAILED",
+        `Mute failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "TIMEOUT", `${msToHuman(durationMs)} — ${reason}`, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
+  await pushSanction(
+    target.id,
+    guild.id,
+    "TIMEOUT",
+    `${msToHuman(durationMs)} — ${reason}`,
+    moderator.id,
+    caseId,
+    moderationRoleSnapshot(moderator),
+  ).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "TIMEOUT",
@@ -361,7 +434,14 @@ export async function mute(
   };
 
   await sendModLog(guild, modResult, { duration: msToHuman(durationMs) });
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "TIMEOUT", caseId });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: target.id,
+    moderatorId: moderator.id,
+    sanctionType: "TIMEOUT",
+    caseId,
+  });
 
   return OkResult(modResult);
 }
@@ -380,7 +460,15 @@ export async function warn(
   if (validationErr) return ErrResult(validationErr);
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "WARN", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
+  await pushSanction(
+    target.id,
+    guild.id,
+    "WARN",
+    reason,
+    moderator.id,
+    caseId,
+    moderationRoleSnapshot(moderator),
+  ).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "WARN",
@@ -392,7 +480,14 @@ export async function warn(
   };
 
   await sendModLog(guild, modResult);
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "WARN", caseId });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: target.id,
+    moderatorId: moderator.id,
+    sanctionType: "WARN",
+    caseId,
+  });
 
   // Check escalation thresholds after warn
   const escalated = await checkEscalation(guild, target, moderator).catch(() => false);
@@ -464,14 +559,41 @@ export async function restrict(
   try {
     await target.roles.add(roleId, reason);
   } catch (err) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Restrict failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DISCORD_API_FAILED",
+        `Restrict failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "RESTRICT", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
-  const modResult: ModerationResult = { type: "RESTRICT", targetId: target.id, targetTag: target.user.tag, reason, moderatorId: moderator.id, caseId };
+  await pushSanction(
+    target.id,
+    guild.id,
+    "RESTRICT",
+    reason,
+    moderator.id,
+    caseId,
+    moderationRoleSnapshot(moderator),
+  ).catch(() => {});
+  const modResult: ModerationResult = {
+    type: "RESTRICT",
+    targetId: target.id,
+    targetTag: target.user.tag,
+    reason,
+    moderatorId: moderator.id,
+    caseId,
+  };
   await sendModLog(guild, modResult);
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "RESTRICT", caseId });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: target.id,
+    moderatorId: moderator.id,
+    sanctionType: "RESTRICT",
+    caseId,
+  });
   return OkResult(modResult);
 }
 
@@ -505,7 +627,9 @@ export async function getCaseById(
     } as never);
 
     if (!doc) return OkResult(null);
-    const history = (doc as Record<string, unknown>).sanction_history as Record<string, SanctionEntry[]> | undefined;
+    const history = (doc as Record<string, unknown>).sanction_history as
+      | Record<string, SanctionEntry[]>
+      | undefined;
     const entries = history?.[guildId] ?? [];
     const entry = entries.find((e) => e.caseId === caseId) ?? null;
     return OkResult(entry ? { entry, userId: String((doc as { _id: unknown })._id) } : null);
@@ -526,10 +650,12 @@ export async function editCase(
 ): Promise<Result<void, ModerationError>> {
   try {
     const db = await getDb();
-    const result = await db.collection("users").updateOne(
-      { _id: userId, [`sanction_history.${guildId}.caseId`]: caseId } as never,
-      { $set: { [`sanction_history.${guildId}.$.description`]: newDescription } } as never,
-    );
+    const result = await db
+      .collection("users")
+      .updateOne(
+        { _id: userId, [`sanction_history.${guildId}.caseId`]: caseId } as never,
+        { $set: { [`sanction_history.${guildId}.$.description`]: newDescription } } as never,
+      );
     if (result.matchedCount === 0) {
       return ErrResult(new ModerationError("DB_FAILED", "Case not found"));
     }
@@ -550,10 +676,12 @@ export async function deleteCase(
 ): Promise<Result<void, ModerationError>> {
   try {
     const db = await getDb();
-    await db.collection("users").updateOne(
-      { _id: userId } as never,
-      { $pull: { [`sanction_history.${guildId}`]: { caseId } } } as never,
-    );
+    await db
+      .collection("users")
+      .updateOne(
+        { _id: userId } as never,
+        { $pull: { [`sanction_history.${guildId}`]: { caseId } } } as never,
+      );
     return OkResult(undefined);
   } catch (err) {
     return ErrResult(new ModerationError("DB_FAILED", String(err)));
@@ -573,11 +701,20 @@ export async function removeWarn(
     const db = await getDb();
     const result = await db.collection("users").updateOne(
       { _id: userId } as never,
-      { $pull: { [`sanction_history.${guildId}`]: { caseId: parseInt(warnId, 10), type: "WARN" } } } as never,
+      {
+        $pull: {
+          [`sanction_history.${guildId}`]: { caseId: parseInt(warnId, 10), type: "WARN" },
+        },
+      } as never,
     );
     return OkResult(result.modifiedCount > 0);
   } catch (err) {
-    return ErrResult(new ModerationError("DB_FAILED", `removeWarn failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DB_FAILED",
+        `removeWarn failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 }
 
@@ -597,7 +734,9 @@ export async function addNote(
     await db.collection("users").updateOne(
       { _id: userId } as never,
       {
-        $push: { [`mod_notes.${guildId}`]: { note, moderatorId, createdAt: new Date().toISOString() } },
+        $push: {
+          [`mod_notes.${guildId}`]: { note, moderatorId, createdAt: new Date().toISOString() },
+        },
         $set: { updatedAt: new Date() },
       } as never,
     );
@@ -610,10 +749,16 @@ export async function addNote(
 export async function getNotes(
   userId: string,
   guildId: string,
-): Promise<Result<Array<{ note: string; moderatorId: string; createdAt: string }>, ModerationError>> {
+): Promise<
+  Result<Array<{ note: string; moderatorId: string; createdAt: string }>, ModerationError>
+> {
   const res = await userStore.get(userId);
   if (res.isErr()) return ErrResult(new ModerationError("DB_FAILED", res.error.message));
-  const notes = (res.unwrap()?.mod_notes?.[guildId] ?? []) as Array<{ note: string; moderatorId: string; createdAt: string }>;
+  const notes = (res.unwrap()?.mod_notes?.[guildId] ?? []) as Array<{
+    note: string;
+    moderatorId: string;
+    createdAt: string;
+  }>;
   return OkResult(notes);
 }
 
@@ -651,26 +796,51 @@ export async function quarantine(
   if (validationErr) return ErrResult(validationErr);
 
   const guildResult = await getGuild(guild.id);
-  if (guildResult.isErr()) return ErrResult(new ModerationError("DB_FAILED", "Could not load guild config"));
+  if (guildResult.isErr())
+    return ErrResult(new ModerationError("DB_FAILED", "Could not load guild config"));
   const quarantineConfig = guildResult.unwrap()?.moderation.quarantine;
 
   if (!quarantineConfig?.enabled || !quarantineConfig.roleId) {
-    return ErrResult(new ModerationError("NOT_CONFIGURED", "Quarantine is not configured. Use /modset quarantine to set it up."));
+    return ErrResult(
+      new ModerationError(
+        "NOT_CONFIGURED",
+        "Quarantine is not configured. Use /modset quarantine to set it up.",
+      ),
+    );
   }
 
   // Save current roles before stripping
-  const currentRoleIds = [...target.roles.cache.filter((r) => !r.managed && r.id !== guild.id).keys()];
-  await updateUserPaths(target.id, { [`quarantine_roles.${guild.id}`]: currentRoleIds }, { upsert: true }).catch(() => {});
+  const currentRoleIds = [
+    ...target.roles.cache.filter((r) => !r.managed && r.id !== guild.id).keys(),
+  ];
+  await updateUserPaths(
+    target.id,
+    { [`quarantine_roles.${guild.id}`]: currentRoleIds },
+    { upsert: true },
+  ).catch(() => {});
 
   try {
     // Remove all non-managed roles and apply quarantine role
     await target.roles.set([quarantineConfig.roleId], `Quarantine: ${reason}`);
   } catch (err) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Quarantine failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DISCORD_API_FAILED",
+        `Quarantine failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   const caseId = await nextCaseId(guild.id);
-  await pushSanction(target.id, guild.id, "RESTRICT", reason, moderator.id, caseId, moderationRoleSnapshot(moderator)).catch(() => {});
+  await pushSanction(
+    target.id,
+    guild.id,
+    "RESTRICT",
+    reason,
+    moderator.id,
+    caseId,
+    moderationRoleSnapshot(moderator),
+  ).catch(() => {});
 
   const modResult: ModerationResult = {
     type: "RESTRICT",
@@ -682,7 +852,14 @@ export async function quarantine(
   };
 
   await sendModLog(guild, modResult);
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: target.id, moderatorId: moderator.id, sanctionType: "RESTRICT", caseId });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: target.id,
+    moderatorId: moderator.id,
+    sanctionType: "RESTRICT",
+    caseId,
+  });
 
   return OkResult(modResult);
 }
@@ -693,7 +870,8 @@ export async function release(
   target: GuildMember,
 ): Promise<Result<{ restoredRoles: number }, ModerationError>> {
   const guildResult = await getGuild(guild.id);
-  if (guildResult.isErr()) return ErrResult(new ModerationError("DB_FAILED", "Could not load guild config"));
+  if (guildResult.isErr())
+    return ErrResult(new ModerationError("DB_FAILED", "Could not load guild config"));
   const quarantineConfig = guildResult.unwrap()?.moderation.quarantine;
 
   if (!quarantineConfig?.enabled || !quarantineConfig.roleId) {
@@ -706,7 +884,12 @@ export async function release(
   try {
     await target.roles.set(savedRoles, `Released from quarantine by ${moderator.user.tag}`);
   } catch (err) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Release failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DISCORD_API_FAILED",
+        `Release failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   // Clear saved roles
@@ -735,14 +918,33 @@ export async function unban(
   try {
     await guild.members.unban(targetId, reason);
   } catch (err) {
-    return ErrResult(new ModerationError("DISCORD_API_FAILED", `Unban failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DISCORD_API_FAILED",
+        `Unban failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 
   const caseId = await nextCaseId(guild.id);
   await pushSanction(targetId, guild.id, "PARDON", reason, moderator.id, caseId).catch(() => {});
-  const modResult: ModerationResult = { type: "PARDON", targetId, targetTag: targetTag ?? targetId, reason, moderatorId: moderator.id, caseId };
+  const modResult: ModerationResult = {
+    type: "PARDON",
+    targetId,
+    targetTag: targetTag ?? targetId,
+    reason,
+    moderatorId: moderator.id,
+    caseId,
+  };
   await sendModLog(guild, modResult);
-  bus.emit({ type: "mod:action", guildId: guild.id, userId: targetId, moderatorId: moderator.id, sanctionType: "PARDON", caseId });
+  bus.emit({
+    type: "mod:action",
+    guildId: guild.id,
+    userId: targetId,
+    moderatorId: moderator.id,
+    sanctionType: "PARDON",
+    caseId,
+  });
   return OkResult(modResult);
 }
 
@@ -762,13 +964,20 @@ export async function clearWarns(
     const count = history.filter((e) => e.type === "WARN").length;
 
     const db = await getDb();
-    await db.collection("users").updateOne(
-      { _id: userId } as never,
-      { $pull: { [`sanction_history.${guildId}`]: { type: "WARN" } } } as never,
-    );
+    await db
+      .collection("users")
+      .updateOne(
+        { _id: userId } as never,
+        { $pull: { [`sanction_history.${guildId}`]: { type: "WARN" } } } as never,
+      );
     return OkResult(count);
   } catch (err) {
-    return ErrResult(new ModerationError("DB_FAILED", `clearWarns failed: ${err instanceof Error ? err.message : String(err)}`));
+    return ErrResult(
+      new ModerationError(
+        "DB_FAILED",
+        `clearWarns failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
   }
 }
 

@@ -12,12 +12,7 @@ import { z } from "zod";
 export const AppealDecisionSchema = z.object({
   reviewerId: z.string(),
   decidedAt: z.string(),
-  reasonCode: z.enum([
-    "wrongful_punishment",
-    "served_time",
-    "mistaken_identity",
-    "other",
-  ]),
+  reasonCode: z.enum(["wrongful_punishment", "served_time", "mistaken_identity", "other"]),
   note: z.string().optional(),
 });
 

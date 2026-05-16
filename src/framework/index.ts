@@ -6,10 +6,14 @@
  * obvious from this one file.
  */
 
+export { bootstrapFramework } from "./bootstrap";
+export { defineCommand } from "./command";
 export { component } from "./component";
+export { Handle, Listen, On } from "./decorators";
 export { defineFeature } from "./feature";
-export { On, Handle, Listen } from "./decorators";
 export type {
+  CommandHelp,
+  CommandModule,
   Component,
   ComponentRecord,
   Ctx,
@@ -17,7 +21,6 @@ export type {
   EventConstructor,
   EventHandler,
   FeatureDescriptor,
-  CommandModule,
+  LoadedFeature,
 } from "./types";
-export { bootstrapFramework } from "./bootstrap";
 export { World } from "./world";

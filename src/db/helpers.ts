@@ -125,8 +125,7 @@ export function buildSafeUpsertUpdate<TSchema>(
   const nextSet = { ...existingSet };
   const shouldSetUpdatedAt = options.setUpdatedAt !== false;
   const hasCurrentDate =
-    isRecord(updateDoc.$currentDate) &&
-    Object.prototype.hasOwnProperty.call(updateDoc.$currentDate, "updatedAt");
+    isRecord(updateDoc.$currentDate) && Object.hasOwn(updateDoc.$currentDate, "updatedAt");
 
   if (shouldSetUpdatedAt && !hasCurrentDate) nextSet.updatedAt = now;
 

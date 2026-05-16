@@ -7,9 +7,9 @@
  * caught at the interaction boundary.
  */
 
-import type { Ctx } from "@/framework/types";
-import { UserCurrency } from "@/components/user-currency";
 import { EconomyAccount } from "@/components/economy-account";
+import { UserCurrency } from "@/components/user-currency";
+import type { Ctx } from "@/framework/types";
 
 export class MutationError extends Error {
   constructor(
@@ -67,7 +67,11 @@ export async function adjustBalance(
 }
 
 /** Read a user's bank balance for a currency. Returns 0 when no wallet document exists. */
-export async function getBankBalance(ctx: Ctx, userId: string, currencyId: string): Promise<number> {
+export async function getBankBalance(
+  ctx: Ctx,
+  userId: string,
+  currencyId: string,
+): Promise<number> {
   const wallet = await ctx.get(userId, UserCurrency);
   return wallet?.bankBalances[currencyId] ?? 0;
 }
@@ -135,8 +139,10 @@ export async function transfer(
   currencyId: string,
   amount: number,
 ): Promise<{ senderBalance: number; recipientBalance: number }> {
-  if (amount <= 0) throw new MutationError("INVALID_AMOUNT", "Transfer amount must be greater than 0");
-  if (senderId === recipientId) throw new MutationError("SELF_TRANSFER", "Cannot transfer currency to yourself");
+  if (amount <= 0)
+    throw new MutationError("INVALID_AMOUNT", "Transfer amount must be greater than 0");
+  if (senderId === recipientId)
+    throw new MutationError("SELF_TRANSFER", "Cannot transfer currency to yourself");
   if (!/^[a-z][a-z0-9_]*$/.test(currencyId)) {
     throw new MutationError("INVALID_CURRENCY", `Invalid currency ID: "${currencyId}"`);
   }
@@ -145,8 +151,10 @@ export async function transfer(
     ctx.ensure(senderId, EconomyAccount),
     ctx.ensure(recipientId, EconomyAccount),
   ]);
-  if (senderAccount.status !== "ok") throw new MutationError("ACCOUNT_INACTIVE", "Sender account is not active");
-  if (recipientAccount.status !== "ok") throw new MutationError("ACCOUNT_INACTIVE", "Recipient account is not active");
+  if (senderAccount.status !== "ok")
+    throw new MutationError("ACCOUNT_INACTIVE", "Sender account is not active");
+  if (recipientAccount.status !== "ok")
+    throw new MutationError("ACCOUNT_INACTIVE", "Recipient account is not active");
 
   const senderWallet = await ctx.ensure(senderId, UserCurrency);
   const senderCurrent = senderWallet.balances[currencyId] ?? 0;

@@ -2,9 +2,10 @@
 // Run this directly via `bun src/features/rpg/crafting/tests/test_ai_alchemy.ts`
 
 import { config } from "dotenv";
+
 config(); // Load .env
 
-import { resolveCrucible, type ItemData } from "@/features/rpg/crafting/alchemy";
+import { type ItemData, resolveCrucible } from "@/features/rpg/crafting/alchemy";
 
 const BASE_ITEMS: Record<string, ItemData> = {
   stone: { id: "stone", name: "Stone", trait1: "Density", trait2: "None" },
@@ -29,22 +30,26 @@ async function runTests() {
 
   let i = 1;
   for (const combo of combos) {
-    console.log(`[Test ${i}] 🧪 Mixing: ${combo.map(c => c.name).join(" + ")}`);
-    
+    console.log(`[Test ${i}] 🧪 Mixing: ${combo.map((c) => c.name).join(" + ")}`);
+
     const startTime = Date.now();
     const result = await resolveCrucible("test_user_id", combo[0], combo[1], combo[2]);
     const duration = Date.now() - startTime;
 
     console.log(`   💎 RESULT: "\x1b[35m${result.outputName}\x1b[0m"`);
-    console.log(`   ✨ New Discovery?: ${result.isNewDiscovery ? "✅ YES (AI was called)" : "❌ NO (Pulled from DB Cache)"}`);
+    console.log(
+      `   ✨ New Discovery?: ${result.isNewDiscovery ? "✅ YES (AI was called)" : "❌ NO (Pulled from DB Cache)"}`,
+    );
     console.log(`   ⏱️  Time Taken: ${duration}ms\n`);
-    
+
     i++;
     // Small delay to let DB breath
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
   }
 
-  console.log("If Test 2 was 'NO' and much faster than Test 1, the caching system is working perfectly.");
+  console.log(
+    "If Test 2 was 'NO' and much faster than Test 1, the caching system is working perfectly.",
+  );
   process.exit(0);
 }
 

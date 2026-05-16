@@ -4,9 +4,10 @@
  * Deterministic recipes come from the loaded typed content registry. Three-item
  * unknown combinations are delegated to active Crucible alchemy.
  */
-import { ErrResult, OkResult, type Result } from "@/core/result";
-import { getContentRegistry } from "@/content/registry";
+
 import type { SourcedRecipeDef } from "@/content/loader";
+import { getContentRegistry } from "@/content/registry";
+import { ErrResult, OkResult, type Result } from "@/core/result";
 import { craftInCrucible } from "./alchemy";
 
 export interface CraftingResult {
@@ -62,10 +63,13 @@ function getOutputItemName(itemId: string): string | null {
  */
 export async function craftItems(
   userId: string,
-  itemIds: string[]
+  itemIds: string[],
 ): Promise<Result<CraftingResult, CraftingError>> {
   if (itemIds.length < 1 || itemIds.length > 3) {
-    return craftingErr({ code: "INVALID_COMBO", message: "You must provide between 1 and 3 items." });
+    return craftingErr({
+      code: "INVALID_COMBO",
+      message: "You must provide between 1 and 3 items.",
+    });
   }
 
   // Sort item IDs to ensure consistency for lookups
@@ -79,7 +83,7 @@ export async function craftItems(
   }
 
   // 1. Check for deterministic recipes
-  const recipe = deterministicRecipes.find(r => {
+  const recipe = deterministicRecipes.find((r) => {
     if (r.ingredients.length !== sortedInputs.length) return false;
     const sortedRecipeInputs = [...r.ingredients].sort();
     return sortedRecipeInputs.every((val, index) => val === sortedInputs[index]);
@@ -96,7 +100,7 @@ export async function craftItems(
 
     // TODO: Actually consume items from inventory here in a real implementation
     // For now, we assume the caller handles inventory or we're just calculating the result.
-    
+
     return craftingOk({
       outputId: recipe.output.id,
       outputName,
@@ -107,10 +111,16 @@ export async function craftItems(
 
   // 2. Fallback to AI Alchemy for 3-item combinations
   if (sortedInputs.length === 3) {
-    const alchemyResult = await craftInCrucible(userId, sortedInputs[0], sortedInputs[1], sortedInputs[2]);
-    
+    const alchemyResult = await craftInCrucible(
+      userId,
+      sortedInputs[0],
+      sortedInputs[1],
+      sortedInputs[2],
+    );
+
     if (alchemyResult.isErr()) {
-      const code = alchemyResult.error.code === "AI_ERROR" ? "ENGINE_ERROR" : alchemyResult.error.code;
+      const code =
+        alchemyResult.error.code === "AI_ERROR" ? "ENGINE_ERROR" : alchemyResult.error.code;
 
       return craftingErr({
         code,
@@ -131,6 +141,7 @@ export async function craftItems(
   // 3. 1 or 2 items with no recipe
   return craftingErr({
     code: "INVALID_COMBO",
-    message: "These items do not seem to have a base transformation or mixture. Try adding a third ingredient for the Crucible.",
+    message:
+      "These items do not seem to have a base transformation or mixture. Try adding a third ingredient for the Crucible.",
   });
 }

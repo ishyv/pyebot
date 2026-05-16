@@ -162,10 +162,7 @@ export function calculateDamage(
         COMBAT_CONFIG.blockDamageReduction.min,
         COMBAT_CONFIG.blockDamageReduction.max,
       );
-      const damage = Math.max(
-        COMBAT_CONFIG.minDamage,
-        Math.floor(attackerAtk * (1 - reduction)),
-      );
+      const damage = Math.max(COMBAT_CONFIG.minDamage, Math.floor(attackerAtk * (1 - reduction)));
       return { damage, isCrit: false, isBlocked: true, isFailedBlock: false };
     }
 
@@ -182,12 +179,18 @@ export function calculateDamage(
 
   let baseDamage: number;
   if (isCrit) {
-    baseDamage = nextFloat(rng, COMBAT_CONFIG.critMultiplier.min, COMBAT_CONFIG.critMultiplier.max) * attackerAtk;
+    baseDamage =
+      nextFloat(rng, COMBAT_CONFIG.critMultiplier.min, COMBAT_CONFIG.critMultiplier.max) *
+      attackerAtk;
   } else {
-    baseDamage = nextFloat(rng, COMBAT_CONFIG.damageVariance.min, COMBAT_CONFIG.damageVariance.max) * attackerAtk;
+    baseDamage =
+      nextFloat(rng, COMBAT_CONFIG.damageVariance.min, COMBAT_CONFIG.damageVariance.max) *
+      attackerAtk;
   }
 
-  const defenseReduction = nextFloat(rng, COMBAT_CONFIG.defenseReduction.min, COMBAT_CONFIG.defenseReduction.max) * defenderDef;
+  const defenseReduction =
+    nextFloat(rng, COMBAT_CONFIG.defenseReduction.min, COMBAT_CONFIG.defenseReduction.max) *
+    defenderDef;
   const damage = Math.max(COMBAT_CONFIG.minDamage, Math.floor(baseDamage - defenseReduction));
 
   return { damage, isCrit, isBlocked: false, isFailedBlock: false };

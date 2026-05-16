@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { DEFAULT_COINFLIP_CONFIG, MinigameError } from "@/features/economy/minigames";
-import { coinflipErrorCopy, data } from "./coinflip";
+import command, { coinflipErrorCopy } from "./coinflip";
 
 describe("coinflip command", () => {
   it("advertises the real minimum bet to Discord", () => {
-    const json = data.toJSON() as { options?: Array<{ name: string; min_value?: number }> };
+    const json = command.data.toJSON() as { options?: Array<{ name: string; min_value?: number }> };
     const amount = json.options?.find((option) => option.name === "amount");
 
     expect(amount?.min_value).toBe(DEFAULT_COINFLIP_CONFIG.minBet);

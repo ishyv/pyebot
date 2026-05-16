@@ -4,7 +4,7 @@ import { createLogger } from "@/core/logger";
 const log = createLogger("automod:linkTracker");
 
 interface LinkTrackDoc {
-  _id: string;         // `${guildId}:${userId}`
+  _id: string; // `${guildId}:${userId}`
   timestamps: number[];
   updatedAt: Date;
 }

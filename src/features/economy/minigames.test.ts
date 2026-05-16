@@ -4,25 +4,27 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import type { Ctx } from "@/framework/types";
 import { CooldownManager, SessionManager } from "@/core/state";
 import {
-  coinflip,
-  startTrivia,
   answerTrivia,
-  rob,
+  coinflip,
   DEFAULT_COINFLIP_CONFIG,
   DEFAULT_ROB_CONFIG,
+  rob,
+  startTrivia,
 } from "@/features/economy/minigames";
+import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------
 // In-memory Ctx factory
 // ---------------------------------------------------------------------------
 
-function makeCtx(opts: {
-  wallets?: Record<string, Record<string, number>>;
-  accounts?: Record<string, "ok" | "blocked" | "banned">;
-} = {}): Ctx {
+function makeCtx(
+  opts: {
+    wallets?: Record<string, Record<string, number>>;
+    accounts?: Record<string, "ok" | "blocked" | "banned">;
+  } = {},
+): Ctx {
   const wallets: Record<string, Record<string, number>> = opts.wallets ?? {};
   const accounts: Record<string, "ok" | "blocked" | "banned"> = opts.accounts ?? {};
   const cooldowns = new CooldownManager();
@@ -45,7 +47,15 @@ function makeCtx(opts: {
       if (component.collection === "economy_accounts") {
         const status = accounts[id as string];
         if (!status) return null;
-        return { status, createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0, dailyStreak: 0, lastDailyAt: null } as never;
+        return {
+          status,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          lastActivityAt: new Date(),
+          version: 0,
+          dailyStreak: 0,
+          lastDailyAt: null,
+        } as never;
       }
       return null;
     },
@@ -56,7 +66,15 @@ function makeCtx(opts: {
       }
       if (component.collection === "economy_accounts") {
         if (!accounts[id as string]) accounts[id as string] = "ok";
-        return { status: accounts[id as string], createdAt: new Date(), updatedAt: new Date(), lastActivityAt: new Date(), version: 0, dailyStreak: 0, lastDailyAt: null } as never;
+        return {
+          status: accounts[id as string],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          lastActivityAt: new Date(),
+          version: 0,
+          dailyStreak: 0,
+          lastDailyAt: null,
+        } as never;
       }
       return {} as never;
     },
@@ -64,7 +82,9 @@ function makeCtx(opts: {
       if (component.collection === "user_currencies") {
         if (!wallets[id as string]) wallets[id as string] = {};
         const current = { balances: wallets[id as string], bankBalances: {} };
-        const partial = (typeof patchArg === "function" ? patchArg(current as never) : patchArg) as { balances?: Record<string, number> };
+        const partial = (
+          typeof patchArg === "function" ? patchArg(current as never) : patchArg
+        ) as { balances?: Record<string, number> };
         if (partial.balances) {
           wallets[id as string] = partial.balances;
         }
@@ -83,28 +103,38 @@ function makeCtx(opts: {
 describe("coinflip", () => {
   test("throws BET_TOO_LOW when bet is below minimum", async () => {
     const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "ok" } });
-    await expect(coinflip(ctx, "u1", "heads", DEFAULT_COINFLIP_CONFIG.minBet - 1)).rejects.toMatchObject({ code: "BET_TOO_LOW" });
+    await expect(
+      coinflip(ctx, "u1", "heads", DEFAULT_COINFLIP_CONFIG.minBet - 1),
+    ).rejects.toMatchObject({ code: "BET_TOO_LOW" });
   });
 
   test("throws BET_TOO_HIGH when bet exceeds maximum", async () => {
     const ctx = makeCtx({ wallets: { u1: { coins: 99999 } }, accounts: { u1: "ok" } });
-    await expect(coinflip(ctx, "u1", "heads", DEFAULT_COINFLIP_CONFIG.maxBet + 1)).rejects.toMatchObject({ code: "BET_TOO_HIGH" });
+    await expect(
+      coinflip(ctx, "u1", "heads", DEFAULT_COINFLIP_CONFIG.maxBet + 1),
+    ).rejects.toMatchObject({ code: "BET_TOO_HIGH" });
   });
 
   test("throws INSUFFICIENT_FUNDS when balance too low", async () => {
     const ctx = makeCtx({ wallets: { u1: { coins: 1 } }, accounts: { u1: "ok" } });
-    await expect(coinflip(ctx, "u1", "heads", 100)).rejects.toMatchObject({ code: "INSUFFICIENT_FUNDS" });
+    await expect(coinflip(ctx, "u1", "heads", 100)).rejects.toMatchObject({
+      code: "INSUFFICIENT_FUNDS",
+    });
   });
 
   test("throws ACCOUNT_INACTIVE for blocked account", async () => {
     const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "blocked" } });
-    await expect(coinflip(ctx, "u1", "heads", 50)).rejects.toMatchObject({ code: "ACCOUNT_INACTIVE" });
+    await expect(coinflip(ctx, "u1", "heads", 50)).rejects.toMatchObject({
+      code: "ACCOUNT_INACTIVE",
+    });
   });
 
   test("throws COOLDOWN_ACTIVE when on cooldown", async () => {
     const ctx = makeCtx({ wallets: { u1: { coins: 1000 } }, accounts: { u1: "ok" } });
     ctx.cooldowns.set("u1", "coinflip", 60_000);
-    await expect(coinflip(ctx, "u1", "heads", 50)).rejects.toMatchObject({ code: "COOLDOWN_ACTIVE" });
+    await expect(coinflip(ctx, "u1", "heads", 50)).rejects.toMatchObject({
+      code: "COOLDOWN_ACTIVE",
+    });
   });
 
   test("returns a result with correct shape on valid bet", async () => {
@@ -156,7 +186,9 @@ describe("startTrivia + answerTrivia", () => {
 
   test("throws SESSION_NOT_FOUND for unknown session", async () => {
     const ctx = makeCtx();
-    await expect(answerTrivia(ctx, "nonexistent:key", 0)).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
+    await expect(answerTrivia(ctx, "nonexistent:key", 0)).rejects.toMatchObject({
+      code: "SESSION_NOT_FOUND",
+    });
   });
 });
 
@@ -171,12 +203,18 @@ describe("rob", () => {
   });
 
   test("throws TARGET_INSUFFICIENT_FUNDS when target too poor", async () => {
-    const ctx = makeCtx({ wallets: { u1: { coins: 1000 }, u2: { coins: 1 } }, accounts: { u1: "ok", u2: "ok" } });
+    const ctx = makeCtx({
+      wallets: { u1: { coins: 1000 }, u2: { coins: 1 } },
+      accounts: { u1: "ok", u2: "ok" },
+    });
     await expect(rob(ctx, "u1", "u2")).rejects.toMatchObject({ code: "TARGET_INSUFFICIENT_FUNDS" });
   });
 
   test("throws COOLDOWN_ACTIVE when robber is on cooldown", async () => {
-    const ctx = makeCtx({ wallets: { u1: { coins: 1000 }, u2: { coins: 500 } }, accounts: { u1: "ok", u2: "ok" } });
+    const ctx = makeCtx({
+      wallets: { u1: { coins: 1000 }, u2: { coins: 500 } },
+      accounts: { u1: "ok", u2: "ok" },
+    });
     ctx.cooldowns.set("u1", "rob", 60_000);
     await expect(rob(ctx, "u1", "u2")).rejects.toMatchObject({ code: "COOLDOWN_ACTIVE" });
   });

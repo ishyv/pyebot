@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CooldownManager, SessionManager, LockSet } from "./state";
+import { CooldownManager, LockSet, SessionManager } from "./state";
 
 describe("CooldownManager", () => {
   test("isOnCooldown returns false for unknown user+command", () => {

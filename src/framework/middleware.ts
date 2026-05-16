@@ -42,10 +42,7 @@ export async function isFeatureEnabled(
  * Best-effort ephemeral reply that respects the deferred/replied state.
  * Used by the framework's error boundary in src/index.ts.
  */
-export async function safeReply(
-  interaction: Interaction,
-  content: string,
-): Promise<void> {
+export async function safeReply(interaction: Interaction, content: string): Promise<void> {
   if (!interaction.isRepliable()) return;
   try {
     const ix = interaction as ChatInputCommandInteraction;

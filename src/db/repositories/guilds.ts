@@ -1,7 +1,7 @@
-import { MongoStore } from "@/db/store";
-import { GuildSchema, type Guild } from "@/db/schemas/guild";
-import type { Result } from "@/core/result";
 import type { Document } from "mongodb";
+import type { Result } from "@/core/result";
+import { type Guild, GuildSchema } from "@/db/schemas/guild";
+import { MongoStore } from "@/db/store";
 
 export const guildStore = new MongoStore("guilds", GuildSchema);
 

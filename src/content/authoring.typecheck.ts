@@ -29,16 +29,19 @@ const typecheckItems = defineItems({
   },
 });
 
-const typecheckLocations = defineLocations<keyof typeof typecheckItems & string, {
-  stone_mine: {
-    id: "stone_mine";
-    name: "Stone Mine";
-    action: "mine";
-    profession: "miner";
-    requiredTier: 1;
-    materials: ["stone"];
-  };
-}>({
+const typecheckLocations = defineLocations<
+  keyof typeof typecheckItems & string,
+  {
+    stone_mine: {
+      id: "stone_mine";
+      name: "Stone Mine";
+      action: "mine";
+      profession: "miner";
+      requiredTier: 1;
+      materials: ["stone"];
+    };
+  }
+>({
   stone_mine: {
     id: "stone_mine",
     name: "Stone Mine",

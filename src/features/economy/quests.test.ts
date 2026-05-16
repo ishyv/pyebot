@@ -3,10 +3,10 @@
  * Mocks economy repo and db/repositories/users — no real DB required.
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { OkResult } from "@/core/result";
-import type { User } from "@/db/schemas/user";
 import type { QuestProgressDoc } from "@/db/schemas/quest";
+import type { User } from "@/db/schemas/user";
 
 // ---------------------------------------------------------------------------
 // Mock @/core/state BEFORE importing quests
@@ -26,10 +26,17 @@ mock.module("@/core/state", () => ({
       lockState.add(key);
       return true;
     }),
-    release: mock((key: string) => { lockState.delete(key); }),
+    release: mock((key: string) => {
+      lockState.delete(key);
+    }),
     isHeld: mock((key: string) => lockState.has(key)),
   },
-  sessions: { get: mock(() => undefined), set: mock(() => {}), delete: mock(() => {}), has: mock(() => false) },
+  sessions: {
+    get: mock(() => undefined),
+    set: mock(() => {}),
+    delete: mock(() => {}),
+    has: mock(() => false),
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -54,7 +61,9 @@ function makeUser(currency: Record<string, number> = { coins: 100 }): User {
 
 const mockUserGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
 const mockUserEnsure = mock(async (_id: string) => OkResult(makeUser()));
-const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) => OkResult(undefined as void));
+const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
+  OkResult(undefined as void),
+);
 
 mock.module("@/db/repositories/users", () => ({
   userStore: {
@@ -88,8 +97,14 @@ mock.module("@/db/repositories/economy", () => ({
   marketStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
   findActiveListings: mock(async () => OkResult([])),
   countActiveListings: mock(async () => OkResult(0)),
-  achievementProgressStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
-  achievementUnlocksStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
+  achievementProgressStore: {
+    get: mock(async () => OkResult(null)),
+    set: mock(async () => OkResult(null)),
+  },
+  achievementUnlocksStore: {
+    get: mock(async () => OkResult(null)),
+    set: mock(async () => OkResult(null)),
+  },
   getUnlocksForUser: mock(async () => OkResult([])),
   getProgressForUser: mock(async () => OkResult([])),
 }));
@@ -125,7 +140,7 @@ function makeCtx() {
     emit: async () => {},
     get: async (id: string) => {
       const bal = wallets[id];
-      return bal ? { balances: bal, bankBalances: {} } as never : null;
+      return bal ? ({ balances: bal, bankBalances: {} } as never) : null;
     },
     ensure: async (id: string) => {
       if (!wallets[id]) wallets[id] = { coins: 1000 };
@@ -134,7 +149,9 @@ function makeCtx() {
     patch: async (id: string, _: unknown, fn: unknown) => {
       if (!wallets[id]) wallets[id] = { coins: 1000 };
       const cur = { balances: wallets[id], bankBalances: {} };
-      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as { balances?: Record<string, number> };
+      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
+        balances?: Record<string, number>;
+      };
       if (patch.balances) wallets[id] = patch.balances;
     },
     set: async () => {},
@@ -161,7 +178,9 @@ function resetAll() {
     return OkResult(doc);
   });
   mockGetActiveQuests.mockImplementation(async (userId: string) =>
-    OkResult(Array.from(questStore.values()).filter((q) => q.userId === userId && !q.rewardsClaimed)),
+    OkResult(
+      Array.from(questStore.values()).filter((q) => q.userId === userId && !q.rewardsClaimed),
+    ),
   );
   mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
   mockUserEnsure.mockImplementation(async () => OkResult(makeUser()));
@@ -244,7 +263,11 @@ describe("progressQuest", () => {
 
   test("does not exceed step target", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 30 });
+    await progressQuest("user-1", "quest_gather_stone", {
+      kind: "gather_item",
+      itemId: "stone",
+      qty: 30,
+    });
 
     const doc = questStore.get("user-1:quest_gather_stone");
     expect(doc?.stepProgress[0]).toBe(20); // capped at target
@@ -260,7 +283,11 @@ describe("progressQuest", () => {
 
   test("does not progress wrong item", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "wood", qty: 10 });
+    await progressQuest("user-1", "quest_gather_stone", {
+      kind: "gather_item",
+      itemId: "wood",
+      qty: 10,
+    });
 
     const doc = questStore.get("user-1:quest_gather_stone");
     expect(doc?.stepProgress[0]).toBe(0);
@@ -270,12 +297,20 @@ describe("progressQuest", () => {
     // quest_mixed_gather has 2 steps: wood x10, stone x10
     await acceptQuest("user-1", "quest_mixed_gather");
 
-    await progressQuest("user-1", "quest_mixed_gather", { kind: "gather_item", itemId: "wood", qty: 10 });
+    await progressQuest("user-1", "quest_mixed_gather", {
+      kind: "gather_item",
+      itemId: "wood",
+      qty: 10,
+    });
     let doc = questStore.get("user-1:quest_mixed_gather");
     expect(doc?.stepProgress).toEqual([10, 0]);
     expect(doc?.completed).toBe(false);
 
-    await progressQuest("user-1", "quest_mixed_gather", { kind: "gather_item", itemId: "stone", qty: 10 });
+    await progressQuest("user-1", "quest_mixed_gather", {
+      kind: "gather_item",
+      itemId: "stone",
+      qty: 10,
+    });
     doc = questStore.get("user-1:quest_mixed_gather");
     expect(doc?.stepProgress).toEqual([10, 10]);
     expect(doc?.completed).toBe(true);
@@ -311,7 +346,11 @@ describe("claimRewards", () => {
 
   test("claims currency reward for completed quest", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 20 });
+    await progressQuest("user-1", "quest_gather_stone", {
+      kind: "gather_item",
+      itemId: "stone",
+      qty: 20,
+    });
 
     const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
 
@@ -335,7 +374,11 @@ describe("claimRewards", () => {
 
   test("returns REWARDS_ALREADY_CLAIMED when claimed again", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 20 });
+    await progressQuest("user-1", "quest_gather_stone", {
+      kind: "gather_item",
+      itemId: "stone",
+      qty: 20,
+    });
     await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
 
     const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
@@ -362,7 +405,11 @@ describe("getActiveQuests", () => {
   test("returns views for all active quests", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
     await acceptQuest("user-1", "quest_fight_5");
-    await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 10 });
+    await progressQuest("user-1", "quest_gather_stone", {
+      kind: "gather_item",
+      itemId: "stone",
+      qty: 10,
+    });
 
     const result = await getActiveQuests("user-1");
     expect(result.isOk()).toBe(true);
@@ -377,7 +424,11 @@ describe("getActiveQuests", () => {
 
   test("excludes claimed quests", async () => {
     await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", { kind: "gather_item", itemId: "stone", qty: 20 });
+    await progressQuest("user-1", "quest_gather_stone", {
+      kind: "gather_item",
+      itemId: "stone",
+      qty: 20,
+    });
     await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
 
     const result = await getActiveQuests("user-1");

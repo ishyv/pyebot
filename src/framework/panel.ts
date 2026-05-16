@@ -22,14 +22,14 @@
 import {
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  SlashCommandBuilder,
   type ButtonInteraction,
+  ButtonStyle,
   type ChatInputCommandInteraction,
   PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { GuildFeatures } from "@/components/guild-features";
+import { container, text, v2Message } from "@/ui/v2";
 import { isAdmin, isFeatureEnabled } from "./middleware";
 import type { CommandModule, Ctx, FeatureDescriptor } from "./types";
 
@@ -54,7 +54,11 @@ function buildSlashCommand(features: ReadonlyArray<FeatureDescriptor>): SlashCom
         .setName("enable")
         .setDescription("Enable a feature in this server.")
         .addStringOption((o) =>
-          o.setName("feature").setDescription("The feature to enable.").setRequired(true).addChoices(...choices),
+          o
+            .setName("feature")
+            .setDescription("The feature to enable.")
+            .setRequired(true)
+            .addChoices(...choices),
         ),
     )
     .addSubcommand((s) =>
@@ -62,21 +66,21 @@ function buildSlashCommand(features: ReadonlyArray<FeatureDescriptor>): SlashCom
         .setName("disable")
         .setDescription("Disable a feature in this server.")
         .addStringOption((o) =>
-          o.setName("feature").setDescription("The feature to disable.").setRequired(true).addChoices(...choices),
+          o
+            .setName("feature")
+            .setDescription("The feature to disable.")
+            .setRequired(true)
+            .addChoices(...choices),
         ),
     ) as SlashCommandBuilder;
 }
 
-/** Render the embed listing every feature and its current state in this guild. */
-async function renderEmbed(
+/** Render the V2 message listing every feature and its current state in this guild. */
+async function renderPanel(
   ctx: Ctx,
   guildId: string,
   features: ReadonlyArray<FeatureDescriptor>,
-): Promise<{ embed: EmbedBuilder; rows: ActionRowBuilder<ButtonBuilder>[] }> {
-  const embed = new EmbedBuilder()
-    .setTitle("⚙ Server Features")
-    .setDescription("Toggle features on or off. Changes apply immediately.");
-
+): Promise<ReturnType<typeof v2Message>> {
   const lines: string[] = [];
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
   let currentRow = new ActionRowBuilder<ButtonBuilder>();
@@ -99,8 +103,15 @@ async function renderEmbed(
   }
 
   if (currentRow.components.length > 0) rows.push(currentRow);
-  embed.setDescription(lines.join("\n"));
-  return { embed, rows };
+
+  return v2Message(
+    container(
+      "info",
+      text("## Server Features\nToggle features on or off. Changes apply immediately."),
+      text(lines.join("\n")),
+    ),
+    ...rows,
+  );
 }
 
 /**
@@ -119,7 +130,10 @@ export function buildFeaturesCommand(features: ReadonlyArray<FeatureDescriptor>)
     const sub = interaction.options.getSubcommand(false);
     const guildId = interaction.guildId;
     if (!guildId) {
-      await interaction.reply({ content: "This command must be used in a server.", ephemeral: true });
+      await interaction.reply({
+        content: "This command must be used in a server.",
+        ephemeral: true,
+      });
       return;
     }
 
@@ -141,11 +155,11 @@ export function buildFeaturesCommand(features: ReadonlyArray<FeatureDescriptor>)
     }
 
     // Default = panel
-    const { embed, rows } = await renderEmbed(ctx, guildId, features);
-    await interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+    const panelPayload = await renderPanel(ctx, guildId, features);
+    await interaction.reply({ ...panelPayload, ephemeral: true });
   }
 
-  return { data, execute };
+  return { data, help: false, execute };
 }
 
 /**
@@ -174,8 +188,8 @@ export function buildToggleHandler(features: ReadonlyArray<FeatureDescriptor>) {
     await ctx.patch(interaction.guildId, GuildFeatures, (cur) => ({
       overrides: { ...cur.overrides, [id]: !current },
     }));
-    const { embed, rows } = await renderEmbed(ctx, interaction.guildId, features);
-    await interaction.update({ embeds: [embed], components: rows });
+    const panelPayload = await renderPanel(ctx, interaction.guildId, features);
+    await interaction.update(panelPayload as Parameters<typeof interaction.update>[0]);
   };
 }
 

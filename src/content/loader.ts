@@ -7,12 +7,7 @@
  */
 import { materializeContentPack } from "@/content/authoring";
 import { DEFAULT_CONTENT_PACK } from "@/content/packs/default";
-import type {
-  DropTableDef,
-  ItemDef,
-  LocationDef,
-  RecipeDef,
-} from "@/content/schemas";
+import type { DropTableDef, ItemDef, LocationDef, RecipeDef } from "@/content/schemas";
 
 export interface SourceMeta {
   readonly file: string;
@@ -58,9 +53,7 @@ export async function loadDefaultContentPacks(): Promise<LoadedContentPacks> {
  */
 export async function loadContentPacks(packDir?: string): Promise<LoadedContentPacks> {
   if (packDir) {
-    throw new ContentLoadError("External content pack directories are not supported.", [
-      packDir,
-    ]);
+    throw new ContentLoadError("External content pack directories are not supported.", [packDir]);
   }
 
   return loadDefaultContentPacks();

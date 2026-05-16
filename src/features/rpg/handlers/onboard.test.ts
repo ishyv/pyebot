@@ -4,10 +4,9 @@
  * for each profession (miner → starter_pickaxe, lumber → starter_axe).
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
-import { OkResult, ErrResult } from "@/core/result";
-import type { RpgProfileData } from "@/db/schemas/rpg-profile";
-import type { EquippedItem } from "@/db/schemas/rpg-profile";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { ErrResult, OkResult } from "@/core/result";
+import type { EquippedItem, RpgProfileData } from "@/db/schemas/rpg-profile";
 
 // ---------------------------------------------------------------------------
 // Mock @/db/repositories/rpg BEFORE importing the handler
@@ -42,20 +41,16 @@ function makeProfile(overrides: Partial<RpgProfileData> = {}): RpgProfileData {
   } as RpgProfileData;
 }
 
-const mockPatchRpgProfile = mock(
-  async (userId: string, patch: Partial<RpgProfileData>) => {
-    const existing = profileStore.get(userId) ?? makeProfile();
-    const updated = { ...existing, ...patch };
-    profileStore.set(userId, updated);
-    return OkResult(updated);
-  },
-);
+const mockPatchRpgProfile = mock(async (userId: string, patch: Partial<RpgProfileData>) => {
+  const existing = profileStore.get(userId) ?? makeProfile();
+  const updated = { ...existing, ...patch };
+  profileStore.set(userId, updated);
+  return OkResult(updated);
+});
 
 mock.module("@/db/repositories/rpg", () => ({
   patchRpgProfile: mockPatchRpgProfile,
-  getRpgProfile: mock(async (userId: string) =>
-    OkResult(profileStore.get(userId) ?? null),
-  ),
+  getRpgProfile: mock(async (userId: string) => OkResult(profileStore.get(userId) ?? null)),
   ensureRpgProfile: mock(async (userId: string) => {
     if (!profileStore.has(userId)) profileStore.set(userId, makeProfile());
     return OkResult(profileStore.get(userId)!);
@@ -86,14 +81,12 @@ function makeInteraction(profession: "miner" | "lumber", userId = "user1") {
 function resetAll() {
   profileStore.clear();
   mockPatchRpgProfile.mockReset();
-  mockPatchRpgProfile.mockImplementation(
-    async (userId: string, patch: Partial<RpgProfileData>) => {
-      const existing = profileStore.get(userId) ?? makeProfile();
-      const updated = { ...existing, ...patch };
-      profileStore.set(userId, updated);
-      return OkResult(updated);
-    },
-  );
+  mockPatchRpgProfile.mockImplementation(async (userId: string, patch: Partial<RpgProfileData>) => {
+    const existing = profileStore.get(userId) ?? makeProfile();
+    const updated = { ...existing, ...patch };
+    profileStore.set(userId, updated);
+    return OkResult(updated);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -171,9 +164,7 @@ describe("handleOnboard", () => {
   });
 
   test("patchRpgProfile failure: replies with failure message", async () => {
-    mockPatchRpgProfile.mockImplementation(async () =>
-      ErrResult(new Error("DB down")),
-    );
+    mockPatchRpgProfile.mockImplementation(async () => ErrResult(new Error("DB down")));
 
     const interaction = makeInteraction("miner", "user_fail");
     await handleOnboard(interaction);
@@ -205,8 +196,6 @@ describe("handleOnboard", () => {
     expect(profileAfterSecond).toBeDefined();
     expect(profileAfterSecond!.starterKitType).toBe("lumber");
     expect(profileAfterSecond!.starterKitClaimedAt).toBeInstanceOf(Date);
-    expect((profileAfterSecond!.loadout.weapon as EquippedItem).itemId).toBe(
-      "starter_axe",
-    );
+    expect((profileAfterSecond!.loadout.weapon as EquippedItem).itemId).toBe("starter_axe");
   });
 });

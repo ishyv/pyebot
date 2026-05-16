@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { ErrResult, OkResult } from "@/core/result";
 import { atomicTransition } from "./transition";
-import { OkResult, ErrResult } from "@/core/result";
 
 describe("atomicTransition", () => {
   test("succeeds on first attempt when commit succeeds", async () => {

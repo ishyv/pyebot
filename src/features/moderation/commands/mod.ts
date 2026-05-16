@@ -1,73 +1,92 @@
 import {
-  Colors,
-  EmbedBuilder,
-  MessageFlags,
-  SlashCommandBuilder,
   type ChatInputCommandInteraction,
   type InteractionReplyOptions,
+  MessageFlags,
+  SlashCommandBuilder,
 } from "discord.js";
 import type { CommandContext } from "@/core/feature";
+import { defineCommand } from "@/framework";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("mod")
   .setDescription("Moderation help and workflow guidance")
   .setDMPermission(false)
   .addSubcommand((sub) =>
-    sub.setName("help").setDescription("Show moderation setup, daily-use, automod, and safety guidance"),
+    sub
+      .setName("help")
+      .setDescription("Show moderation setup, daily-use, automod, and safety guidance"),
   );
 
-export function buildModHelpEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(Colors.Blurple)
-    .setTitle("Moderation Help")
-    .setDescription("Use this as the moderation home base while the deeper audit pipeline is being built.")
-    .addFields(
-      {
-        name: "First setup",
-        value: [
-          "`/modset panel` - configure logs, appeals, quarantine, verification, and escalation.",
-          "`/automod panel` - configure spam, raid, slowmode, whitelist, and regex protections.",
-          "`/roles dashboard` - review managed role policy and action limits.",
+/**
+ * Renders the moderation help card as a V2 message.
+ *
+ * Exported so test fixtures and admin panels can render it without executing
+ * the command handler.
+ */
+export function renderModHelp() {
+  return v2Message(
+    container(
+      "info",
+      text("## Moderation Help"),
+      separator("sm"),
+      text(
+        [
+          "**First setup**",
+          "`/modset panel` — configure logs, appeals, quarantine, verification, and escalation.",
+          "`/automod panel` — configure spam, raid, slowmode, whitelist, and regex protections.",
+          "`/roles dashboard` — review managed role policy and action limits.",
         ].join("\n"),
-      },
-      {
-        name: "Daily moderation",
-        value: [
-          "`/warn`, `/mute`, `/kick`, `/ban` - core sanctions.",
-          "`/quarantine add` - restrict a user without removing them from the server.",
-          "`/case view` and `/cases` - inspect moderation history.",
+      ),
+      separator("sm"),
+      text(
+        [
+          "**Daily moderation**",
+          "`/warn`, `/mute`, `/kick`, `/ban` — core sanctions.",
+          "`/quarantine add` — restrict a user without removing them from the server.",
+          "`/case view` and `/cases` — inspect moderation history.",
         ].join("\n"),
-      },
-      {
-        name: "Automod",
-        value: [
-          "`/automod status` - review enabled protections and report channels.",
+      ),
+      separator("sm"),
+      text(
+        [
+          "**Automod**",
+          "`/automod status` — review enabled protections and report channels.",
           "Automod alerts should be treated as evidence review, not blind punishment.",
         ].join("\n"),
-      },
-      {
-        name: "Safety",
-        value: [
+      ),
+      separator("sm"),
+      text(
+        [
+          "**Safety**",
           "Use reasons that another moderator can understand later.",
           "Prefer quarantine or timeout when evidence is incomplete.",
           "Destructive actions should have cases, evidence, and a review path.",
         ].join("\n"),
-      },
-    )
-    .setFooter({ text: "Next foundation: unified moderation authorization, action recording, and audit trails." })
-    .setTimestamp();
+      ),
+    ),
+  );
 }
 
-export async function execute(
+async function execute(
   _interaction: ChatInputCommandInteraction,
   ctx?: CommandContext,
 ): Promise<void> {
+  const { components } = renderModHelp();
+  // Both IsComponentsV2 and Ephemeral are required: V2 flag to opt into the
+  // component layout, Ephemeral so the help card is only visible to the requester.
   const payload: InteractionReplyOptions = {
-    embeds: [buildModHelpEmbed()],
-    flags: MessageFlags.Ephemeral,
+    components,
+    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
   };
   if (ctx) {
     await ctx.respond.send(payload);
     return;
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/modset status", "/modconfig modlog"] },
+  execute,
+});

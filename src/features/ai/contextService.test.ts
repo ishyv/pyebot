@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
+  type ContextFetchableMessage,
   collectChannelContext,
   normalizeContextPeriod,
-  type ContextFetchableMessage,
 } from "./contextService";
 
 function message(
@@ -21,7 +21,9 @@ function message(
       username: options.author ?? `user-${id}`,
       bot: options.bot ?? false,
     },
-    attachments: new Map((options.attachments ?? []).map((name, index) => [`${id}-${index}`, { name }])),
+    attachments: new Map(
+      (options.attachments ?? []).map((name, index) => [`${id}-${index}`, { name }]),
+    ),
     embeds: [],
   };
 }
@@ -43,10 +45,26 @@ function channelWithPages(pages: ContextFetchableMessage[][]) {
 
 describe("AI context collection", () => {
   it("normalizes supported context periods", () => {
-    expect(normalizeContextPeriod(null)).toEqual({ label: "30 minutes", value: "30m", minutes: 30 });
-    expect(normalizeContextPeriod("15m")).toEqual({ label: "15 minutes", value: "15m", minutes: 15 });
-    expect(normalizeContextPeriod("120m")).toEqual({ label: "2 hours", value: "120m", minutes: 120 });
-    expect(normalizeContextPeriod("nope")).toEqual({ label: "30 minutes", value: "30m", minutes: 30 });
+    expect(normalizeContextPeriod(null)).toEqual({
+      label: "30 minutes",
+      value: "30m",
+      minutes: 30,
+    });
+    expect(normalizeContextPeriod("15m")).toEqual({
+      label: "15 minutes",
+      value: "15m",
+      minutes: 15,
+    });
+    expect(normalizeContextPeriod("120m")).toEqual({
+      label: "2 hours",
+      value: "120m",
+      minutes: 120,
+    });
+    expect(normalizeContextPeriod("nope")).toEqual({
+      label: "30 minutes",
+      value: "30m",
+      minutes: 30,
+    });
   });
 
   it("paginates messages until the requested time window is exhausted", async () => {
@@ -91,17 +109,20 @@ describe("AI context collection", () => {
     ]);
     let calls = 0;
 
-    const result = await collectChannelContext({
-      messages: {
-        async fetch() {
-          calls += 1;
-          return calls === 1 ? discordCollection : [];
+    const result = await collectChannelContext(
+      {
+        messages: {
+          async fetch() {
+            calls += 1;
+            return calls === 1 ? discordCollection : [];
+          },
         },
       },
-    }, {
-      periodMinutes: 15,
-      now: Date.UTC(2026, 4, 10, 12, 0, 0),
-    });
+      {
+        periodMinutes: 15,
+        now: Date.UTC(2026, 4, 10, 12, 0, 0),
+      },
+    );
 
     expect(result.isOk()).toBe(true);
     const collected = result.unwrap();
@@ -135,16 +156,19 @@ describe("AI context collection", () => {
   });
 
   it("returns an error result instead of throwing when Discord fetch fails", async () => {
-    const result = await collectChannelContext({
-      messages: {
-        async fetch() {
-          throw new Error("missing history");
+    const result = await collectChannelContext(
+      {
+        messages: {
+          async fetch() {
+            throw new Error("missing history");
+          },
         },
       },
-    }, {
-      periodMinutes: 30,
-      now: Date.UTC(2026, 4, 10, 12, 0, 0),
-    });
+      {
+        periodMinutes: 30,
+        now: Date.UTC(2026, 4, 10, 12, 0, 0),
+      },
+    );
 
     expect(result.isErr()).toBe(true);
     expect(result.error.code).toBe("FETCH_FAILED");

@@ -5,11 +5,12 @@
  * Called when a user picks a tool from the dropdown shown by /equip.
  */
 
-import { EmbedBuilder, Colors, type StringSelectMenuInteraction } from "discord.js";
-import { getUser } from "@/db/repositories/users";
+import type { StringSelectMenuInteraction } from "discord.js";
 import { patchRpgProfile } from "@/db/repositories/rpg";
-import { getHints } from "@/utils/command-registry";
+import { getUser } from "@/db/repositories/users";
 import { TOOLS } from "@/features/rpg/content/tools";
+import { container, text, v2Message } from "@/ui/v2";
+import { getHints } from "@/utils/command-registry";
 
 export const EQUIP_CUSTOM_ID = "equip:select";
 
@@ -27,32 +28,30 @@ export async function handleEquipSelect(interaction: StringSelectMenuInteraction
   if (!itemId) return;
 
   const userId = interaction.user.id;
-  const footer = { text: getHints("equip") };
 
   // Validate tool is still in the allowed set (guard against stale menus)
   if (!EQUIPABLE_TOOLS.has(itemId)) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setDescription(`\`${itemId}\` is not a valid tool.`)
-          .setFooter(footer),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(
+        container("danger", text(`\`${itemId}\` is not a valid tool.\n-# ${getHints("equip")}`)),
+      ),
+    );
     return;
   }
 
   // Re-fetch user to confirm current inventory (guard against race conditions)
   const userRes = await getUser(userId);
   if (userRes.isErr()) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setDescription("Something went wrong fetching your profile. Please try again.")
-          .setFooter(footer),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "danger",
+          text(
+            `Something went wrong fetching your profile. Please try again.\n-# ${getHints("equip")}`,
+          ),
+        ),
+      ),
+    );
     return;
   }
 
@@ -61,14 +60,14 @@ export async function handleEquipSelect(interaction: StringSelectMenuInteraction
   const qty = (inventory[itemId] as number | undefined) ?? 0;
 
   if (qty < 1) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setDescription(`You no longer have \`${itemId}\` in your inventory.`)
-          .setFooter(footer),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "danger",
+          text(`You no longer have \`${itemId}\` in your inventory.\n-# ${getHints("equip")}`),
+        ),
+      ),
+    );
     return;
   }
 
@@ -93,24 +92,22 @@ export async function handleEquipSelect(interaction: StringSelectMenuInteraction
   });
 
   if (patchRes.isErr()) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(Colors.Red)
-          .setDescription("Something went wrong equipping your item. Please try again.")
-          .setFooter(footer),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "danger",
+          text(
+            `Something went wrong equipping your item. Please try again.\n-# ${getHints("equip")}`,
+          ),
+        ),
+      ),
+    );
     return;
   }
 
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(Colors.Blue)
-        .setTitle("🗡️ Equipped!")
-        .setDescription(`You equipped \`${itemId}\`.`)
-        .setFooter(footer),
-    ],
-  });
+  await interaction.editReply(
+    v2Message(
+      container("ok", text(`## 🗡️ Equipped!\nYou equipped \`${itemId}\`.\n-# ${getHints("equip")}`)),
+    ),
+  );
 }

@@ -1,17 +1,13 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { browseQuests } from "@/features/economy/quests";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("quest-list")
   .setDescription("Browse available quests");
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -21,16 +17,19 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const quests = browseQuests().slice(0, 10);
 
-  const embed = new EmbedBuilder().setColor(Colors.Blurple).setTitle("Available Quests");
-
+  let body: string;
   if (quests.length === 0) {
-    embed.setDescription("No quests are currently available.");
+    body = "## Available Quests\nNo quests are currently available.";
   } else {
-    const lines = quests.map(
-      (q) => `**${q.title}** (${q.difficulty}) — ${q.description}`,
-    );
-    embed.setDescription(lines.join("\n\n"));
+    const lines = quests.map((q) => `**${q.title}** (${q.difficulty}) — ${q.description}`);
+    body = `## Available Quests\n${lines.join("\n\n")}`;
   }
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(v2Message(container("info", text(body))));
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/quest-accept", "/balance"] },
+  execute,
+});

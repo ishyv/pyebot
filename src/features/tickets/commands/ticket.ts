@@ -1,33 +1,31 @@
+import { defineCommand } from "@/framework";
 /**
  * /ticket open [type] — Opens a ticket channel in the configured category.
  * /ticket close      — Closes the current ticket channel.
  */
 
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  Colors,
-  PermissionFlagsBits,
   ChannelType,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
-import {
-  TICKET_CATEGORIES,
-  openTicket,
-  closeTicket,
-  makeTicketChannelName,
-  TicketError,
-} from "@/features/tickets/service";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+import {
+  closeTicket,
+  makeTicketChannelName,
+  openTicket,
+  TICKET_CATEGORIES,
+  type TicketError,
+} from "@/features/tickets/service";
+import { renderTicketWelcome } from "@/features/tickets/views";
+import { container, text, v2Message } from "@/ui/v2";
 
 export const TICKET_CLOSE_BUTTON_PREFIX = "tickets:close:";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("ticket")
   .setDescription("Ticket system")
   .addSubcommand((sub) =>
@@ -44,11 +42,7 @@ export const data = new SlashCommandBuilder()
           ),
       ),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("close")
-      .setDescription("Close the current ticket channel"),
-  )
+  .addSubcommand((sub) => sub.setName("close").setDescription("Close the current ticket channel"))
   .addSubcommand((sub) =>
     sub
       .setName("setup")
@@ -62,12 +56,10 @@ export const data = new SlashCommandBuilder()
       ),
   )
   .addSubcommand((sub) =>
-    sub
-      .setName("panel")
-      .setDescription("Open the tickets configuration panel"),
+    sub.setName("panel").setDescription("Open the tickets configuration panel"),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
   if (sub === "open") {
@@ -132,29 +124,21 @@ async function handleOpen(interaction: ChatInputCommandInteraction): Promise<voi
 
   const { channelId } = result.unwrap();
 
-  // Post welcome + close button in the new ticket channel
-  const welcomeEmbed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle(`Ticket — ${category.emoji} ${category.label}`)
-    .setDescription(
-      `Welcome <@${interaction.user.id}>!\n\nPlease describe your request and wait for a staff member.`,
-    )
-    .setFooter({ text: `Opened by ${interaction.user.username}` })
-    .setTimestamp();
-
-  const closeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${TICKET_CLOSE_BUTTON_PREFIX}${channelId}`)
-      .setLabel("Close Ticket")
-      .setStyle(ButtonStyle.Danger),
-  );
-
+  // Post welcome + inline close button to the new ticket channel.
+  // V2 Section puts the Close button beside the heading rather than below it.
   try {
-    const ticketChannel = guild.channels.cache.get(channelId)
-      ?? await guild.channels.fetch(channelId);
+    const ticketChannel =
+      guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId));
 
     if (ticketChannel?.isTextBased() && ticketChannel.type === ChannelType.GuildText) {
-      await ticketChannel.send({ embeds: [welcomeEmbed], components: [closeRow] });
+      await ticketChannel.send(
+        renderTicketWelcome({
+          categoryEmoji: category.emoji,
+          categoryLabel: category.label,
+          userId: interaction.user.id,
+          closeCustomId: `${TICKET_CLOSE_BUTTON_PREFIX}${channelId}`,
+        }),
+      );
     }
   } catch {
     // Non-fatal — channel created but couldn't send welcome message
@@ -191,17 +175,23 @@ async function handleClose(interaction: ChatInputCommandInteraction): Promise<vo
   if (!isStaff) {
     // Allow if user is the ticket opener — session lookup
     // Best-effort: if we can't confirm ownership, block non-staff
-    await interaction.editReply({ content: "Only staff can close tickets from this command. Use the Close Ticket button instead." });
+    await interaction.editReply({
+      content:
+        "Only staff can close tickets from this command. Use the Close Ticket button instead.",
+    });
     return;
   }
 
-  const closingEmbed = new EmbedBuilder()
-    .setColor(Colors.Orange)
-    .setTitle("🔒 Closing Ticket")
-    .setDescription("This ticket is being closed. The channel will be deleted shortly.")
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [closingEmbed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "warn",
+        text(
+          "**🔒 Closing Ticket**\nThis ticket is being closed. The channel will be deleted shortly.",
+        ),
+      ),
+    ),
+  );
 
   await closeTicket(guild, channel.id);
 }
@@ -228,20 +218,33 @@ async function handleSetup(interaction: ChatInputCommandInteraction): Promise<vo
 
   const category = interaction.options.getChannel("category", true);
 
-  const updateResult = await updateGuildPaths(guild.id, {
-    "channels.ticketCategoryId": category.id,
-  }, { upsert: true });
+  const updateResult = await updateGuildPaths(
+    guild.id,
+    { "channels.ticketCategoryId": category.id },
+    { upsert: true },
+  );
 
   if (updateResult.isErr()) {
-    await interaction.editReply({ content: `Failed to save configuration: ${updateResult.error.message}` });
+    await interaction.editReply({
+      content: `Failed to save configuration: ${updateResult.error.message}`,
+    });
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle("✅ Ticket System Configured")
-    .setDescription(`Tickets will now be created in the <#${category.id}> category.`)
-    .setFooter({ text: "Use /ticket open to test the system." });
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        text(
+          `**✅ Ticket System Configured**\nTickets will now be created in the <#${category.id}> category.\n-# Use /ticket open to test the system.`,
+        ),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: [] },
+  execute,
+});

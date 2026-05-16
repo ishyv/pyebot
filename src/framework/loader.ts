@@ -5,7 +5,7 @@
  * contains `index.ts` exporting (as default) a `FeatureDescriptor`. The
  * loader also looks for:
  *
- *   <feature>/commands/*.ts   → CommandModule per file, default-loaded
+ *   <feature>/commands/*.ts   → default CommandModule per file
  *   <feature>/handlers.ts     → optional; default export must be a class
  *                                whose prototype carries @On/@Handle
  *                                metadata (read by the framework).
@@ -30,14 +30,10 @@
  */
 
 import { readdir, stat } from "node:fs/promises";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLogger } from "@/core/logger";
-import type {
-  CommandModule,
-  FeatureDescriptor,
-  LoadedFeature,
-} from "./types";
+import type { CommandModule, FeatureDescriptor, LoadedFeature } from "./types";
 
 const log = createLogger("framework:loader");
 
@@ -79,18 +75,17 @@ async function importDefault<T>(absPath: string): Promise<T> {
   return mod.default;
 }
 
-async function importModule(absPath: string): Promise<Record<string, unknown>> {
-  const url = pathToFileURL(absPath).href;
-  return (await import(url)) as Record<string, unknown>;
-}
-
-function isCommandModule(mod: Record<string, unknown>): boolean {
+function isCommandModule(mod: unknown): mod is CommandModule {
   return (
-    typeof mod.data === "object" &&
-    mod.data !== null &&
-    typeof (mod.data as { name?: unknown }).name === "string" &&
-    typeof (mod.data as { toJSON?: unknown }).toJSON === "function" &&
-    typeof mod.execute === "function"
+    typeof mod === "object" &&
+    mod !== null &&
+    typeof (mod as { data?: unknown }).data === "object" &&
+    (mod as { data?: unknown }).data !== null &&
+    typeof (mod as { data: { name?: unknown } }).data.name === "string" &&
+    typeof (mod as { data: { toJSON?: unknown } }).data.toJSON === "function" &&
+    (typeof (mod as { help?: unknown }).help === "object" ||
+      (mod as { help?: unknown }).help === false) &&
+    typeof (mod as { execute?: unknown }).execute === "function"
   );
 }
 
@@ -103,14 +98,14 @@ async function loadCommands(featureDir: string): Promise<CommandModule[]> {
     if (entry.endsWith(".test.ts") || entry.endsWith(".test.js")) continue;
     if (!(entry.endsWith(".ts") || entry.endsWith(".js"))) continue;
     const abs = join(commandsDir, entry);
-    const mod = await importModule(abs);
+    const mod = await importDefault<unknown>(abs);
     if (!isCommandModule(mod)) {
       throw new Error(
-        `Command file ${abs} is missing required exports (data, execute). ` +
-        `Every file in commands/ must be a CommandModule. Delete or move utility files.`,
+        `Command file ${abs} must default-export defineCommand({ data, help, execute }). ` +
+          `Use help: false only for commands intentionally hidden from /help.`,
       );
     }
-    result.push(mod as unknown as CommandModule);
+    result.push(mod);
   }
   return result;
 }
@@ -158,13 +153,15 @@ export async function loadFeatures(): Promise<LoadedFeature[]> {
     if (descriptor.id !== entry) {
       throw new Error(
         `Feature folder "${entry}" exports descriptor with mismatched id "${descriptor.id}". ` +
-        `The folder name and the descriptor id MUST match.`,
+          `The folder name and the descriptor id MUST match.`,
       );
     }
     const commands = await loadCommands(featureDir);
     const handlers = await loadHandlers(featureDir);
     features.push({ descriptor, commands, handlers });
-    log.info(`Loaded feature: ${descriptor.id} (${commands.length} commands, handlers: ${handlers ? "yes" : "no"})`);
+    log.info(
+      `Loaded feature: ${descriptor.id} (${commands.length} commands, handlers: ${handlers ? "yes" : "no"})`,
+    );
   }
   return features;
 }

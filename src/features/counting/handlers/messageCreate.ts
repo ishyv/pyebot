@@ -1,9 +1,9 @@
 import type { Client, Message } from "discord.js";
+import { resolveConfiguredChannel } from "@/core/featureConfig";
+import { createLogger } from "@/core/logger";
+import { mongoCountingStateRepository } from "@/db/repositories/counting";
 import { getGuild } from "@/db/repositories/guilds";
 import { Features } from "@/db/schemas/guild";
-import { mongoCountingStateRepository } from "@/db/repositories/counting";
-import { createLogger } from "@/core/logger";
-import { resolveConfiguredChannel } from "@/core/featureConfig";
 import { countingFeatureConfig } from "@/features/counting/config";
 import { processCountingMessage } from "../service";
 

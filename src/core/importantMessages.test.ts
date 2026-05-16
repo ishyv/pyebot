@@ -1,10 +1,6 @@
-import { describe, expect, test, beforeEach } from "bun:test";
-import {
-  markImportant,
-  unmarkImportant,
-  getImportantMessage,
-} from "./importantMessages";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "discord.js";
+import { getImportantMessage, markImportant, unmarkImportant } from "./importantMessages";
 
 function fakeMessage(id: string): Message {
   return { id, channelId: "ch1", guildId: "g1" } as unknown as Message;

@@ -7,19 +7,19 @@
  */
 
 import {
-  MessageFlags,
+  ActionRowBuilder,
   type ButtonInteraction,
-  PermissionFlagsBits,
+  MessageFlags,
   ModalBuilder,
+  PermissionFlagsBits,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
 } from "discord.js";
 import {
-  OFFER_APPROVE_PREFIX,
-  OFFER_REJECT_PREFIX,
-  OFFER_CHANGES_PREFIX,
   approveOffer,
+  OFFER_APPROVE_PREFIX,
+  OFFER_CHANGES_PREFIX,
+  OFFER_REJECT_PREFIX,
   rejectOffer,
   requestChanges,
 } from "@/features/offers/service";
@@ -55,7 +55,10 @@ export async function handleOfferReview(interaction: ButtonInteraction): Promise
 
 async function handleApprove(interaction: ButtonInteraction, offerId: string): Promise<void> {
   if (!requireModerator(interaction)) {
-    await interaction.reply({ content: "You need ManageGuild to review offers.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "You need ManageGuild to review offers.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -83,7 +86,10 @@ async function handleRejectOrChanges(
   type: "reject" | "changes",
 ): Promise<void> {
   if (!requireModerator(interaction)) {
-    await interaction.reply({ content: "You need ManageGuild to review offers.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "You need ManageGuild to review offers.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

@@ -8,12 +8,12 @@
  * Inventory items are stored as numeric quantities at `inventory.<itemId>`.
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
+import { ErrResult, OkResult, type Result } from "@/core/result";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
 import {
   CRAFTING_RECIPES,
-  parseCraftingRecipeId,
   type CraftingRecipeId,
+  parseCraftingRecipeId,
 } from "@/features/rpg/content/recipes";
 
 // Re-export for callers that need to enumerate or autocomplete recipes.

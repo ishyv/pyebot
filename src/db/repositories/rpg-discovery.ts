@@ -1,6 +1,6 @@
+import { ErrResult, OkResult, type Result } from "@/core/result";
+import { type RpgDiscoveredItem, RpgDiscoveredItemSchema } from "@/db/schemas/rpg-discovery";
 import { MongoStore } from "@/db/store";
-import { RpgDiscoveredItemSchema, type RpgDiscoveredItem } from "@/db/schemas/rpg-discovery";
-import { OkResult, ErrResult, type Result } from "@/core/result";
 
 export const discoveryStore = new MongoStore("rpg_discovered_items", RpgDiscoveredItemSchema);
 

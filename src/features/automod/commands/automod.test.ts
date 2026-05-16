@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { OkResult, ErrResult } from "@/core/result";
+import { ErrResult, OkResult } from "@/core/result";
 
 const updateCalls: Array<{
   guildId: string;
@@ -14,11 +14,7 @@ mock.module("@/db/repositories/guilds", () => ({
   ensureGuild: async () => OkResult(null),
   getGuild: async () => OkResult(null),
   patchGuild: async () => OkResult(null),
-  updateGuildPaths: async (
-    guildId: string,
-    paths: Record<string, unknown>,
-    options: unknown,
-  ) => {
+  updateGuildPaths: async (guildId: string, paths: Record<string, unknown>, options: unknown) => {
     updateCalls.push({ guildId, paths, options });
     return updateResult;
   },
@@ -85,10 +81,10 @@ describe("/automod linkspam", () => {
   it("uses the framework responder and upserts the latest guild config shape", async () => {
     updateCalls.length = 0;
     updateResult = OkResult(undefined);
-    const { execute } = await import("./automod");
+    const { default: command } = await import("./automod");
     const { ctx, calls } = fakeContext();
 
-    await execute(linkspamInteraction() as never, ctx as never);
+    await command.execute(linkspamInteraction() as never, ctx as never);
 
     expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
     expect(updateCalls).toEqual([
@@ -108,10 +104,10 @@ describe("/automod linkspam", () => {
   it("reports persistence failures through the framework responder", async () => {
     updateCalls.length = 0;
     updateResult = ErrResult(new Error("db down"));
-    const { execute } = await import("./automod");
+    const { default: command } = await import("./automod");
     const { ctx, calls } = fakeContext();
 
-    await execute(linkspamInteraction() as never, ctx as never);
+    await command.execute(linkspamInteraction() as never, ctx as never);
 
     expect(calls.map((call) => call.method)).toEqual(["defer", "fail"]);
   });

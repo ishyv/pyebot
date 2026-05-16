@@ -45,7 +45,10 @@ function checkDuplicateIds<T extends { id: string; __source: { file: string; jso
   return issues;
 }
 
-function buildKnownItemIds(content: LoadedContentPacks, extraItemIds?: ReadonlySet<string>): Set<string> {
+function buildKnownItemIds(
+  content: LoadedContentPacks,
+  extraItemIds?: ReadonlySet<string>,
+): Set<string> {
   const ids = new Set<string>(extraItemIds ?? []);
   for (const item of content.items) {
     ids.add(item.id);
@@ -53,7 +56,10 @@ function buildKnownItemIds(content: LoadedContentPacks, extraItemIds?: ReadonlyS
   return ids;
 }
 
-export function validateLoadedContent(content: LoadedContentPacks, ctx: ValidationContext = {}): void {
+export function validateLoadedContent(
+  content: LoadedContentPacks,
+  ctx: ValidationContext = {},
+): void {
   const issues: string[] = [];
 
   issues.push(...checkDuplicateIds(content.items, "item"));
@@ -83,10 +89,7 @@ export function validateLoadedContent(content: LoadedContentPacks, ctx: Validati
       }
     });
 
-    if (
-      recipe.currencyInput &&
-      !knownCurrencyIds.has(recipe.currencyInput.currencyId)
-    ) {
+    if (recipe.currencyInput && !knownCurrencyIds.has(recipe.currencyInput.currencyId)) {
       issues.push(
         `${sourceLabel(recipe)} $.currencyInput.currencyId references unknown currency '${recipe.currencyInput.currencyId}'`,
       );
@@ -132,9 +135,6 @@ export function validateLoadedContent(content: LoadedContentPacks, ctx: Validati
   }
 
   if (issues.length > 0) {
-    throw new ContentValidationError(
-      "Content validation failed",
-      issues,
-    );
+    throw new ContentValidationError("Content validation failed", issues);
   }
 }

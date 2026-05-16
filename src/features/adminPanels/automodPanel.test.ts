@@ -31,8 +31,7 @@ describe("automod admin panel", () => {
     session.selectedAutomodSection = "linkSpam";
 
     const payload = renderAutomodPanel(session, guild);
-    const embed = payload.embeds[0]?.toJSON();
-    const rendered = JSON.stringify(embed);
+    const rendered = JSON.stringify(payload.container.toJSON());
 
     expect(rendered).toContain("Link spam");
     expect(rendered).toContain("Tiered policy");

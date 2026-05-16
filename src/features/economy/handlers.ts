@@ -1,7 +1,8 @@
-import { Colors, EmbedBuilder, MessageFlags, type ButtonInteraction } from "discord.js";
+import { type ButtonInteraction, MessageFlags } from "discord.js";
+import { answerTrivia, MinigameError } from "@/features/economy/minigames";
 import { Handle } from "@/framework/decorators";
 import type { Ctx } from "@/framework/types";
-import { answerTrivia, MinigameError } from "@/features/economy/minigames";
+import { container, text, v2Message } from "@/ui/v2";
 
 export const TRIVIA_BUTTON_PREFIX = "trivia_answer:";
 
@@ -18,7 +19,10 @@ export default class EconomyHandlers {
     }
 
     if (!sessionKey.startsWith(interaction.user.id)) {
-      await interaction.reply({ content: "This is not your trivia session.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: "This is not your trivia session.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
 
@@ -27,17 +31,23 @@ export default class EconomyHandlers {
     try {
       const { correct, reward, newBalance } = await answerTrivia(ctx, sessionKey, answerIndex);
 
-      const embed = new EmbedBuilder()
-        .setColor(correct ? Colors.Green : Colors.Red)
-        .setTitle(correct ? "Correct!" : "Wrong!")
-        .setDescription(
-          correct
-            ? `You earned **${reward} coins**! New balance: **${newBalance} coins**`
-            : `Better luck next time. New balance: **${newBalance} coins**`,
-        )
-        .setTimestamp();
+      const payload = correct
+        ? v2Message(
+            container(
+              "ok",
+              text(
+                `## Correct!\nYou earned **${reward} coins**! New balance: **${newBalance} coins**`,
+              ),
+            ),
+          )
+        : v2Message(
+            container(
+              "danger",
+              text(`## Wrong!\nBetter luck next time. New balance: **${newBalance} coins**`),
+            ),
+          );
 
-      await interaction.editReply({ embeds: [embed], components: [] });
+      await interaction.editReply({ ...payload, components: payload.components as any[] });
     } catch (err) {
       const msg = err instanceof MinigameError ? err.message : "An error occurred.";
       await interaction.editReply({ content: `Trivia error: ${msg}`, components: [] });

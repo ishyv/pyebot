@@ -14,9 +14,6 @@
  */
 
 import {
-  EmbedBuilder,
-  Colors,
-  ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
@@ -24,8 +21,9 @@ import {
   type GuildMember,
   type TextChannel,
 } from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
 import { createLogger } from "@/core/logger";
+import { getGuild } from "@/db/repositories/guilds";
+import { container, row, separator, text, v2Message } from "@/ui/v2";
 
 const log = createLogger("automod:raid");
 
@@ -86,7 +84,9 @@ async function onMemberJoin(member: GuildMember): Promise<void> {
   // Trigger if > 50% of the surge are new accounts
   if (newAccountPct < 0.5) return;
 
-  log.warn(`Raid suspected in ${member.guild.name}: ${entries.length} joins/min, ${Math.round(newAccountPct * 100)}% new accounts`);
+  log.warn(
+    `Raid suspected in ${member.guild.name}: ${entries.length} joins/min, ${Math.round(newAccountPct * 100)}% new accounts`,
+  );
 
   // Clear tracking to prevent repeated triggers
   joinHistory.delete(member.guild.id);
@@ -122,19 +122,11 @@ async function postRaidAlert(
       .map((e) => `<@${e.userId}>`)
       .join(", ");
     const overflow = entries.length > 10 ? ` (+${entries.length - 10} more)` : "";
+    const newAccountCount = entries.filter(
+      (e) => Date.now() - e.accountCreatedAt < 7 * 24 * 60 * 60 * 1000,
+    ).length;
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setTitle("⚠️ Raid Suspected")
-      .addFields(
-        { name: "Joins in last 60s", value: `${entries.length}`, inline: true },
-        { name: "New accounts (<threshold age)", value: `${entries.filter((e) => Date.now() - e.accountCreatedAt < 7 * 24 * 60 * 60 * 1000).length}`, inline: true },
-        { name: "Recent Members", value: userList + overflow },
-      )
-      .setFooter({ text: "Use the buttons below to respond." })
-      .setTimestamp();
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    const alertRow = row(
       new ButtonBuilder()
         .setCustomId(`automod:raid:lockdown:${trigger.guild.id}`)
         .setLabel("Lockdown Server")
@@ -145,7 +137,22 @@ async function postRaidAlert(
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await (channel as TextChannel).send({ embeds: [embed], components: [row] });
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+    await (channel as TextChannel).send(
+      v2Message(
+        container(
+          "danger",
+          text("## Raid Suspected"),
+          separator("sm"),
+          text(
+            `**Joins in last 60s:** ${entries.length}\n**New accounts (<threshold age):** ${newAccountCount}\n**Recent Members:** ${userList + overflow}`,
+          ),
+          separator("sm"),
+          text("-# Use the buttons below to respond."),
+          alertRow,
+        ),
+      ) as any,
+    );
   } catch (err) {
     log.error("Failed to post raid alert", err);
   }
@@ -158,11 +165,13 @@ async function lockdownServer(trigger: GuildMember): Promise<void> {
 
   await Promise.allSettled(
     [...textChannels.values()].map((c) =>
-      (c as TextChannel).permissionOverwrites.edit(
-        trigger.guild.roles.everyone,
-        { SendMessages: false },
-        { reason: "Auto-lockdown: raid detected" },
-      ).catch(() => {}),
+      (c as TextChannel).permissionOverwrites
+        .edit(
+          trigger.guild.roles.everyone,
+          { SendMessages: false },
+          { reason: "Auto-lockdown: raid detected" },
+        )
+        .catch(() => {}),
     ),
   );
 }

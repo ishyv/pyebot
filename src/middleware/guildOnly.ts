@@ -5,8 +5,8 @@
  * Replaces the `if (!interaction.guild)` guard repeated in every command.
  */
 
-import { OkResult, ErrResult } from "@/core/result";
 import type { MiddlewareFn } from "@/core/feature";
+import { ErrResult, OkResult } from "@/core/result";
 
 export function guildOnly(): MiddlewareFn {
   return async (interaction) => {

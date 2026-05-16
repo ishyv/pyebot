@@ -1,8 +1,4 @@
-import {
-  MessageFlags,
-  PermissionFlagsBits,
-  type ButtonInteraction,
-} from "discord.js";
+import { type ButtonInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import type { ModerationAction } from "./actionContract";
 
 export interface PermissionSetLike {
@@ -55,9 +51,11 @@ export async function guardModerationComponentAction(
   action: ModerationAction,
 ): Promise<boolean> {
   if (canUseModerationAction(interaction.memberPermissions, action)) return true;
-  await interaction.reply({
-    content: missingModerationPermissionMessage(action),
-    flags: MessageFlags.Ephemeral,
-  }).catch(() => {});
+  await interaction
+    .reply({
+      content: missingModerationPermissionMessage(action),
+      flags: MessageFlags.Ephemeral,
+    })
+    .catch(() => {});
   return false;
 }

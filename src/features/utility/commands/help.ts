@@ -1,21 +1,19 @@
 import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
   type AutocompleteInteraction,
+  type ChatInputCommandInteraction,
+  SlashCommandBuilder,
 } from "discord.js";
+import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
+import { type ContainerChild, container, separator, text, v2Message } from "@/ui/v2";
 import {
-  REGISTRY,
-  CATEGORIES,
+  getCommandFeatures,
   getCommandMeta,
-  getCommandsForCategory,
+  getCommandsForFeature,
   getHints,
-  type CategoryKey,
 } from "@/utils/command-registry";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("help")
   .setDescription("Browse commands by category or get help for a specific command")
   .addStringOption((opt) =>
@@ -26,13 +24,14 @@ export const data = new SlashCommandBuilder()
       .setAutocomplete(true),
   );
 
-export async function autocomplete(interaction: AutocompleteInteraction, _ctx: Ctx): Promise<void> {
+async function autocomplete(interaction: AutocompleteInteraction, _ctx: Ctx): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
 
-  const categoryKeys = Object.keys(CATEGORIES) as CategoryKey[];
-  const commandNames = Object.keys(REGISTRY);
+  const features = getCommandFeatures();
+  const featureIds = features.map((entry) => entry.feature.id);
+  const commandNames = features.flatMap((entry) => entry.commands.map((command) => command.name));
 
-  const choices = [...categoryKeys, ...commandNames]
+  const choices = [...featureIds, ...commandNames]
     .filter((entry) => entry.toLowerCase().startsWith(focused))
     .map((entry) => ({ name: entry, value: entry }))
     .slice(0, 25);
@@ -40,96 +39,103 @@ export async function autocomplete(interaction: AutocompleteInteraction, _ctx: C
   await interaction.respond(choices);
 }
 
-export async function execute(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   const topic = interaction.options.getString("topic");
 
   // Level 1 — no argument: category overview
   if (!topic) {
-    const embed = new EmbedBuilder()
-      .setTitle("Help")
-      .setDescription("Browse commands by category or use `/help <command>` for details on a specific command.")
-      .setColor(Colors.Blurple);
+    const categoryLines = getCommandFeatures()
+      .map((entry) => `**${entry.feature.name}**\n${entry.feature.description}`)
+      .join("\n\n");
 
-    for (const [, cat] of Object.entries(CATEGORIES)) {
-      embed.addFields({
-        name: `${cat.emoji} ${cat.label}`,
-        value: cat.description,
-        inline: false,
-      });
-    }
-
-    embed.setFooter({ text: "💡 /help rpg • /help economy • /help moderation" });
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "info",
+          text(
+            "## Help\nBrowse commands by category or use `/help <command>` for details on a specific command.",
+          ),
+          separator("sm"),
+          text(categoryLines),
+          separator("sm"),
+          text("-# /help rpg • /help economy • /help moderation"),
+        ),
+      ),
+    );
     return;
   }
 
   // Level 2 — category arg
-  if (topic in CATEGORIES) {
-    const categoryKey = topic as CategoryKey;
-    const cat = CATEGORIES[categoryKey];
-    const commands = getCommandsForCategory(categoryKey);
+  const feature = getCommandFeatures().find((entry) => entry.feature.id === topic);
+  if (feature) {
+    const commands = getCommandsForFeature(feature.feature.id);
 
-    const embed = new EmbedBuilder()
-      .setTitle(`${cat.emoji} ${cat.label} Commands`)
-      .setDescription(cat.description)
-      .setColor(Colors.Blurple);
+    const commandLines = commands
+      .map(({ name, meta }) => `**/${name}** — ${meta.description}`)
+      .join("\n");
 
-    for (const { name, meta } of commands) {
-      embed.addFields({
-        name: `/${name}`,
-        value: meta.description,
-        inline: true,
-      });
-    }
-
-    embed.setFooter({ text: "💡 Use /help <command> for more details" });
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "info",
+          text(`## ${feature.feature.name} Commands\n${feature.feature.description}`),
+          separator("sm"),
+          text(commandLines || "No commands in this category."),
+          separator("sm"),
+          text("-# Use /help <command> for more details"),
+        ),
+      ),
+    );
     return;
   }
 
   // Level 3 — command arg
   const meta = getCommandMeta(topic);
   if (meta) {
-    const embed = new EmbedBuilder()
-      .setTitle(`/${topic}`)
-      .setDescription(meta.description)
-      .setColor(Colors.Blurple);
+    const parts: string[] = [`## /${topic}\n${meta.description}`];
 
     if (meta.requires) {
-      embed.addFields({ name: "Requires", value: meta.requires, inline: false });
+      parts.push(`\n**Requires:** ${meta.requires}`);
     }
 
     if (meta.args && meta.args.length > 0) {
+      parts.push("\n**Arguments:**");
       for (const arg of meta.args) {
-        embed.addFields({
-          name: arg.name,
-          value: `${arg.description}${arg.tip ? "\n💡 " + arg.tip : ""}`,
-          inline: true,
-        });
+        const required = arg.required ? " *(required)*" : "";
+        parts.push(`• **${arg.name}**${required} — ${arg.description}`);
       }
     }
 
     if (meta.hints.length > 0) {
-      embed.addFields({ name: "See Also", value: meta.hints.join(" • "), inline: false });
+      parts.push(`\n**See Also:** ${meta.hints.join(" • ")}`);
     }
 
     const footer = getHints(topic);
+    const children: ContainerChild[] = [text(parts.join("\n"))];
     if (footer) {
-      embed.setFooter({ text: footer });
+      children.push(separator("sm"), text(`-# ${footer}`));
     }
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(v2Message(container("info", ...children)));
     return;
   }
 
   // Unknown topic
-  const errorEmbed = new EmbedBuilder()
-    .setColor(Colors.Red)
-    .setDescription(`Unknown command or category: \`${topic}\`.\nUse \`/help\` to browse all categories.`);
-
-  await interaction.editReply({ embeds: [errorEmbed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "danger",
+        text(`Unknown command or category: \`${topic}\`.\nUse \`/help\` to browse all categories.`),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: [] },
+  autocomplete,
+  execute,
+});

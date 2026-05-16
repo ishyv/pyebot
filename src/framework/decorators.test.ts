@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { Handle, On, getHandleMetadata, getOnMetadata } from "./decorators";
+import { getHandleMetadata, getOnMetadata, Handle, On } from "./decorators";
 
 class FakeEvent {}
 

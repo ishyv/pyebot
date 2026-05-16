@@ -15,20 +15,18 @@
  * Configuration: guild.moderation.altDetectionEnabled
  */
 
-import {
-  EmbedBuilder,
-  Colors,
-  type Client,
-  type GuildMember,
-  type TextChannel,
-} from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
+import type { Client, GuildMember, TextChannel } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { getGuild } from "@/db/repositories/guilds";
+import { container, section, separator, text, thumb, v2Message } from "@/ui/v2";
 
 const log = createLogger("moderation:alt-detection");
 
 // Cache recent bans per guild (last 30, refreshed periodically)
-const recentBanCache = new Map<string, Array<{ userId: string; username: string; avatarHash: string | null; bannedAt: number }>>();
+const recentBanCache = new Map<
+  string,
+  Array<{ userId: string; username: string; avatarHash: string | null; bannedAt: number }>
+>();
 
 export function registerAltDetection(client: Client): void {
   client.on("guildMemberAdd", async (member) => {
@@ -40,12 +38,15 @@ export function registerAltDetection(client: Client): void {
   });
 
   // Refresh ban caches every 10 minutes
-  setInterval(async () => {
-    for (const guildId of recentBanCache.keys()) {
-      const guild = client.guilds.cache.get(guildId);
-      if (guild) await refreshBanCache(guild.id, client);
-    }
-  }, 10 * 60 * 1000);
+  setInterval(
+    async () => {
+      for (const guildId of recentBanCache.keys()) {
+        const guild = client.guilds.cache.get(guildId);
+        if (guild) await refreshBanCache(guild.id, client);
+      }
+    },
+    10 * 60 * 1000,
+  );
 }
 
 async function refreshBanCache(guildId: string, client: Client): Promise<void> {
@@ -60,7 +61,9 @@ async function refreshBanCache(guildId: string, client: Client): Promise<void> {
       bannedAt: Date.now(), // Discord doesn't provide ban timestamp; use now as approximation
     }));
     recentBanCache.set(guildId, entries);
-  } catch { /* permissions may not allow ban list */ }
+  } catch {
+    /* permissions may not allow ban list */
+  }
 }
 
 // Simple Levenshtein distance (capped for performance)
@@ -71,9 +74,10 @@ function levenshtein(a: string, b: string): number {
   );
   for (let i = 1; i <= a.length; i++) {
     for (let j = 1; j <= b.length; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
     }
   }
   return dp[a.length][b.length];
@@ -109,11 +113,16 @@ async function checkForAlt(member: GuildMember): Promise<void> {
     if (maxLen > 0) {
       const distance = levenshtein(newUsername, ban.username);
       const similarity = 1 - distance / maxLen;
-      if (similarity > 0.75) signals.push(`Similar username to <@${ban.userId}> (\`${ban.username}\`)`);
+      if (similarity > 0.75)
+        signals.push(`Similar username to <@${ban.userId}> (\`${ban.username}\`)`);
     }
 
     // Signal 3: matching avatar hash prefix
-    if (newAvatarHash && ban.avatarHash && newAvatarHash.slice(0, 8) === ban.avatarHash.slice(0, 8)) {
+    if (
+      newAvatarHash &&
+      ban.avatarHash &&
+      newAvatarHash.slice(0, 8) === ban.avatarHash.slice(0, 8)
+    ) {
       signals.push(`Matching avatar hash (same profile picture as <@${ban.userId}>)`);
     }
 
@@ -134,22 +143,24 @@ async function postAltAlert(
     const channel = await member.guild.channels.fetch(modLogChannelId);
     if (!channel?.isTextBased() || !("send" in channel)) return;
 
-    const accountAge = Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24));
+    const accountAge = Math.floor(
+      (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24),
+    );
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Orange)
-      .setTitle("Possible Alt Account Detected")
-      .setDescription("A newly joined member matches signals of a previously banned user. **No action has been taken — this requires manual review.**")
-      .addFields(
-        { name: "New Member", value: `<@${member.id}> (${member.user.tag})`, inline: true },
-        { name: "Account Age", value: `${accountAge} day${accountAge === 1 ? "" : "s"}`, inline: true },
-        { name: "Suspected Original", value: `<@${suspectedOriginalId}>`, inline: true },
-        { name: "Matching Signals", value: signals.map((s) => `• ${s}`).join("\n") },
-      )
-      .setThumbnail(member.user.displayAvatarURL())
-      .setTimestamp();
-
-    await (channel as TextChannel).send({ embeds: [embed] });
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+    await (channel as TextChannel).send(
+      v2Message(
+        container(
+          "warn",
+          section(
+            `## Possible Alt Account Detected\nA newly joined member matches signals of a previously banned user. **No action has been taken — this requires manual review.**\n\n**New Member:** <@${member.id}> (${member.user.tag})\n**Account Age:** ${accountAge} day${accountAge === 1 ? "" : "s"}\n**Suspected Original:** <@${suspectedOriginalId}>`,
+            thumb(member.user.displayAvatarURL(), member.user.tag),
+          ),
+          separator("sm"),
+          text(`**Matching Signals**\n${signals.map((s) => `• ${s}`).join("\n")}`),
+        ),
+      ) as any,
+    );
   } catch (err) {
     log.error("Failed to post alt alert", err);
   }

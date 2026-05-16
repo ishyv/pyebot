@@ -1,300 +1,332 @@
 <script lang="ts">
-	import {
-		PageHeader,
-		Tabs,
-		Input,
-		Button,
-		Card,
-		Badge,
-		Label,
-		Stack,
-		Grid,
-		Modal,
-		Select,
-		Textarea,
-		MetricCard,
-		Divider,
-		Text,
-		Drawer,
-		toastStore
-	} from '@hyvnt/hyvui';
-	import { onMount } from 'svelte';
+import {
+  Badge,
+  Button,
+  Card,
+  Divider,
+  Drawer,
+  Grid,
+  Input,
+  Label,
+  MetricCard,
+  Modal,
+  PageHeader,
+  Select,
+  Stack,
+  Tabs,
+  Text,
+  Textarea,
+  toastStore,
+} from "@hyvnt/hyvui";
+import { onMount } from "svelte";
 
-	// ── Types ────────────────────────────────────────────────────────────
-	interface ItemDef {
-		id: string;
-		name: string;
-		category: string;
-		rarity: string;
-		trait1: string;
-		trait2: string;
-		sources: string[];
-		description: string;
-	}
+// ── Types ────────────────────────────────────────────────────────────
+interface ItemDef {
+  id: string;
+  name: string;
+  category: string;
+  rarity: string;
+  trait1: string;
+  trait2: string;
+  sources: string[];
+  description: string;
+}
 
-	const CATEGORIES = [
-		'all', 'mineral', 'timber', 'herb', 'animal', 'reagent',
-		'medical', 'component', 'tool', 'weapon', 'armor', 'artifact', 'misc'
-	];
+const CATEGORIES = [
+  "all",
+  "mineral",
+  "timber",
+  "herb",
+  "animal",
+  "reagent",
+  "medical",
+  "component",
+  "tool",
+  "weapon",
+  "armor",
+  "artifact",
+  "misc",
+];
 
-	const TRAITS = ['Density', 'Sharpness', 'Organic', 'Toxicity', 'Magic', 'Liquid', 'None'];
-	const RARITIES = ['common', 'uncommon', 'rare', 'legendary'];
-	const SOURCES = ['gather', 'expedition', 'craft', 'drop', 'quest', 'shop'];
+const TRAITS = ["Density", "Sharpness", "Organic", "Toxicity", "Magic", "Liquid", "None"];
+const RARITIES = ["common", "uncommon", "rare", "legendary"];
+const SOURCES = ["gather", "expedition", "craft", "drop", "quest", "shop"];
 
-	// ── Icon maps ────────────────────────────────────────────────────────
+// ── Icon maps ────────────────────────────────────────────────────────
 
-	/** SVG path data for each category icon */
-	const CATEGORY_ICONS: Record<string, string> = {
-		mineral:   `<path d="M19 3H5C3.9 3 3 3.9 3 5v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z" fill="currentColor"/>`,
-		// better icons
-	};
+/** SVG path data for each category icon */
+const CATEGORY_ICONS: Record<string, string> = {
+  mineral: `<path d="M19 3H5C3.9 3 3 3.9 3 5v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z" fill="currentColor"/>`,
+  // better icons
+};
 
-	/** Emoji-style icon per category */
-	const CAT_ICON: Record<string, string> = {
-		all:       '◈',
-		mineral:   '💎',
-		timber:    '🪵',
-		herb:      '🌿',
-		animal:    '🦴',
-		reagent:   '⚗️',
-		medical:   '🩹',
-		component: '⚙️',
-		tool:      '🔧',
-		weapon:    '⚔️',
-		armor:     '🛡️',
-		artifact:  '🔮',
-		misc:      '📦',
-	};
+/** Emoji-style icon per category */
+const CAT_ICON: Record<string, string> = {
+  all: "◈",
+  mineral: "💎",
+  timber: "🪵",
+  herb: "🌿",
+  animal: "🦴",
+  reagent: "⚗️",
+  medical: "🩹",
+  component: "⚙️",
+  tool: "🔧",
+  weapon: "⚔️",
+  armor: "🛡️",
+  artifact: "🔮",
+  misc: "📦",
+};
 
-	/** Color for each category (CSS color string) */
-	const CAT_COLOR: Record<string, string> = {
-		all:       'var(--text-soft)',
-		mineral:   '#7dd3fc',   // sky blue
-		timber:    '#86efac',   // sage green
-		herb:      '#4ade80',   // bright green
-		animal:    '#fb923c',   // orange
-		reagent:   '#a78bfa',   // violet
-		medical:   '#34d399',   // teal
-		component: '#94a3b8',   // slate
-		tool:      '#fbbf24',   // amber
-		weapon:    '#f87171',   // red
-		armor:     '#60a5fa',   // blue
-		artifact:  '#c084fc',   // purple
-		misc:      '#9ca3af',   // grey
-	};
+/** Color for each category (CSS color string) */
+const CAT_COLOR: Record<string, string> = {
+  all: "var(--text-soft)",
+  mineral: "#7dd3fc", // sky blue
+  timber: "#86efac", // sage green
+  herb: "#4ade80", // bright green
+  animal: "#fb923c", // orange
+  reagent: "#a78bfa", // violet
+  medical: "#34d399", // teal
+  component: "#94a3b8", // slate
+  tool: "#fbbf24", // amber
+  weapon: "#f87171", // red
+  armor: "#60a5fa", // blue
+  artifact: "#c084fc", // purple
+  misc: "#9ca3af", // grey
+};
 
-	/** Trait icon (emoji) */
-	const TRAIT_ICON: Record<string, string> = {
-		Density:   '⚖️',
-		Sharpness: '🗡️',
-		Organic:   '🌱',
-		Toxicity:  '☠️',
-		Magic:     '✨',
-		Liquid:    '💧',
-		None:      '—',
-	};
+/** Trait icon (emoji) */
+const TRAIT_ICON: Record<string, string> = {
+  Density: "⚖️",
+  Sharpness: "🗡️",
+  Organic: "🌱",
+  Toxicity: "☠️",
+  Magic: "✨",
+  Liquid: "💧",
+  None: "—",
+};
 
-	/** Trait color */
-	const TRAIT_COLOR: Record<string, string> = {
-		Density:   '#94a3b8',  // slate
-		Sharpness: '#f87171',  // red
-		Organic:   '#4ade80',  // green
-		Toxicity:  '#a3e635',  // lime-ish
-		Magic:     '#c084fc',  // purple
-		Liquid:    '#38bdf8',  // sky
-		None:      '#374151',  // dark grey
-	};
+/** Trait color */
+const TRAIT_COLOR: Record<string, string> = {
+  Density: "#94a3b8", // slate
+  Sharpness: "#f87171", // red
+  Organic: "#4ade80", // green
+  Toxicity: "#a3e635", // lime-ish
+  Magic: "#c084fc", // purple
+  Liquid: "#38bdf8", // sky
+  None: "#374151", // dark grey
+};
 
-	/** Rarity metadata */
-	const RARITY_META: Record<string, { label: string; color: string; glow: string; icon: string }> = {
-		common:    { label: 'Common',    color: '#6b7280', glow: 'rgba(107,114,128,0.15)', icon: '○' },
-		uncommon:  { label: 'Uncommon',  color: '#22c55e', glow: 'rgba(34,197,94,0.15)',   icon: '◆' },
-		rare:      { label: 'Rare',      color: '#3b82f6', glow: 'rgba(59,130,246,0.15)',  icon: '◈' },
-		legendary: { label: 'Legendary', color: '#f59e0b', glow: 'rgba(245,158,11,0.25)',  icon: '★' },
-	};
+/** Rarity metadata */
+const RARITY_META: Record<string, { label: string; color: string; glow: string; icon: string }> = {
+  common: { label: "Common", color: "#6b7280", glow: "rgba(107,114,128,0.15)", icon: "○" },
+  uncommon: { label: "Uncommon", color: "#22c55e", glow: "rgba(34,197,94,0.15)", icon: "◆" },
+  rare: { label: "Rare", color: "#3b82f6", glow: "rgba(59,130,246,0.15)", icon: "◈" },
+  legendary: { label: "Legendary", color: "#f59e0b", glow: "rgba(245,158,11,0.25)", icon: "★" },
+};
 
-	// ── State ────────────────────────────────────────────────────────────
-	let items: ItemDef[] = $state([]);
-	let loading = $state(true);
-	let searchQuery = $state('');
-	let activeCategory = $state('all');
-	let showAddModal = $state(false);
-	let editDrawerOpen = $state(false);
-	let editingItem: ItemDef | null = $state(null);
-	let saving = $state(false);
-	let deleteConfirmId: string | null = $state(null);
+// ── State ────────────────────────────────────────────────────────────
+let items: ItemDef[] = $state([]);
+let loading = $state(true);
+let searchQuery = $state("");
+let activeCategory = $state("all");
+let showAddModal = $state(false);
+let editDrawerOpen = $state(false);
+let editingItem: ItemDef | null = $state(null);
+let saving = $state(false);
+let deleteConfirmId: string | null = $state(null);
 
-	let newItem: ItemDef = $state({
-		id: '', name: '', category: 'mineral', rarity: 'common',
-		trait1: 'None', trait2: 'None', sources: [], description: ''
-	});
+let newItem: ItemDef = $state({
+  id: "",
+  name: "",
+  category: "mineral",
+  rarity: "common",
+  trait1: "None",
+  trait2: "None",
+  sources: [],
+  description: "",
+});
 
-	// -- Recipe State --
-	let recipes: any[] = $state([]);
-	let activeTab: 'registry' | 'recipes' = $state('registry');
-	let recipeSearch = $state('');
+// -- Recipe State --
+let recipes: any[] = $state([]);
+let activeTab: "registry" | "recipes" = $state("registry");
+let recipeSearch = $state("");
 
+// ── Derived ──────────────────────────────────────────────────────────
+let filteredItems = $derived.by(() => {
+  let result = items;
+  if (activeCategory !== "all") result = result.filter((i) => i.category === activeCategory);
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    result = result.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        i.id.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q) ||
+        i.trait1.toLowerCase().includes(q) ||
+        i.trait2.toLowerCase().includes(q),
+    );
+  }
+  return result;
+});
 
-	// ── Derived ──────────────────────────────────────────────────────────
-	let filteredItems = $derived.by(() => {
-		let result = items;
-		if (activeCategory !== 'all') result = result.filter(i => i.category === activeCategory);
-		if (searchQuery.trim()) {
-			const q = searchQuery.toLowerCase();
-			result = result.filter(i =>
-				i.name.toLowerCase().includes(q) ||
-				i.id.toLowerCase().includes(q) ||
-				i.description.toLowerCase().includes(q) ||
-				i.trait1.toLowerCase().includes(q) ||
-				i.trait2.toLowerCase().includes(q)
-			);
-		}
-		return result;
-	});
+let filteredRecipes = $derived.by(() => {
+  if (!recipeSearch.trim()) return recipes;
+  const q = recipeSearch.toLowerCase();
+  return recipes.filter(
+    (r) =>
+      r.id.toLowerCase().includes(q) ||
+      r.output.id.toLowerCase().includes(q) ||
+      r.ingredients.some((i: string) => i.toLowerCase().includes(q)),
+  );
+});
 
-	let filteredRecipes = $derived.by(() => {
-		if (!recipeSearch.trim()) return recipes;
-		const q = recipeSearch.toLowerCase();
-		return recipes.filter(r => 
-			r.id.toLowerCase().includes(q) || 
-			r.output.id.toLowerCase().includes(q) ||
-			r.ingredients.some((i: string) => i.toLowerCase().includes(q))
-		);
-	});
+let categoryCounts = $derived.by(() => {
+  const counts: Record<string, number> = {};
+  for (const cat of CATEGORIES) {
+    counts[cat] = cat === "all" ? items.length : items.filter((i) => i.category === cat).length;
+  }
+  return counts;
+});
 
-	let categoryCounts = $derived.by(() => {
-		const counts: Record<string, number> = {};
-		for (const cat of CATEGORIES) {
-			counts[cat] = cat === 'all' ? items.length : items.filter(i => i.category === cat).length;
-		}
-		return counts;
-	});
+let rarityCounts = $derived.by(() => {
+  const counts: Record<string, number> = {};
+  for (const r of RARITIES) counts[r] = items.filter((i) => i.rarity === r).length;
+  return counts;
+});
 
-	let rarityCounts = $derived.by(() => {
-		const counts: Record<string, number> = {};
-		for (const r of RARITIES) counts[r] = items.filter(i => i.rarity === r).length;
-		return counts;
-	});
+// ── API ──────────────────────────────────────────────────────────────
+async function loadItems() {
+  loading = true;
+  try {
+    const res = await fetch("/api/items");
+    const data = await res.json();
 
-	// ── API ──────────────────────────────────────────────────────────────
-	async function loadItems() {
-		loading = true;
-		try {
-			const res = await fetch('/api/items');
-			const data = await res.json();
+    if (Array.isArray(data.items)) {
+      items = data.items;
+    } else {
+      toastStore.push(data.error ?? "Failed to load items", "fail");
+      items = [];
+    }
+  } catch (err) {
+    console.error("Failed to load items", err);
+    toastStore.push("Failed to load items: " + err, "fail");
+    items = [];
+  } finally {
+    loading = false;
+  }
+}
 
-			if (Array.isArray(data.items)) {
-				items = data.items;
-			} else {
-				toastStore.push(data.error ?? 'Failed to load items', 'fail');
-				items = [];
-			}
-		} catch (err) {
-			console.error('Failed to load items', err);
-			toastStore.push('Failed to load items: ' + err, 'fail');
-			items = [];
-		} finally {
-			loading = false;
-		}
-	}
+async function loadRecipes() {
+  try {
+    const res = await fetch("/api/recipes");
+    const data = await res.json();
+    recipes = Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error("Failed to load recipes", err);
+  }
+}
 
-	async function loadRecipes() {
-		try {
-			const res = await fetch('/api/recipes');
-			const data = await res.json();
-			recipes = Array.isArray(data) ? data : [];
-		} catch (err) {
-			console.error('Failed to load recipes', err);
-		}
-	}
+async function saveItem(item: ItemDef) {
+  saving = true;
+  try {
+    const res = await fetch(`/api/items/${item.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(item),
+    });
+    const data = await res.json();
+    if (data.success) {
+      toastStore.push(`"${item.name}" saved`, "ok");
+      await loadItems();
+      editDrawerOpen = false;
+      editingItem = null;
+    } else {
+      toastStore.push(data.error, "fail");
+    }
+  } catch (err) {
+    toastStore.push("Save failed: " + err, "fail");
+  } finally {
+    saving = false;
+  }
+}
 
-	async function saveItem(item: ItemDef) {
-		saving = true;
-		try {
-			const res = await fetch(`/api/items/${item.id}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(item)
-			});
-			const data = await res.json();
-			if (data.success) {
-				toastStore.push(`"${item.name}" saved`, 'ok');
-				await loadItems();
-				editDrawerOpen = false;
-				editingItem = null;
-			} else {
-				toastStore.push(data.error, 'fail');
-			}
-		} catch (err) {
-			toastStore.push('Save failed: ' + err, 'fail');
-		} finally {
-			saving = false;
-		}
-	}
+async function addItem() {
+  if (!newItem.id || !newItem.name) {
+    toastStore.push("ID and Name are required", "warn");
+    return;
+  }
+  saving = true;
+  try {
+    const res = await fetch("/api/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newItem),
+    });
+    const data = await res.json();
+    if (data.success) {
+      toastStore.push(`"${newItem.name}" added`, "ok");
+      showAddModal = false;
+      resetNewItem();
+      await loadItems();
+    } else {
+      toastStore.push(data.error, "fail");
+    }
+  } catch (err) {
+    toastStore.push("Add failed: " + err, "fail");
+  } finally {
+    saving = false;
+  }
+}
 
-	async function addItem() {
-		if (!newItem.id || !newItem.name) { toastStore.push('ID and Name are required', 'warn'); return; }
-		saving = true;
-		try {
-			const res = await fetch('/api/items', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(newItem)
-			});
-			const data = await res.json();
-			if (data.success) {
-				toastStore.push(`"${newItem.name}" added`, 'ok');
-				showAddModal = false;
-				resetNewItem();
-				await loadItems();
-			} else {
-				toastStore.push(data.error, 'fail');
-			}
-		} catch (err) {
-			toastStore.push('Add failed: ' + err, 'fail');
-		} finally {
-			saving = false;
-		}
-	}
+async function deleteItem(id: string) {
+  try {
+    const res = await fetch(`/api/items/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (data.success) {
+      toastStore.push(`"${id}" removed`, "ok");
+      deleteConfirmId = null;
+      await loadItems();
+    } else {
+      toastStore.push(data.error, "fail");
+    }
+  } catch (err) {
+    toastStore.push("Delete failed: " + err, "fail");
+  }
+}
 
-	async function deleteItem(id: string) {
-		try {
-			const res = await fetch(`/api/items/${id}`, { method: 'DELETE' });
-			const data = await res.json();
-			if (data.success) {
-				toastStore.push(`"${id}" removed`, 'ok');
-				deleteConfirmId = null;
-				await loadItems();
-			} else {
-				toastStore.push(data.error, 'fail');
-			}
-		} catch (err) {
-			toastStore.push('Delete failed: ' + err, 'fail');
-		}
-	}
+function resetNewItem() {
+  newItem = {
+    id: "",
+    name: "",
+    category: "mineral",
+    rarity: "common",
+    trait1: "None",
+    trait2: "None",
+    sources: [],
+    description: "",
+  };
+}
 
-	function resetNewItem() {
-		newItem = { id: '', name: '', category: 'mineral', rarity: 'common', trait1: 'None', trait2: 'None', sources: [], description: '' };
-	}
+function openEdit(item: ItemDef) {
+  editingItem = { ...item, sources: [...item.sources] };
+  editDrawerOpen = true;
+}
 
-	function openEdit(item: ItemDef) {
-		editingItem = { ...item, sources: [...item.sources] };
-		editDrawerOpen = true;
-	}
+function autoId(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
 
-	function autoId(name: string): string {
-		return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-	}
+function toggleSource(sources: string[], src: string): string[] {
+  return sources.includes(src) ? sources.filter((s) => s !== src) : [...sources, src];
+}
 
-	function toggleSource(sources: string[], src: string): string[] {
-		return sources.includes(src) ? sources.filter(s => s !== src) : [...sources, src];
-	}
-
-	onMount(() => {
-		loadItems();
-		loadRecipes();
-	});
-
+onMount(() => {
+  loadItems();
+  loadRecipes();
+});
 </script>
 
 <svelte:head>

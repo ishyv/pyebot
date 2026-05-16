@@ -28,12 +28,17 @@ export interface ContextFetchableMessage {
 export interface ContextFetchableEmbed {
   readonly title?: string | null;
   readonly description?: string | null;
-  readonly fields?: readonly { readonly name?: string | null; readonly value?: string | null }[] | null;
+  readonly fields?:
+    | readonly { readonly name?: string | null; readonly value?: string | null }[]
+    | null;
 }
 
 export interface ContextFetchableChannel {
   readonly messages?: {
-    fetch(options: { limit: number; before?: string }): Promise<
+    fetch(options: {
+      limit: number;
+      before?: string;
+    }): Promise<
       Iterable<ContextFetchableMessage> | { values(): Iterable<ContextFetchableMessage> }
     >;
   };
@@ -92,7 +97,10 @@ export async function collectChannelContext(
 ): Promise<Result<CollectedChannelContext, ContextCollectionError>> {
   if (!channel.messages?.fetch) {
     return ErrResult(
-      new ContextCollectionError("UNSUPPORTED_CHANNEL", "This channel does not expose message history."),
+      new ContextCollectionError(
+        "UNSUPPORTED_CHANNEL",
+        "This channel does not expose message history.",
+      ),
     );
   }
 
@@ -131,7 +139,9 @@ export async function collectChannelContext(
       }
     }
   } catch (cause) {
-    return ErrResult(new ContextCollectionError("FETCH_FAILED", "Failed to fetch channel messages.", cause));
+    return ErrResult(
+      new ContextCollectionError("FETCH_FAILED", "Failed to fetch channel messages.", cause),
+    );
   }
 
   const chronological = [...collected].reverse();
@@ -156,11 +166,11 @@ function normalizeMessage(
   maxMessageChars: number,
 ): CollectedContextMessage | null {
   const authorName = cleanInline(
-    message.author?.displayName
-      ?? message.author?.username
-      ?? message.author?.tag
-      ?? message.author?.id
-      ?? "Unknown",
+    message.author?.displayName ??
+      message.author?.username ??
+      message.author?.tag ??
+      message.author?.id ??
+      "Unknown",
   );
   const parts = [
     message.content?.trim() ?? "",
@@ -212,7 +222,7 @@ function iterableValues(input: ContextFetchableMessage["attachments"]): unknown[
   if (typeof (input as { values?: unknown }).values === "function") {
     return [...(input as { values(): Iterable<unknown> }).values()];
   }
-  return [...input as Iterable<unknown>];
+  return [...(input as Iterable<unknown>)];
 }
 
 function messageValues(
@@ -221,7 +231,7 @@ function messageValues(
   if (typeof (input as { values?: unknown }).values === "function") {
     return [...(input as { values(): Iterable<ContextFetchableMessage> }).values()];
   }
-  return [...input as Iterable<ContextFetchableMessage>];
+  return [...(input as Iterable<ContextFetchableMessage>)];
 }
 
 function capTranscript(

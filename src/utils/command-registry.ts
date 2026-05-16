@@ -1,168 +1,209 @@
-export type CommandMeta = {
-  category: "rpg" | "economy" | "moderation" | "utility";
-  description: string;
-  hints: string[];
-  requires?: string;
-  args?: Array<{ name: string; description: string; tip?: string }>;
+import { ApplicationCommandOptionType } from "discord.js";
+import type { CommandHelp, FeatureDescriptor, LoadedFeature } from "@/framework";
+
+export interface CommandArgMeta {
+  readonly name: string;
+  readonly description: string;
+  readonly required?: boolean;
+}
+
+export interface CommandMeta {
+  readonly featureId: string;
+  readonly featureName: string;
+  readonly name: string;
+  readonly description: string;
+  readonly hints: readonly string[];
+  readonly requires?: string;
+  readonly args: readonly CommandArgMeta[];
+}
+
+export interface FeatureCommandGroup {
+  readonly feature: FeatureDescriptor;
+  readonly commands: readonly CommandMeta[];
+}
+
+export interface CommandCatalog {
+  readonly features: readonly FeatureCommandGroup[];
+  readonly commandsByName: ReadonlyMap<string, CommandMeta>;
+}
+
+type SlashCommandJson = {
+  readonly name?: unknown;
+  readonly description?: unknown;
+  readonly options?: readonly SlashCommandOptionJson[];
 };
 
-export const REGISTRY = {
-  // ── RPG ──────────────────────────────────────────────────────────────────
-  "rpg-profile": {
-    category: "rpg",
-    description: "View your RPG stats, profession, and equipped items",
-    hints: ["/expedition", "/fight", "/rpg-quest list"],
-  },
-  "expedition": {
-    category: "rpg",
-    description: "Enter a mine or forest expedition — gather resources and venture deeper for rarer materials",
-    hints: ["/inventory", "/process", "/craft"],
-    requires: "pickaxe or axe in weapon slot",
-  },
-  "process": {
-    category: "rpg",
-    description: "Process raw materials into refined ingots or planks",
-    hints: ["/craft", "/inventory", "/market-list"],
-    args: [
-      { name: "material", description: "Raw material ID (e.g. copper_ore, oak_wood)" },
-      { name: "quantity", description: "How many to process" },
-    ],
-  },
-  "craft": {
-    category: "rpg",
-    description: "Craft tools from ingots — upgrades unlock deeper expedition levels",
-    hints: ["/equip", "/inventory", "/expedition"],
-    args: [
-      { name: "item", description: "Item to craft (e.g. stone_pickaxe, copper_axe)" },
-      { name: "quantity", description: "How many to craft (default: 1)" },
-    ],
-  },
-  "equip": {
-    category: "rpg",
-    description: "Equip a tool from your inventory into your weapon slot",
-    hints: ["/expedition", "/rpg-profile"],
-  },
-  "fight": {
-    category: "rpg",
-    description: "Challenge another user to a fight",
-    hints: ["/rpg-profile", "/rpg-quest list", "/inventory"],
-    args: [{ name: "user", description: "The user to challenge" }],
-  },
-  "rpg-quest": {
-    category: "rpg",
-    description: "Browse, accept, and claim RPG quests",
-    hints: ["/rpg-profile", "/expedition", "/inventory"],
-  },
-  // ── Economy ──────────────────────────────────────────────────────────────
-  "balance": {
-    category: "economy",
-    description: "Check your wallet balance (hand + bank)",
-    hints: ["/work", "/transfer"],
-  },
-  "work": {
-    category: "economy",
-    description: "Work a shift to earn coins (cooldown between shifts)",
-    hints: ["/coinflip", "/balance"],
-  },
-  "transfer": {
-    category: "economy",
-    description: "Send coins to another user",
-    hints: ["/balance"],
-  },
-  "market-list": {
-    category: "economy",
-    description: "Create a sell listing on the market",
-    hints: ["/market-browse", "/balance"],
-  },
-  "market-browse": {
-    category: "economy",
-    description: "Browse active market listings",
-    hints: ["/market-buy", "/market-list"],
-  },
-  "market-buy": {
-    category: "economy",
-    description: "Buy an item from the market",
-    hints: ["/market-browse", "/balance"],
-  },
-  "market-cancel": {
-    category: "economy",
-    description: "Cancel one of your market listings",
-    hints: ["/market-browse", "/market-list"],
-  },
-  "inventory": {
-    category: "economy",
-    description: "View your item inventory — materials, processed goods, and tools",
-    hints: ["/craft", "/process", "/market-list"],
-  },
-  "quest-list": {
-    category: "economy",
-    description: "Browse available economy quests",
-    hints: ["/quest-accept", "/balance"],
-  },
-  "quest-accept": {
-    category: "economy",
-    description: "Accept an economy quest",
-    hints: ["/quest-claim", "/work", "/balance"],
-  },
-  "quest-claim": {
-    category: "economy",
-    description: "Claim rewards for a completed quest",
-    hints: ["/quest-list", "/balance"],
-  },
-  "coinflip": {
-    category: "economy",
-    description: "Gamble coins on a coin flip (50/50)",
-    hints: ["/balance", "/work"],
-  },
-  "trivia": {
-    category: "economy",
-    description: "Answer trivia questions to earn coins",
-    hints: ["/balance", "/work"],
-  },
-  "rob": {
-    category: "economy",
-    description: "Attempt to steal coins from another user's hand",
-    hints: ["/balance"],
-  },
-  // ── Moderation ────────────────────────────────────────────────────────────
-  "ban": { category: "moderation", description: "Ban a user from the server", hints: ["/cases"] },
-  "kick": { category: "moderation", description: "Kick a user from the server", hints: ["/cases"] },
-  "mute": { category: "moderation", description: "Mute a user", hints: ["/cases"] },
-  "warn": { category: "moderation", description: "Warn a user", hints: ["/cases"] },
-  "cases": { category: "moderation", description: "View moderation cases", hints: [] },
-  // ── Utility ───────────────────────────────────────────────────────────────
-  "help": {
-    category: "utility",
-    description: "Browse commands by category or get help for a specific command",
-    hints: [],
-    args: [{ name: "topic", description: "A category (rpg, economy, moderation) or command name" }],
-  },
-} as const satisfies Record<string, CommandMeta>;
+type SlashCommandOptionJson = {
+  readonly type?: unknown;
+  readonly name?: unknown;
+  readonly description?: unknown;
+  readonly required?: unknown;
+  readonly options?: readonly SlashCommandOptionJson[];
+};
 
-export const CATEGORIES = {
-  rpg:         { label: "RPG",         emoji: "⚔️",  description: "Gathering, crafting, combat, and progression" },
-  economy:     { label: "Economy",     emoji: "💰",  description: "Coins, banking, quests, and the market" },
-  moderation:  { label: "Moderation",  emoji: "🛡️",  description: "Bans, kicks, mutes, warns, and case history" },
-  utility:     { label: "Utility",     emoji: "📖",  description: "Help and information commands" },
-} as const;
+let installedCatalog: CommandCatalog = {
+  features: [],
+  commandsByName: new Map(),
+};
 
-export type CategoryKey = keyof typeof CATEGORIES;
+/**
+ * Builds the help catalog from the same loaded features used by dispatch.
+ *
+ * Command names, descriptions, and argument descriptions come from Discord's
+ * slash-command JSON. `help` only carries curated guidance that Discord does
+ * not know about, which keeps `/help` from becoming a second command registry.
+ */
+export function buildCommandCatalog(features: ReadonlyArray<LoadedFeature>): CommandCatalog {
+  const allCommandNames = new Set<string>();
+  for (const feature of features) {
+    for (const command of feature.commands) allCommandNames.add(command.data.name);
+  }
 
-/** Returns a formatted footer hint string, e.g. "💡 /inventory • /process • /craft" */
+  const commandsByName = new Map<string, CommandMeta>();
+  const groups: FeatureCommandGroup[] = [];
+
+  for (const feature of features) {
+    const commands: CommandMeta[] = [];
+
+    for (const command of feature.commands) {
+      const help = command.help;
+      if (help === false) continue;
+      if (!isCommandHelpObject(help)) {
+        throw new Error(
+          `Command "${command.data.name}" must declare help metadata or help: false.`,
+        );
+      }
+
+      validateHints(command.data.name, help.hints ?? [], allCommandNames);
+      const json = command.data.toJSON() as SlashCommandJson;
+      const name = stringValue(json.name) ?? command.data.name;
+      const description = stringValue(json.description) ?? "";
+      const meta: CommandMeta = {
+        featureId: feature.descriptor.id,
+        featureName: feature.descriptor.name,
+        name,
+        description,
+        hints: help.hints ?? [],
+        requires: help.requires,
+        args: collectArgs(json.options ?? []),
+      };
+      commands.push(meta);
+      commandsByName.set(name, meta);
+    }
+
+    if (commands.length > 0) {
+      groups.push({ feature: feature.descriptor, commands });
+    }
+  }
+
+  return { features: groups, commandsByName };
+}
+
+/** Installs the boot-built catalog used by `/help` and footer hint helpers. */
+export function installCommandCatalog(catalog: CommandCatalog): void {
+  installedCatalog = catalog;
+}
+
+/** Returns all feature groups with at least one command visible in `/help`. */
+export function getCommandFeatures(): readonly FeatureCommandGroup[] {
+  return installedCatalog.features;
+}
+
+/** Returns a formatted footer hint string, e.g. "💡 /inventory • /process • /craft". */
 export function getHints(commandName: string): string {
-  const meta = REGISTRY[commandName as keyof typeof REGISTRY];
+  const meta = installedCatalog.commandsByName.get(commandName);
   if (!meta || meta.hints.length === 0) return "";
   return "💡 " + meta.hints.join(" • ");
 }
 
 /** Returns the full metadata for a command, or null if not registered. */
 export function getCommandMeta(commandName: string): CommandMeta | null {
-  return (REGISTRY[commandName as keyof typeof REGISTRY] as CommandMeta) ?? null;
+  return installedCatalog.commandsByName.get(commandName) ?? null;
 }
 
-/** Returns all command names for a given category. */
-export function getCommandsForCategory(category: CategoryKey): Array<{ name: string; meta: CommandMeta }> {
-  return Object.entries(REGISTRY)
-    .filter(([, meta]) => meta.category === category)
-    .map(([name, meta]) => ({ name, meta }));
+/** Returns all visible command metadata owned by a feature. */
+export function getCommandsForFeature(
+  featureId: string,
+): Array<{ name: string; meta: CommandMeta }> {
+  const group = installedCatalog.features.find((entry) => entry.feature.id === featureId);
+  return group?.commands.map((meta) => ({ name: meta.name, meta })) ?? [];
+}
+
+function isCommandHelpObject(help: CommandHelp | undefined): help is Exclude<CommandHelp, false> {
+  return typeof help === "object" && help !== null;
+}
+
+function validateHints(
+  commandName: string,
+  hints: readonly string[],
+  allCommandNames: ReadonlySet<string>,
+): void {
+  for (const hint of hints) {
+    const hintedCommand = slashCommandName(hint);
+    if (hintedCommand && !allCommandNames.has(hintedCommand)) {
+      throw new Error(`Command "${commandName}" has unknown command hint "${hint}".`);
+    }
+  }
+}
+
+function slashCommandName(hint: string): string | null {
+  const match = /^\/([a-z0-9_-]+)/i.exec(hint.trim());
+  return match?.[1] ?? null;
+}
+
+function collectArgs(options: readonly SlashCommandOptionJson[]): CommandArgMeta[] {
+  const args: CommandArgMeta[] = [];
+  for (const option of options) {
+    const name = stringValue(option.name);
+    const description = stringValue(option.description);
+    if (!name || !description) continue;
+
+    if (option.type === ApplicationCommandOptionType.Subcommand) {
+      args.push({ name, description });
+      args.push(...collectNestedArgs(name, option.options ?? []));
+      continue;
+    }
+
+    if (option.type === ApplicationCommandOptionType.SubcommandGroup) {
+      args.push({ name, description });
+      for (const subcommand of option.options ?? []) {
+        const subName = stringValue(subcommand.name);
+        if (!subName) continue;
+        const prefix = `${name} ${subName}`;
+        const subDescription = stringValue(subcommand.description);
+        if (subDescription) args.push({ name: prefix, description: subDescription });
+        args.push(...collectNestedArgs(prefix, subcommand.options ?? []));
+      }
+      continue;
+    }
+
+    args.push({
+      name,
+      description,
+      required: option.required === true,
+    });
+  }
+  return args;
+}
+
+function collectNestedArgs(
+  prefix: string,
+  options: readonly SlashCommandOptionJson[],
+): CommandArgMeta[] {
+  return options.flatMap((option) => {
+    const name = stringValue(option.name);
+    const description = stringValue(option.description);
+    if (!name || !description) return [];
+    return [
+      {
+        name: `${prefix} ${name}`,
+        description,
+        required: option.required === true,
+      },
+    ];
+  });
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }

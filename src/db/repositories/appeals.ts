@@ -5,9 +5,10 @@
  * All reads return null on miss rather than propagating the Result, because
  * callers treat "not found" as a domain condition, not an error.
  */
-import { MongoStore } from "@/db/store";
-import { AppealSchema, type Appeal } from "@/db/schemas/appeal";
+
 import type { Result } from "@/core/result";
+import { type Appeal, AppealSchema } from "@/db/schemas/appeal";
+import { MongoStore } from "@/db/store";
 
 const store = new MongoStore("appeals", AppealSchema);
 

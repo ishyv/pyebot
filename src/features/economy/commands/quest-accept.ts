@@ -1,14 +1,10 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { acceptQuest, QUEST_DEFINITIONS } from "@/features/economy/quests";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("quest-accept")
   .setDescription("Accept a quest")
   .addStringOption((opt) =>
@@ -24,7 +20,7 @@ export const data = new SlashCommandBuilder()
       ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -38,33 +34,27 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const result = await acceptQuest(userId, questId);
 
   if (result.isErr()) {
-    const errEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setTitle("❌ Quest Not Accepted")
-      .setDescription(result.error.message);
-    await interaction.editReply({ embeds: [errEmbed] });
+    await interaction.editReply(
+      v2Message(container("danger", text(`## ❌ Quest Not Accepted\n${result.error.message}`))),
+    );
     return;
   }
 
   const def = QUEST_DEFINITIONS.find((q) => q.id === questId);
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle("📋 Quest Accepted!")
-    .setDescription(def?.description ?? `Quest **${questId}** accepted.`);
+  let body = `## 📋 Quest Accepted!\n${def?.description ?? `Quest **${questId}** accepted.`}`;
 
   if (def) {
-    // Steps summary
     const stepLines = def.steps.map((s, i) => {
       if (s.kind === "gather_item") return `${i + 1}. Gather ${s.qty}x **${s.itemId}**`;
       if (s.kind === "fight_win") return `${i + 1}. Win **${s.qty}** fights`;
       if (s.kind === "craft_recipe") return `${i + 1}. Craft ${s.qty}x **${s.recipeId}**`;
-      if (s.kind === "market_buy_item") return `${i + 1}. Buy ${s.qty}x **${s.itemId}** from market`;
+      if (s.kind === "market_buy_item")
+        return `${i + 1}. Buy ${s.qty}x **${s.itemId}** from market`;
       return `${i + 1}. ${s.kind}`;
     });
-    embed.addFields({ name: "📝 Objectives", value: stepLines.join("\n") });
+    body += `\n\n**📝 Objectives**\n${stepLines.join("\n")}`;
 
-    // Rewards
     const rewardLines: string[] = [];
     for (const r of def.rewards.currency ?? []) {
       rewardLines.push(`💰 ${coins(r.amount, r.currencyId)}`);
@@ -73,13 +63,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       rewardLines.push(`✨ ${def.rewards.xp} XP`);
     }
     if (rewardLines.length > 0) {
-      embed.addFields({ name: "🎁 Rewards", value: rewardLines.join("\n") });
+      body += `\n\n**🎁 Rewards**\n${rewardLines.join("\n")}`;
     }
 
-    embed.addFields({ name: "🔁 Repeat", value: def.repeat.kind === "none" ? "One-time" : def.repeat.kind, inline: true });
+    const repeatLabel = def.repeat.kind === "none" ? "One-time" : def.repeat.kind;
+    body += `\n\n**🔁 Repeat:** ${repeatLabel}`;
   }
 
-  embed.setFooter({ text: "💡 Use /quest-claim when all steps are complete" });
+  body += "\n\n-# 💡 Use /quest-claim when all steps are complete";
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(v2Message(container("info", text(body))));
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/quest-claim", "/work", "/balance"] },
+  execute,
+});

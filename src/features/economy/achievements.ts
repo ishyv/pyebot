@@ -10,17 +10,17 @@
  *       Title/badge equipping is handled separately.
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
-import type { Ctx } from "@/framework/types";
-import { adjustBalance } from "@/features/economy/mutations";
+import { ErrResult, OkResult, type Result } from "@/core/result";
 import {
   achievementProgressStore,
   achievementUnlocksStore,
-  getUnlocksForUser,
   getProgressForUser,
+  getUnlocksForUser,
 } from "@/db/repositories/economy";
-import { buildAchievementId } from "@/utils/ids";
 import type { AchievementProgressDoc, UnlockedAchievementDoc } from "@/db/schemas/achievement";
+import { adjustBalance } from "@/features/economy/mutations";
+import type { Ctx } from "@/framework/types";
+import { buildAchievementId } from "@/utils/ids";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -94,9 +94,7 @@ export const ACHIEVEMENT_DEFINITIONS: readonly AchievementDefinition[] = [
     category: "progression",
     conditionType: "streak_milestone",
     target: 7,
-    rewards: [
-      { type: "currency", currencyId: "coins", amount: 500 },
-    ],
+    rewards: [{ type: "currency", currencyId: "coins", amount: 500 }],
     displayOrder: 1,
   },
   {
@@ -121,9 +119,7 @@ export const ACHIEVEMENT_DEFINITIONS: readonly AchievementDefinition[] = [
     category: "minigame",
     conditionType: "trivia_wins",
     target: 10,
-    rewards: [
-      { type: "currency", currencyId: "coins", amount: 300 },
-    ],
+    rewards: [{ type: "currency", currencyId: "coins", amount: 300 }],
     displayOrder: 10,
   },
   {
@@ -136,7 +132,12 @@ export const ACHIEVEMENT_DEFINITIONS: readonly AchievementDefinition[] = [
     target: 50,
     rewards: [
       { type: "currency", currencyId: "coins", amount: 1500 },
-      { type: "title", titleId: "title_trivia_master", titleName: "Trivia Master", titlePrefix: "[Trivia Master] " },
+      {
+        type: "title",
+        titleId: "title_trivia_master",
+        titleName: "Trivia Master",
+        titlePrefix: "[Trivia Master] ",
+      },
     ],
     displayOrder: 11,
   },
@@ -148,9 +149,7 @@ export const ACHIEVEMENT_DEFINITIONS: readonly AchievementDefinition[] = [
     category: "minigame",
     conditionType: "coinflip_streak",
     target: 5,
-    rewards: [
-      { type: "currency", currencyId: "coins", amount: 1000 },
-    ],
+    rewards: [{ type: "currency", currencyId: "coins", amount: 1000 }],
     displayOrder: 20,
   },
   {
@@ -161,9 +160,7 @@ export const ACHIEVEMENT_DEFINITIONS: readonly AchievementDefinition[] = [
     category: "progression",
     conditionType: "quest_completions",
     target: 10,
-    rewards: [
-      { type: "currency", currencyId: "coins", amount: 400 },
-    ],
+    rewards: [{ type: "currency", currencyId: "coins", amount: 400 }],
     displayOrder: 30,
   },
 ];
@@ -303,7 +300,9 @@ export async function claimRewards(
 ): Promise<Result<{ appliedRewards: AppliedReward[] }, AchievementError>> {
   const definition = getDefinition(achievementId);
   if (!definition) {
-    return ErrResult(new AchievementError("ACHIEVEMENT_NOT_FOUND", `Achievement "${achievementId}" not found`));
+    return ErrResult(
+      new AchievementError("ACHIEVEMENT_NOT_FOUND", `Achievement "${achievementId}" not found`),
+    );
   }
 
   const docId = buildAchievementId(userId, achievementId);
@@ -314,7 +313,9 @@ export async function claimRewards(
 
   const unlock = unlockRes.unwrap();
   if (!unlock) {
-    return ErrResult(new AchievementError("ACHIEVEMENT_NOT_UNLOCKED", "Achievement not yet unlocked"));
+    return ErrResult(
+      new AchievementError("ACHIEVEMENT_NOT_UNLOCKED", "Achievement not yet unlocked"),
+    );
   }
 
   if (unlock.rewardsClaimed) {
@@ -327,21 +328,41 @@ export async function claimRewards(
     if (reward.type === "currency" && reward.currencyId && reward.amount) {
       try {
         await adjustBalance(ctx, userId, reward.currencyId, reward.amount);
-        appliedRewards.push({ type: "currency", description: `${reward.amount} ${reward.currencyId}`, amount: reward.amount });
-      } catch { /* skip reward on mutation failure */ }
+        appliedRewards.push({
+          type: "currency",
+          description: `${reward.amount} ${reward.currencyId}`,
+          amount: reward.amount,
+        });
+      } catch {
+        /* skip reward on mutation failure */
+      }
     } else if (reward.type === "title") {
       // Title is noted in the reward list; equipping is handled by the title command
-      appliedRewards.push({ type: "title", description: `Title: "${reward.titleName ?? reward.titleId}"` });
+      appliedRewards.push({
+        type: "title",
+        description: `Title: "${reward.titleName ?? reward.titleId}"`,
+      });
     } else if (reward.type === "badge") {
-      appliedRewards.push({ type: "badge", description: `Badge: ${reward.badgeEmoji ?? ""} ${reward.badgeName ?? reward.badgeId}` });
+      appliedRewards.push({
+        type: "badge",
+        description: `Badge: ${reward.badgeEmoji ?? ""} ${reward.badgeName ?? reward.badgeId}`,
+      });
     } else if (reward.type === "xp" && reward.amount) {
       // TODO: apply XP when progression module is implemented
-      appliedRewards.push({ type: "xp", description: `${reward.amount} XP (pending progression module)`, amount: reward.amount });
+      appliedRewards.push({
+        type: "xp",
+        description: `${reward.amount} XP (pending progression module)`,
+        amount: reward.amount,
+      });
     }
   }
 
   // Mark as claimed
-  await achievementUnlocksStore.set(docId, { ...unlock, rewardsClaimed: true, rewardsClaimedAt: new Date() });
+  await achievementUnlocksStore.set(docId, {
+    ...unlock,
+    rewardsClaimed: true,
+    rewardsClaimedAt: new Date(),
+  });
 
   return OkResult({ appliedRewards });
 }

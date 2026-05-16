@@ -9,9 +9,9 @@
 
 import type { Collection, Document, Filter, FindOptions, UpdateFilter } from "mongodb";
 import type { ZodSchema } from "zod";
+import { getDb } from "@/core/db";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { buildSafeUpsertUpdate } from "./helpers";
-import { getDb } from "@/core/db";
 
 export class MongoStore<T extends Document & { _id: string }> {
   constructor(
@@ -37,10 +37,15 @@ export class MongoStore<T extends Document & { _id: string }> {
       if (shape && typeof shape === "object" && "guildId" in shape) {
         raw.guildId = id;
       }
-    } catch { /* continue */ }
+    } catch {
+      /* continue */
+    }
     const parsed = this.schema.safeParse(raw);
     if (parsed.success) return parsed.data;
-    console.error(`[MongoStore:${this.collectionName}] failed to build default`, { id, error: parsed.error });
+    console.error(`[MongoStore:${this.collectionName}] failed to build default`, {
+      id,
+      error: parsed.error,
+    });
     return raw as unknown as T;
   }
 
@@ -48,7 +53,10 @@ export class MongoStore<T extends Document & { _id: string }> {
     const parsed = this.schema.safeParse(doc);
     if (parsed.success) return parsed.data;
     const id = (doc as any)?._id ?? "unknown";
-    console.error(`[MongoStore:${this.collectionName}] invalid document; using defaults`, { id, error: parsed.error });
+    console.error(`[MongoStore:${this.collectionName}] invalid document; using defaults`, {
+      id,
+      error: parsed.error,
+    });
     return this.getDefault(id);
   }
 
@@ -57,7 +65,9 @@ export class MongoStore<T extends Document & { _id: string }> {
       const col = await this.collection();
       const doc = await col.findOne({ _id: id } as Filter<T>);
       return OkResult(doc ? this.parse(doc) : null);
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 
   async ensure(id: string, initial?: Partial<T>): Promise<Result<T>> {
@@ -70,14 +80,15 @@ export class MongoStore<T extends Document & { _id: string }> {
         new Date(),
         { setUpdatedAt: false },
       );
-      const res = await col.findOneAndUpdate(
-        { _id: id } as Filter<T>,
-        update as UpdateFilter<T>,
-        { upsert: true, returnDocument: "after" },
-      );
+      const res = await col.findOneAndUpdate({ _id: id } as Filter<T>, update as UpdateFilter<T>, {
+        upsert: true,
+        returnDocument: "after",
+      });
       if (!res) return ErrResult(new Error(`Failed to ensure ${this.collectionName}:${id}`));
       return OkResult(this.parse(res));
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 
   async patch(id: string, patch: Partial<T>): Promise<Result<T>> {
@@ -85,14 +96,15 @@ export class MongoStore<T extends Document & { _id: string }> {
       const col = await this.collection();
       const defaults = this.getDefault(id);
       const update = buildSafeUpsertUpdate<T>({ $set: patch as any }, defaults, new Date());
-      const res = await col.findOneAndUpdate(
-        { _id: id } as Filter<T>,
-        update as UpdateFilter<T>,
-        { upsert: true, returnDocument: "after" },
-      );
+      const res = await col.findOneAndUpdate({ _id: id } as Filter<T>, update as UpdateFilter<T>, {
+        upsert: true,
+        returnDocument: "after",
+      });
       if (!res) return ErrResult(new Error(`Failed to patch ${this.collectionName}:${id}`));
       return OkResult(this.parse(res));
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 
   async set(id: string, data: T): Promise<Result<T>> {
@@ -103,10 +115,16 @@ export class MongoStore<T extends Document & { _id: string }> {
       // Unlike ensure/patch/replaceIfMatch, this does not provide a read-your-own-write guarantee.
       // Callers that need the committed state should call get() after set().
       return OkResult(this.parse(data));
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 
-  async replaceIfMatch(id: string, expected: Partial<T>, next: Partial<T>): Promise<Result<T | null>> {
+  async replaceIfMatch(
+    id: string,
+    expected: Partial<T>,
+    next: Partial<T>,
+  ): Promise<Result<T | null>> {
     try {
       const col = await this.collection();
       const res = await col.findOneAndUpdate(
@@ -115,7 +133,9 @@ export class MongoStore<T extends Document & { _id: string }> {
         { returnDocument: "after" },
       );
       return OkResult(res ? this.parse(res) : null);
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 
   async delete(id: string): Promise<Result<boolean>> {
@@ -123,7 +143,9 @@ export class MongoStore<T extends Document & { _id: string }> {
       const col = await this.collection();
       const res = await col.deleteOne({ _id: id } as Filter<T>);
       return OkResult((res.deletedCount ?? 0) > 0);
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 
   async updatePaths(
@@ -134,7 +156,9 @@ export class MongoStore<T extends Document & { _id: string }> {
     try {
       const col = await this.collection();
       if (options.pipeline) {
-        await col.updateOne({ _id: id } as Filter<T>, options.pipeline as any, { upsert: options.upsert });
+        await col.updateOne({ _id: id } as Filter<T>, options.pipeline as any, {
+          upsert: options.upsert,
+        });
       } else {
         const update: Document = {};
         if (Object.keys(paths).length > 0) {
@@ -145,14 +169,14 @@ export class MongoStore<T extends Document & { _id: string }> {
         if (options.unset?.length) {
           update.$unset = Object.fromEntries(options.unset.map((path) => [path, ""]));
         }
-        await col.updateOne(
-          { _id: id } as Filter<T>,
-          update as UpdateFilter<T>,
-          { upsert: options.upsert },
-        );
+        await col.updateOne({ _id: id } as Filter<T>, update as UpdateFilter<T>, {
+          upsert: options.upsert,
+        });
       }
       return OkResult(undefined);
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 
   async find(filter: Filter<T>, options?: FindOptions<T>): Promise<Result<T[]>> {
@@ -160,6 +184,8 @@ export class MongoStore<T extends Document & { _id: string }> {
       const col = await this.collection();
       const docs = await col.find(filter, options).toArray();
       return OkResult(docs.map((doc) => this.parse(doc as any)));
-    } catch (error) { return ErrResult(this.mapError(error)); }
+    } catch (error) {
+      return ErrResult(this.mapError(error));
+    }
   }
 }

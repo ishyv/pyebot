@@ -1,27 +1,28 @@
 import {
-  EmbedBuilder,
-  MessageFlags,
-  SlashCommandBuilder,
   type ChatInputCommandInteraction,
   type InteractionReplyOptions,
+  MessageFlags,
+  SlashCommandBuilder,
 } from "discord.js";
 import { z } from "zod";
-import { cooldowns } from "@/core/state";
-import type { Result } from "@/core/result";
 import { createLogger } from "@/core/logger";
+import type { Result } from "@/core/result";
+import { cooldowns } from "@/core/state";
 import {
   CONTEXT_PERIODS,
-  collectChannelContext,
-  normalizeContextPeriod,
   type CollectedChannelContext,
   type ContextFetchableChannel,
+  collectChannelContext,
+  normalizeContextPeriod,
 } from "@/features/ai/contextService";
 import {
-  AiGenerationError,
+  type AiGenerationError,
   checkRateLimit as checkAiRateLimit,
-  generateResilientObject,
   type GenerateResilientObjectResult,
+  generateResilientObject,
 } from "@/features/ai/service";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
 
 const log = createLogger("ai:context");
 
@@ -37,9 +38,13 @@ const CONTEXT_SYSTEM_PROMPT = [
   "Be concise, neutral, and useful. Do not invent facts that are not supported by the transcript.",
 ].join(" ");
 
-const boundedText = (max: number) => z.coerce.string().transform((value) => truncateText(value, max));
+const boundedText = (max: number) =>
+  z.coerce.string().transform((value) => truncateText(value, max));
 const boundedList = (maxItems: number, maxItemChars: number) =>
-  z.array(boundedText(maxItemChars)).catch([]).transform((items) => items.filter(Boolean).slice(0, maxItems));
+  z
+    .array(boundedText(maxItemChars))
+    .catch([])
+    .transform((items) => items.filter(Boolean).slice(0, maxItems));
 
 export const contextSummarySchema = z.object({
   headline: boundedText(120).catch("Conversation context"),
@@ -47,16 +52,21 @@ export const contextSummarySchema = z.object({
   keyPoints: boundedList(6, 220),
   decisions: boundedList(5, 220),
   openQuestions: boundedList(5, 220),
-  participants: z.array(z.object({
-    name: boundedText(80),
-    note: boundedText(180),
-  })).catch([]).transform((items) => items.slice(0, 6)),
+  participants: z
+    .array(
+      z.object({
+        name: boundedText(80),
+        note: boundedText(180),
+      }),
+    )
+    .catch([])
+    .transform((items) => items.slice(0, 6)),
   confidence: z.enum(["low", "medium", "high"]).catch("low"),
 });
 
 export type ContextSummary = z.infer<typeof contextSummarySchema>;
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("context")
   .setDescription("Summarize recent channel conversation with AI")
   .addStringOption((option) =>
@@ -64,7 +74,9 @@ export const data = new SlashCommandBuilder()
       .setName("period")
       .setDescription("How far back to summarize")
       .setRequired(false)
-      .addChoices(...CONTEXT_PERIODS.map((period) => ({ name: period.label, value: period.value }))),
+      .addChoices(
+        ...CONTEXT_PERIODS.map((period) => ({ name: period.label, value: period.value })),
+      ),
   );
 
 export interface ContextCommandDeps {
@@ -74,7 +86,7 @@ export interface ContextCommandDeps {
   readonly now?: () => number;
 }
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await executeWithDeps(interaction, {});
 }
 
@@ -100,7 +112,9 @@ export async function executeWithDeps(
     const now = deps.now?.() ?? Date.now();
     const cooldown = checkContextCooldown(interaction.user.id, interaction.channelId);
     if (cooldown) {
-      await interaction.editReply({ content: `Espera ${formatMs(cooldown)} antes de volver a usar /context.` });
+      await interaction.editReply({
+        content: `Espera ${formatMs(cooldown)} antes de volver a usar /context.`,
+      });
       return;
     }
 
@@ -120,12 +134,19 @@ export async function executeWithDeps(
 
     const context = collected.unwrap();
     if (context.messages.length === 0) {
-      await interaction.editReply({ content: `No hay mensajes en los ultimos ${context.period.label}.` });
+      await interaction.editReply({
+        content: `No hay mensajes en los ultimos ${context.period.label}.`,
+      });
       return;
     }
 
     const checkRateLimit = deps.checkRateLimit ?? checkAiRateLimit;
-    const rateLimit = await checkRateLimit(guildId, interaction.user.id, AI_MAX_USES_PER_MINUTE, AI_RATE_WINDOW_SECONDS);
+    const rateLimit = await checkRateLimit(
+      guildId,
+      interaction.user.id,
+      AI_MAX_USES_PER_MINUTE,
+      AI_RATE_WINDOW_SECONDS,
+    );
     if (!rateLimit.allowed) {
       await interaction.editReply({
         content: `La IA esta en cooldown para ti. Intenta de nuevo <t:${Math.floor(rateLimit.resetAt / 1000)}:R>.`,
@@ -143,7 +164,10 @@ export async function executeWithDeps(
         channelId: interaction.channelId,
         error: generated.error,
       });
-      await interaction.editReply({ content: "No pude generar el contexto ahora. La IA fallo sin tirar el bot, que era la idea." });
+      await interaction.editReply({
+        content:
+          "No pude generar el contexto ahora. La IA fallo sin tirar el bot, que era la idea.",
+      });
       return;
     }
 
@@ -161,14 +185,22 @@ export async function executeWithDeps(
       await interaction.followUp(payload);
       await interaction.editReply({ content: "Context summary posted." });
     } catch (cause) {
-      log.warn("Failed to publish context summary", { guildId, channelId: interaction.channelId, cause });
+      log.warn("Failed to publish context summary", {
+        guildId,
+        channelId: interaction.channelId,
+        cause,
+      });
       await interaction.editReply({
-        content: "Genere el contexto, pero no pude publicarlo en el canal. Revisa mis permisos para enviar embeds.",
+        content:
+          "Genere el contexto, pero no pude publicarlo en el canal. Revisa mis permisos para enviar embeds.",
       });
     }
   } catch (cause) {
     log.error("Unexpected /context command failure", cause);
-    await safeEdit(interaction, "No pude ejecutar /context ahora. Fallo controlado, nada de crash.");
+    await safeEdit(
+      interaction,
+      "No pude ejecutar /context ahora. Fallo controlado, nada de crash.",
+    );
   }
 }
 
@@ -182,18 +214,13 @@ export async function summarizeChannelContext(
     context.transcript,
   ].join("\n");
 
-  return await generateResilientObject(
-    contextSummarySchema,
-    CONTEXT_SYSTEM_PROMPT,
-    userPrompt,
-    {
-      tier: "mid",
-      maxOutputTokens: 900,
-      timeout: { totalMs: 25_000 },
-      temperature: 0.2,
-      functionId: "ai.context.summarize",
-    },
-  );
+  return await generateResilientObject(contextSummarySchema, CONTEXT_SYSTEM_PROMPT, userPrompt, {
+    tier: "mid",
+    maxOutputTokens: 900,
+    timeout: { totalMs: 25_000 },
+    temperature: 0.2,
+    functionId: "ai.context.summarize",
+  });
 }
 
 export function buildContextEmbed(input: {
@@ -205,40 +232,44 @@ export function buildContextEmbed(input: {
   readonly providerLabel: string;
 }): InteractionReplyOptions {
   const summary = sanitizeSummary(input.summary);
-  const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle(truncateText(summary.headline || "Conversation context", 180))
-    .setDescription(truncateText(summary.overview, 950))
-    .addFields(
-      { name: "Key points", value: listField(summary.keyPoints, "No key points detected."), inline: false },
-      { name: "Decisions", value: listField(summary.decisions, "No decisions detected."), inline: false },
-      { name: "Open questions", value: listField(summary.openQuestions, "No open questions detected."), inline: false },
-      { name: "Participants", value: participantsField(summary.participants), inline: false },
-      {
-        name: "Coverage",
-        value: truncateText(
-          `${input.messageCount} messages used from ${input.periodLabel}. Confidence: ${summary.confidence}.`,
-          300,
-        ),
-        inline: false,
-      },
-    )
-    .setFooter({
-      text: input.partial
-        ? `Resumen parcial: ${input.messageCount} mensajes usados de ${input.totalFetched} recopilados. ${input.providerLabel}`
-        : `${input.messageCount} mensajes resumidos. ${input.providerLabel}`,
-    })
-    .setTimestamp();
+
+  const footerText = input.partial
+    ? `Resumen parcial: ${input.messageCount} mensajes usados de ${input.totalFetched} recopilados. ${input.providerLabel}`
+    : `${input.messageCount} mensajes resumidos. ${input.providerLabel}`;
+
+  const coverageText = truncateText(
+    `${input.messageCount} messages used from ${input.periodLabel}. Confidence: ${summary.confidence}.`,
+    300,
+  );
+
+  const bodyParts = [
+    `## ${truncateText(summary.headline || "Conversation context", 180)}`,
+    truncateText(summary.overview, 950),
+    "",
+    `**Key points**\n${listField(summary.keyPoints, "No key points detected.")}`,
+    "",
+    `**Decisions**\n${listField(summary.decisions, "No decisions detected.")}`,
+    "",
+    `**Open questions**\n${listField(summary.openQuestions, "No open questions detected.")}`,
+    "",
+    `**Participants**\n${participantsField(summary.participants)}`,
+    "",
+    `**Coverage**\n${coverageText}`,
+    "",
+    `-# ${footerText}`,
+  ].join("\n");
 
   return {
-    embeds: [embed],
+    ...v2Message(container("info", text(truncateText(bodyParts, 3900)))),
     allowedMentions: { parse: [] },
   };
 }
 
 function checkContextCooldown(userId: string, channelId: string | null): number {
   const userRemaining = cooldowns.getRemainingMs(userId, "context");
-  const channelRemaining = channelId ? cooldowns.getRemainingMs(`channel:${channelId}`, "context") : 0;
+  const channelRemaining = channelId
+    ? cooldowns.getRemainingMs(`channel:${channelId}`, "context")
+    : 0;
   return Math.max(userRemaining, channelRemaining);
 }
 
@@ -256,7 +287,9 @@ function listField(items: readonly string[], empty: string): string {
   return truncateText(items.map((item) => `- ${item}`).join("\n"), 900);
 }
 
-function participantsField(participants: readonly { readonly name: string; readonly note: string }[]): string {
+function participantsField(
+  participants: readonly { readonly name: string; readonly note: string }[],
+): string {
   if (participants.length === 0) return "No participant breakdown generated.";
   return truncateText(participants.map((item) => `- ${item.name}: ${item.note}`).join("\n"), 800);
 }
@@ -284,3 +317,9 @@ async function safeEdit(interaction: ChatInputCommandInteraction, content: strin
     // Framework boundary logs the original failure; Discord reply failures are non-fatal here.
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/ai panel"] },
+  execute,
+});

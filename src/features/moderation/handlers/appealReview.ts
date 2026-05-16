@@ -17,22 +17,22 @@
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  type ButtonInteraction,
   ButtonStyle,
   MessageFlags,
+  type ModalActionRowComponentBuilder,
   ModalBuilder,
+  type ModalSubmitInteraction,
   PermissionFlagsBits,
   TextInputBuilder,
   TextInputStyle,
-  type ButtonInteraction,
-  type ModalActionRowComponentBuilder,
-  type ModalSubmitInteraction,
   type ThreadChannel,
 } from "discord.js";
-import { getAppeal, updateAppeal } from "@/db/repositories/appeals";
-import { getCases, pardon } from "@/features/moderation/service";
-import { syncQueueMessage } from "@/features/moderation/appeals";
-import { renderSanctionHistory } from "@/features/moderation/views";
 import { bus } from "@/core/bus";
+import { getAppeal, updateAppeal } from "@/db/repositories/appeals";
+import { syncQueueMessage } from "@/features/moderation/appeals";
+import { getCases, pardon } from "@/features/moderation/service";
+import { renderSanctionHistory } from "@/features/moderation/views";
 import { container, row, separator, text, v2Message } from "@/ui/v2";
 
 // ---------------------------------------------------------------------------

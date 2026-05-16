@@ -1,7 +1,14 @@
 import { z } from "zod";
 
 export const EquipmentSlotSchema = z.enum([
-  "weapon", "shield", "helmet", "chest", "pants", "boots", "ring", "necklace",
+  "weapon",
+  "shield",
+  "helmet",
+  "chest",
+  "pants",
+  "boots",
+  "ring",
+  "necklace",
 ]);
 export type EquipmentSlot = z.infer<typeof EquipmentSlotSchema>;
 
@@ -25,7 +32,16 @@ export const LoadoutSchema = z.object({
 export type Loadout = z.infer<typeof LoadoutSchema>;
 
 export function defaultLoadout(): Loadout {
-  return { weapon: null, shield: null, helmet: null, chest: null, pants: null, boots: null, ring: null, necklace: null };
+  return {
+    weapon: null,
+    shield: null,
+    helmet: null,
+    chest: null,
+    pants: null,
+    boots: null,
+    ring: null,
+    necklace: null,
+  };
 }
 
 const DateSchema = z.coerce.date().catch(() => new Date());

@@ -1,3 +1,4 @@
+import { defineCommand } from "@/framework";
 /**
  * /modset — configure the moderation feature.
  *
@@ -17,18 +18,17 @@
  */
 
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
-import { DURATION_MAP } from "@/features/moderation/service";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+import { DURATION_MAP } from "@/features/moderation/service";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("modset")
   .setDescription("Configure moderation settings")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -44,7 +44,9 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("appeals-channel")
       .setDescription("Set the channel where ban appeal threads are created")
-      .addChannelOption((o) => o.setName("channel").setDescription("Appeals channel (omit to clear)")),
+      .addChannelOption((o) =>
+        o.setName("channel").setDescription("Appeals channel (omit to clear)"),
+      ),
   )
   // ── Escalation ────────────────────────────────────────────────────────────
   .addSubcommandGroup((group) =>
@@ -56,7 +58,11 @@ export const data = new SlashCommandBuilder()
           .setName("add")
           .setDescription("Add an escalation threshold")
           .addIntegerOption((o) =>
-            o.setName("warns").setDescription("Number of warns that triggers this action").setMinValue(1).setRequired(true),
+            o
+              .setName("warns")
+              .setDescription("Number of warns that triggers this action")
+              .setMinValue(1)
+              .setRequired(true),
           )
           .addStringOption((o) =>
             o
@@ -91,7 +97,10 @@ export const data = new SlashCommandBuilder()
               .setName("action")
               .setDescription("Enable or disable")
               .setRequired(true)
-              .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
+              .addChoices(
+                { name: "Enable", value: "enable" },
+                { name: "Disable", value: "disable" },
+              ),
           ),
       ),
   )
@@ -104,13 +113,17 @@ export const data = new SlashCommandBuilder()
         sub
           .setName("role")
           .setDescription("Set the quarantine role")
-          .addRoleOption((o) => o.setName("role").setDescription("Quarantine role (omit to clear)")),
+          .addRoleOption((o) =>
+            o.setName("role").setDescription("Quarantine role (omit to clear)"),
+          ),
       )
       .addSubcommand((sub) =>
         sub
           .setName("channel")
           .setDescription("Set the review channel for quarantined users")
-          .addChannelOption((o) => o.setName("channel").setDescription("Review channel (omit to clear)")),
+          .addChannelOption((o) =>
+            o.setName("channel").setDescription("Review channel (omit to clear)"),
+          ),
       )
       .addSubcommand((sub) =>
         sub
@@ -121,7 +134,10 @@ export const data = new SlashCommandBuilder()
               .setName("action")
               .setDescription("Enable or disable")
               .setRequired(true)
-              .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
+              .addChoices(
+                { name: "Enable", value: "enable" },
+                { name: "Disable", value: "disable" },
+              ),
           ),
       ),
   )
@@ -139,7 +155,10 @@ export const data = new SlashCommandBuilder()
               .setName("action")
               .setDescription("Enable or disable")
               .setRequired(true)
-              .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" }),
+              .addChoices(
+                { name: "Enable", value: "enable" },
+                { name: "Disable", value: "disable" },
+              ),
           ),
       )
       .addSubcommand((sub) =>
@@ -161,7 +180,9 @@ export const data = new SlashCommandBuilder()
         sub
           .setName("channel")
           .setDescription("Channel where the verify prompt is posted")
-          .addChannelOption((o) => o.setName("channel").setDescription("Verify channel (omit to clear)")),
+          .addChannelOption((o) =>
+            o.setName("channel").setDescription("Verify channel (omit to clear)"),
+          ),
       )
       .addSubcommand((sub) =>
         sub
@@ -173,7 +194,14 @@ export const data = new SlashCommandBuilder()
         sub
           .setName("min-age")
           .setDescription("Minimum account age in days (0 = no minimum)")
-          .addIntegerOption((o) => o.setName("days").setDescription("Days").setMinValue(0).setMaxValue(365).setRequired(true)),
+          .addIntegerOption((o) =>
+            o
+              .setName("days")
+              .setDescription("Days")
+              .setMinValue(0)
+              .setMaxValue(365)
+              .setRequired(true),
+          ),
       ),
   )
   // ── Alt detection ─────────────────────────────────────────────────────────
@@ -201,7 +229,7 @@ export const data = new SlashCommandBuilder()
 // execute
 // ---------------------------------------------------------------------------
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
     await interaction.reply({ content: "Server only.", flags: MessageFlags.Ephemeral });
     return;
@@ -253,13 +281,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 async function handleLogChannel(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
   const channel = i.options.getChannel("channel");
   await updateGuildPaths(guildId, { "moderation.modLogChannelId": channel?.id ?? null });
-  await i.editReply({ content: channel ? `Mod log set to <#${channel.id}>.` : "Mod log channel cleared." });
+  await i.editReply({
+    content: channel ? `Mod log set to <#${channel.id}>.` : "Mod log channel cleared.",
+  });
 }
 
-async function handleAppealsChannel(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
+async function handleAppealsChannel(
+  i: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<void> {
   const channel = i.options.getChannel("channel");
   await updateGuildPaths(guildId, { "moderation.appealsChannelId": channel?.id ?? null });
-  await i.editReply({ content: channel ? `Appeals channel set to <#${channel.id}>.` : "Appeals channel cleared." });
+  await i.editReply({
+    content: channel ? `Appeals channel set to <#${channel.id}>.` : "Appeals channel cleared.",
+  });
 }
 
 async function handleAltDetection(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
@@ -279,63 +314,108 @@ async function handleEscalationAdd(i: ChatInputCommandInteraction, guildId: stri
   }
 
   const guildResult = await getGuild(guildId);
-  if (guildResult.isErr()) { await i.editReply({ content: "Failed to load config." }); return; }
+  if (guildResult.isErr()) {
+    await i.editReply({ content: "Failed to load config." });
+    return;
+  }
 
   const existing = guildResult.unwrap()?.moderation.escalation.thresholds ?? [];
   if (existing.some((t) => t.warnCount === warnCount)) {
-    await i.editReply({ content: `A threshold for **${warnCount} warns** already exists. Delete the old one first.` });
+    await i.editReply({
+      content: `A threshold for **${warnCount} warns** already exists. Delete the old one first.`,
+    });
     return;
   }
 
   const updated = [...existing, { warnCount, action, ...(durationKey ? { durationKey } : {}) }];
   await updateGuildPaths(guildId, { "moderation.escalation.thresholds": updated });
 
-  const label = action === "timeout" ? `Timeout ${durationKey}` : action.charAt(0).toUpperCase() + action.slice(1);
+  const label =
+    action === "timeout"
+      ? `Timeout ${durationKey}`
+      : action.charAt(0).toUpperCase() + action.slice(1);
   await i.editReply({ content: `Threshold added: **${warnCount} warns → ${label}**.` });
 }
 
-async function handleEscalationClear(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
+async function handleEscalationClear(
+  i: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<void> {
   await updateGuildPaths(guildId, { "moderation.escalation.thresholds": [] });
   await i.editReply({ content: "All escalation thresholds cleared." });
 }
 
-async function handleEscalationList(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
+async function handleEscalationList(
+  i: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<void> {
   const guildResult = await getGuild(guildId);
-  if (guildResult.isErr()) { await i.editReply({ content: "Failed to load config." }); return; }
+  if (guildResult.isErr()) {
+    await i.editReply({ content: "Failed to load config." });
+    return;
+  }
 
-  const { enabled, thresholds } = guildResult.unwrap()?.moderation.escalation ?? { enabled: false, thresholds: [] };
+  const { enabled, thresholds } = guildResult.unwrap()?.moderation.escalation ?? {
+    enabled: false,
+    thresholds: [],
+  };
   if (thresholds.length === 0) {
-    await i.editReply({ content: `Escalation is **${enabled ? "enabled" : "disabled"}** — no thresholds configured.` });
+    await i.editReply({
+      content: `Escalation is **${enabled ? "enabled" : "disabled"}** — no thresholds configured.`,
+    });
     return;
   }
   const lines = thresholds
     .sort((a, b) => a.warnCount - b.warnCount)
     .map((t) => {
-      const label = t.action === "timeout" ? `Timeout ${t.durationKey}` : t.action.charAt(0).toUpperCase() + t.action.slice(1);
+      const label =
+        t.action === "timeout"
+          ? `Timeout ${t.durationKey}`
+          : t.action.charAt(0).toUpperCase() + t.action.slice(1);
       return `• **${t.warnCount} warns** → ${label}`;
     });
-  await i.editReply({ content: `**Escalation** (${enabled ? "✅ on" : "❌ off"})\n${lines.join("\n")}` });
+  await i.editReply({
+    content: `**Escalation** (${enabled ? "✅ on" : "❌ off"})\n${lines.join("\n")}`,
+  });
 }
 
-async function handleEscalationToggle(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
+async function handleEscalationToggle(
+  i: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<void> {
   const enabled = i.options.getString("action", true) === "enable";
   await updateGuildPaths(guildId, { "moderation.escalation.enabled": enabled });
   await i.editReply({ content: `Escalation is now **${enabled ? "enabled" : "disabled"}**.` });
 }
 
-async function handleQuarantineRole(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
+async function handleQuarantineRole(
+  i: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<void> {
   const role = i.options.getRole("role");
   await updateGuildPaths(guildId, { "moderation.quarantine.roleId": role?.id ?? null });
-  await i.editReply({ content: role ? `Quarantine role set to <@&${role.id}>.` : "Quarantine role cleared." });
+  await i.editReply({
+    content: role ? `Quarantine role set to <@&${role.id}>.` : "Quarantine role cleared.",
+  });
 }
 
-async function handleQuarantineChannel(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
+async function handleQuarantineChannel(
+  i: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<void> {
   const channel = i.options.getChannel("channel");
   await updateGuildPaths(guildId, { "moderation.quarantine.channelId": channel?.id ?? null });
-  await i.editReply({ content: channel ? `Quarantine channel set to <#${channel.id}>.` : "Quarantine channel cleared." });
+  await i.editReply({
+    content: channel
+      ? `Quarantine channel set to <#${channel.id}>.`
+      : "Quarantine channel cleared.",
+  });
 }
 
-async function handleQuarantineToggle(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
+async function handleQuarantineToggle(
+  i: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<void> {
   const enabled = i.options.getString("action", true) === "enable";
   await updateGuildPaths(guildId, { "moderation.quarantine.enabled": enabled });
   await i.editReply({ content: `Quarantine is now **${enabled ? "enabled" : "disabled"}**.` });
@@ -344,7 +424,9 @@ async function handleQuarantineToggle(i: ChatInputCommandInteraction, guildId: s
 async function handleVerifyToggle(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
   const enabled = i.options.getString("action", true) === "enable";
   await updateGuildPaths(guildId, { "moderation.verification.enabled": enabled });
-  await i.editReply({ content: `Verification gate is now **${enabled ? "enabled" : "disabled"}**.` });
+  await i.editReply({
+    content: `Verification gate is now **${enabled ? "enabled" : "disabled"}**.`,
+  });
 }
 
 async function handleVerifyMode(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
@@ -356,19 +438,25 @@ async function handleVerifyMode(i: ChatInputCommandInteraction, guildId: string)
 async function handleVerifyChannel(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
   const channel = i.options.getChannel("channel");
   await updateGuildPaths(guildId, { "moderation.verification.channelId": channel?.id ?? null });
-  await i.editReply({ content: channel ? `Verify channel set to <#${channel.id}>.` : "Verify channel cleared." });
+  await i.editReply({
+    content: channel ? `Verify channel set to <#${channel.id}>.` : "Verify channel cleared.",
+  });
 }
 
 async function handleVerifyRole(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
   const role = i.options.getRole("role");
   await updateGuildPaths(guildId, { "moderation.verification.roleId": role?.id ?? null });
-  await i.editReply({ content: role ? `Verified role set to <@&${role.id}>.` : "Verified role cleared." });
+  await i.editReply({
+    content: role ? `Verified role set to <@&${role.id}>.` : "Verified role cleared.",
+  });
 }
 
 async function handleVerifyMinAge(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
   const days = i.options.getInteger("days", true);
   await updateGuildPaths(guildId, { "moderation.verification.minAccountAgeDays": days });
-  await i.editReply({ content: `Minimum account age set to **${days} day${days === 1 ? "" : "s"}**.` });
+  await i.editReply({
+    content: `Minimum account age set to **${days} day${days === 1 ? "" : "s"}**.`,
+  });
 }
 
 async function handleStatus(i: ChatInputCommandInteraction, guildId: string): Promise<void> {
@@ -390,7 +478,10 @@ async function handleStatus(i: ChatInputCommandInteraction, guildId: string): Pr
     `**Escalation:** ${esc.enabled ? "✅ on" : "❌ off"} — ${esc.thresholds.length} threshold(s)`,
     ...esc.thresholds
       .sort((a, b) => a.warnCount - b.warnCount)
-      .map((t) => `  • ${t.warnCount} warns → ${t.action === "timeout" ? `timeout ${t.durationKey}` : t.action}`),
+      .map(
+        (t) =>
+          `  • ${t.warnCount} warns → ${t.action === "timeout" ? `timeout ${t.durationKey}` : t.action}`,
+      ),
     "",
     `**Quarantine:** ${q.enabled ? "✅ on" : "❌ off"}`,
     `  Role: ${q.roleId ? `<@&${q.roleId}>` : "not set"} | Channel: ${q.channelId ? `<#${q.channelId}>` : "not set"}`,
@@ -400,11 +491,13 @@ async function handleStatus(i: ChatInputCommandInteraction, guildId: string): Pr
     `  Min account age: ${v.minAccountAgeDays}d | Kick on fail: ${v.kickOnFail ? "yes" : "no"}`,
   ];
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blurple)
-    .setTitle("Moderation Config")
-    .setDescription(lines.join("\n"))
-    .setTimestamp();
-
-  await i.editReply({ embeds: [embed] });
+  await i.editReply(
+    v2Message(container("info", text(`## Moderation Config\n${lines.join("\n")}`))),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/modconfig modlog", "/mod help"] },
+  execute,
+});

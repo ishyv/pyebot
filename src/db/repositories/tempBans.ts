@@ -1,8 +1,8 @@
-import { MongoStore } from "@/db/store";
-import { TempBanSchema, type TempBan } from "@/db/schemas/tempBan";
-import type { Result } from "@/core/result";
-import { OkResult, ErrResult } from "@/core/result";
 import { getDb } from "@/core/db";
+import type { Result } from "@/core/result";
+import { ErrResult, OkResult } from "@/core/result";
+import { type TempBan, TempBanSchema } from "@/db/schemas/tempBan";
+import { MongoStore } from "@/db/store";
 
 export const tempBanStore = new MongoStore("temp_bans", TempBanSchema);
 

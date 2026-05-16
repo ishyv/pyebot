@@ -21,13 +21,13 @@ export interface ToolDef {
 
 export const TOOLS = {
   starter_pickaxe: { name: "Starter Pickaxe", kind: "pickaxe", tier: 1, startingDurability: 50 },
-  starter_axe:     { name: "Starter Axe",     kind: "axe",     tier: 1, startingDurability: 50 },
-  stone_pickaxe:   { name: "Stone Pickaxe",   kind: "pickaxe", tier: 2, startingDurability: 100 },
-  stone_axe:       { name: "Stone Axe",       kind: "axe",     tier: 2, startingDurability: 100 },
-  copper_pickaxe:  { name: "Copper Pickaxe",  kind: "pickaxe", tier: 3, startingDurability: 100 },
-  copper_axe:      { name: "Copper Axe",      kind: "axe",     tier: 3, startingDurability: 100 },
-  iron_pickaxe:    { name: "Iron Pickaxe",    kind: "pickaxe", tier: 4, startingDurability: 100 },
-  iron_axe:        { name: "Iron Axe",        kind: "axe",     tier: 4, startingDurability: 100 },
+  starter_axe: { name: "Starter Axe", kind: "axe", tier: 1, startingDurability: 50 },
+  stone_pickaxe: { name: "Stone Pickaxe", kind: "pickaxe", tier: 2, startingDurability: 100 },
+  stone_axe: { name: "Stone Axe", kind: "axe", tier: 2, startingDurability: 100 },
+  copper_pickaxe: { name: "Copper Pickaxe", kind: "pickaxe", tier: 3, startingDurability: 100 },
+  copper_axe: { name: "Copper Axe", kind: "axe", tier: 3, startingDurability: 100 },
+  iron_pickaxe: { name: "Iron Pickaxe", kind: "pickaxe", tier: 4, startingDurability: 100 },
+  iron_axe: { name: "Iron Axe", kind: "axe", tier: 4, startingDurability: 100 },
 } as const satisfies Record<string, ToolDef>;
 
 export type ToolId = keyof typeof TOOLS;

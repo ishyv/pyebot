@@ -1,32 +1,27 @@
 import {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { unban } from "@/features/moderation/service";
+import { defineCommand } from "@/framework";
+import { container, text, v2Message } from "@/ui/v2";
 import { sendModLog } from "../modlog";
+import { renderModlogCase } from "../views";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("unban")
   .setDescription("Unban a user from this server")
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .setDMPermission(false)
   .addStringOption((opt) =>
-    opt
-      .setName("user_id")
-      .setDescription("Discord user ID of the banned user")
-      .setRequired(true),
+    opt.setName("user_id").setDescription("Discord user ID of the banned user").setRequired(true),
   )
   .addStringOption((opt) =>
-    opt
-      .setName("reason")
-      .setDescription("Reason for unbanning")
-      .setRequired(false),
+    opt.setName("reason").setDescription("Reason for unbanning").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild || !interaction.member) {
@@ -38,20 +33,23 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const reason = interaction.options.getString("reason") ?? "No reason provided";
 
   if (!/^\d{17,19}$/.test(userId)) {
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription("Invalid user ID. Please provide a valid Discord snowflake (17–19 digits).");
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "danger",
+          text("**Invalid user ID.** Please provide a valid Discord snowflake (17–19 digits)."),
+        ),
+      ),
+    );
     return;
   }
 
   try {
     await interaction.guild.bans.fetch(userId);
   } catch {
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription("That user is not currently banned.");
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(container("danger", text("That user is not currently banned."))),
+    );
     return;
   }
 
@@ -61,10 +59,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const result = await unban(interaction.guild, moderator, userId, reason, targetUser?.tag);
 
   if (result.isErr()) {
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription(`Failed: ${result.error.message}`);
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(container("danger", text(`**Failed:** ${result.error.message}`))),
+    );
     return;
   }
 
@@ -72,15 +69,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   await sendModLog(interaction.guild, sanctionResult);
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle("User Unbanned")
-    .setDescription(`User <@${userId}> (ID: ${userId}) has been unbanned.`)
-    .addFields(
-      { name: "Reason", value: reason },
-      { name: "Case ID", value: `#${sanctionResult.caseId}`, inline: true },
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(renderModlogCase({ result: sanctionResult }));
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

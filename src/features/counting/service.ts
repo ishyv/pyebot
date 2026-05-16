@@ -7,8 +7,13 @@
  * guild/channel because Discord can deliver message events close enough
  * together to race the expected value.
  */
-import { createDefaultCountingState, type CountingStateRecord, type CountingStateRepository } from "@/db/repositories/counting";
+
 import { createLogger, type Logger } from "@/core/logger";
+import {
+  type CountingStateRecord,
+  type CountingStateRepository,
+  createDefaultCountingState,
+} from "@/db/repositories/counting";
 import { evaluateIntegerExpression } from "./expression";
 
 const log = createLogger("counting");
@@ -63,13 +68,15 @@ export async function processCountingMessage(
   deps: CountingGameDependencies,
 ): Promise<CountingMessageOutcome> {
   if (message.authorIsBot || message.guildId === null) return "ignored";
-  if (deps.configuredChannelId === null || message.channelId !== deps.configuredChannelId) return "ignored";
+  if (deps.configuredChannelId === null || message.channelId !== deps.configuredChannelId)
+    return "ignored";
 
   return countingLocks.run(`${message.guildId}:${message.channelId}`, async () => {
     const stateResult = await deps.stateRepository.getState(message.guildId!, message.channelId);
-    const state = stateResult.isOk() && stateResult.unwrap()
-      ? stateResult.unwrap()!
-      : createDefaultCountingState(message.guildId!, message.channelId);
+    const state =
+      stateResult.isOk() && stateResult.unwrap()
+        ? stateResult.unwrap()!
+        : createDefaultCountingState(message.guildId!, message.channelId);
 
     if (state.lastUserId === message.authorId) {
       await resetCount(message, deps, state, "same-user-repeat");
@@ -113,14 +120,21 @@ async function resetCount(
   await safeReact(message, FAIL_REACTION, deps.logger ?? log);
 }
 
-async function persistState(deps: CountingGameDependencies, state: CountingStateRecord): Promise<void> {
+async function persistState(
+  deps: CountingGameDependencies,
+  state: CountingStateRecord,
+): Promise<void> {
   const result = await deps.stateRepository.setState(state);
   if (result.isErr()) {
     throw result.error;
   }
 }
 
-async function safeReact(message: CountingMessageInput, emoji: string, logger: Logger): Promise<void> {
+async function safeReact(
+  message: CountingMessageInput,
+  emoji: string,
+  logger: Logger,
+): Promise<void> {
   try {
     await message.react(emoji);
   } catch (error) {

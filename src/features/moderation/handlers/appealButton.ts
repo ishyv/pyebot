@@ -14,18 +14,18 @@
  * missing appeals channel means appeals are disabled for that guild.
  */
 import {
+  ActionRowBuilder,
+  type ButtonInteraction,
+  ChannelType,
+  MessageFlags,
+  type ModalActionRowComponentBuilder,
   ModalBuilder,
+  type ModalSubmitInteraction,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
-  ChannelType,
-  type ModalActionRowComponentBuilder,
-  type ModalSubmitInteraction,
-  type ButtonInteraction,
-  MessageFlags,
 } from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
 import { createAppeal, getAppeal } from "@/db/repositories/appeals";
+import { getGuild } from "@/db/repositories/guilds";
 import { syncQueueMessage } from "@/features/moderation/appeals";
 import { container, text, v2Message } from "@/ui/v2";
 

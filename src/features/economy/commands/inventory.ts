@@ -1,21 +1,18 @@
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
-import { UserInventory } from "@/components/user-inventory";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { RpgProfile } from "@/components/rpg-profile";
+import { UserInventory } from "@/components/user-inventory";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, section, separator, text, thumb, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("inventory")
   .setDescription("View your item inventory")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to view (defaults to you)").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -38,13 +35,18 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
     if (qty > 0) items.push([itemId, qty]);
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.DarkGold)
-    .setTitle(`${target.username}'s Inventory`);
-
   if (items.length === 0) {
-    embed.setDescription("Empty — start gathering with `/gather-mine` or `/gather-cutdown`.");
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "mute",
+          section(
+            `## ${target.username}'s Inventory\nEmpty — start gathering with \`/gather-mine\` or \`/gather-cutdown\`.`,
+            thumb(target.displayAvatarURL(), "avatar"),
+          ),
+        ),
+      ),
+    );
     return;
   }
 
@@ -57,8 +59,26 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
         ? weapon
         : null;
 
-  const RAW = ["stone", "copper_ore", "iron_ore", "silver_ore", "oak_wood", "spruce_wood", "palm_wood", "pine_wood"];
-  const PROCESSED = ["stone_block", "copper_ingot", "iron_ingot", "silver_ingot", "oak_plank", "spruce_plank", "palm_plank", "pine_plank"];
+  const RAW = [
+    "stone",
+    "copper_ore",
+    "iron_ore",
+    "silver_ore",
+    "oak_wood",
+    "spruce_wood",
+    "palm_wood",
+    "pine_wood",
+  ];
+  const PROCESSED = [
+    "stone_block",
+    "copper_ingot",
+    "iron_ingot",
+    "silver_ingot",
+    "oak_plank",
+    "spruce_plank",
+    "palm_plank",
+    "pine_plank",
+  ];
 
   const raw: string[] = [];
   const processed: string[] = [];
@@ -76,10 +96,26 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
     else other.push(line);
   }
 
-  if (tools.length)     embed.addFields({ name: "🔧 Tools", value: tools.join("\n"), inline: false });
-  if (raw.length)       embed.addFields({ name: "⛏️ Raw Materials", value: raw.join("\n"), inline: false });
-  if (processed.length) embed.addFields({ name: "🔩 Processed", value: processed.join("\n"), inline: false });
-  if (other.length)     embed.addFields({ name: "📦 Other", value: other.join("\n"), inline: false });
+  const sections: string[] = [];
+  if (tools.length) sections.push(`**🔧 Tools**\n${tools.join("\n")}`);
+  if (raw.length) sections.push(`**⛏️ Raw Materials**\n${raw.join("\n")}`);
+  if (processed.length) sections.push(`**🔩 Processed**\n${processed.join("\n")}`);
+  if (other.length) sections.push(`**📦 Other**\n${other.join("\n")}`);
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "info",
+        section(`## ${target.username}'s Inventory`, thumb(target.displayAvatarURL(), "avatar")),
+        separator("sm"),
+        text(sections.join("\n\n")),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/craft", "/process", "/market-list"] },
+  execute,
+});

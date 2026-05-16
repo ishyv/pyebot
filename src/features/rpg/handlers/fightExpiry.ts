@@ -7,8 +7,8 @@
  * Called by the RPG feature's framework-owned job.
  */
 
-import { sessions } from "@/core/state";
 import { createLogger } from "@/core/logger";
+import { sessions } from "@/core/state";
 import type { ActiveCombatSession } from "@/features/rpg/combat/engine";
 
 const log = createLogger("fight-expiry");

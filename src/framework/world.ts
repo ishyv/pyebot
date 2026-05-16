@@ -45,22 +45,12 @@
  */
 
 import type { Client, Interaction } from "discord.js";
-import type {
-  Collection,
-  Db,
-  Document,
-  Filter as MongoFilter,
-} from "mongodb";
+import type { Collection, Db, Document, Filter as MongoFilter } from "mongodb";
 import { getDb } from "@/core/db";
 import { createLogger, type Logger } from "@/core/logger";
 import { cooldowns, locks, sessions } from "@/core/state";
 import { EventBus } from "./event-bus";
-import type {
-  Component,
-  ComponentRecord,
-  Ctx,
-  Entity,
-} from "./types";
+import type { Component, ComponentRecord, Ctx, Entity } from "./types";
 
 // Helper: identify a cache row for a (collection, id) tuple.
 function cacheKey(collection: string, id: Entity): string {
@@ -98,7 +88,10 @@ export class World {
   private parse<T>(component: Component<T>, raw: unknown, id: Entity): T {
     const parsed = component.schema.safeParse(raw);
     if (parsed.success) return parsed.data;
-    this.logger.error(`Invalid document in ${component.collection} (${id}); using defaults.`, parsed.error);
+    this.logger.error(
+      `Invalid document in ${component.collection} (${id}); using defaults.`,
+      parsed.error,
+    );
     return this.defaults(component, id);
   }
 
@@ -164,7 +157,12 @@ export class World {
 
   async queryDirect<T>(
     component: Component<T>,
-    options?: { filter?: MongoFilter<Document>; sort?: Record<string, 1 | -1>; limit?: number; skip?: number },
+    options?: {
+      filter?: MongoFilter<Document>;
+      sort?: Record<string, 1 | -1>;
+      limit?: number;
+      skip?: number;
+    },
   ): Promise<ReadonlyArray<ComponentRecord<T>>> {
     const col = await this.col(component);
     let cursor = col.find((options?.filter as MongoFilter<Document & { _id: Entity }>) ?? {});
@@ -205,10 +203,18 @@ class InteractionCtx implements Ctx {
     this.logger = createLogger(`feature:${featureId}`);
   }
 
-  get client(): Client { return this.world.client; }
-  get cooldowns() { return cooldowns; }
-  get locks() { return locks; }
-  get sessions() { return sessions; }
+  get client(): Client {
+    return this.world.client;
+  }
+  get cooldowns() {
+    return cooldowns;
+  }
+  get locks() {
+    return locks;
+  }
+  get sessions() {
+    return sessions;
+  }
 
   async get<T>(id: Entity, component: Component<T>): Promise<T | null> {
     const key = cacheKey(component.collection, id);
@@ -255,7 +261,12 @@ class InteractionCtx implements Ctx {
 
   query<T>(
     component: Component<T>,
-    options?: { filter?: MongoFilter<Document>; sort?: Record<string, 1 | -1>; limit?: number; skip?: number },
+    options?: {
+      filter?: MongoFilter<Document>;
+      sort?: Record<string, 1 | -1>;
+      limit?: number;
+      skip?: number;
+    },
   ): Promise<ReadonlyArray<ComponentRecord<T>>> {
     // `query` results are NOT cached — they vary by options and can be large.
     return this.world.queryDirect(component, options);

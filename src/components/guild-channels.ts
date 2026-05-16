@@ -19,7 +19,12 @@ export const GuildChannels = component({
   collection: "guild_channels",
   schema: z.object({
     core: z.record(z.string(), CoreChannel.nullable()).default(() => ({
-      welcome: null, goodbye: null, logs: null, reports: null, suggestions: null, tickets: null,
+      welcome: null,
+      goodbye: null,
+      logs: null,
+      reports: null,
+      suggestions: null,
+      tickets: null,
     })),
     managed: z.record(z.string(), ManagedChannel).default(() => ({})),
     ticketMessageId: z.string().nullable().default(null),

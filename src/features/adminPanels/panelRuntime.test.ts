@@ -4,6 +4,7 @@ import {
   openPanelFromCommand,
   PANEL_TTL_MS,
   PanelSessionRegistry,
+  panelContainer,
   parsePanelCustomId,
   withNavigationRows,
 } from "./panelRuntime";
@@ -41,9 +42,12 @@ describe("panel runtime", () => {
     const session = registry.create("user-1", "guild-1", "channels");
     const rows = [{}, {}, {}, {}, {}] as never[];
 
-    const payload = withNavigationRows(session, { embeds: [], components: rows });
+    const payload = withNavigationRows(session, {
+      container: panelContainer({ title: "Test" }),
+      actionRows: rows,
+    });
 
-    expect(payload.components).toHaveLength(5);
+    expect(payload.actionRows).toHaveLength(5);
   });
 
   it("uses remaining action-row space for navigation", () => {
@@ -51,9 +55,12 @@ describe("panel runtime", () => {
     const session = registry.create("user-1", "guild-1", "economy");
     const rows = [{}, {}, {}] as never[];
 
-    const payload = withNavigationRows(session, { embeds: [], components: rows });
+    const payload = withNavigationRows(session, {
+      container: panelContainer({ title: "Test" }),
+      actionRows: rows,
+    });
 
-    expect(payload.components).toHaveLength(5);
+    expect(payload.actionRows).toHaveLength(5);
   });
 
   it("replies when opening a panel from a fresh command interaction", async () => {
@@ -75,8 +82,8 @@ describe("panel runtime", () => {
     } as never;
 
     await openPanelFromCommand(interaction, "moderation", async () => ({
-      embeds: [],
-      components: [],
+      container: panelContainer({ title: "Test" }),
+      actionRows: [],
     }));
 
     expect(calls).toEqual(["reply"]);
@@ -101,8 +108,8 @@ describe("panel runtime", () => {
     } as never;
 
     await openPanelFromCommand(interaction, "moderation", async () => ({
-      embeds: [],
-      components: [],
+      container: panelContainer({ title: "Test" }),
+      actionRows: [],
     }));
 
     expect(calls).toEqual(["editReply"]);

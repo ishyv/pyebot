@@ -10,9 +10,9 @@
 
 import { ChannelType, type Guild as DjsGuild } from "discord.js";
 import { getDb } from "@/core/db";
-import { sessions } from "@/core/state";
-import { ErrResult, OkResult, type Result } from "@/core/result";
 import { createLogger } from "@/core/logger";
+import { ErrResult, OkResult, type Result } from "@/core/result";
+import { sessions } from "@/core/state";
 
 const log = createLogger("tickets");
 
@@ -37,11 +37,36 @@ export interface OpenTicketResult {
 }
 
 export const TICKET_CATEGORIES = [
-  { id: "report",    label: "Report",                   description: "Report bad behavior from other users.", emoji: "❗" },
-  { id: "featured",  label: "Featured Notice",           description: "Inquire about or purchase advertisement.", emoji: "📣" },
-  { id: "workshop",  label: "Give a Workshop",           description: "Host a workshop on the server.", emoji: "🎓" },
-  { id: "alliance",  label: "Request Server Alliance",   description: "Minimum 300 users, must comply with TOS.", emoji: "🤝" },
-  { id: "general",   label: "General",                   description: "If none of the above options apply.", emoji: "❓" },
+  {
+    id: "report",
+    label: "Report",
+    description: "Report bad behavior from other users.",
+    emoji: "❗",
+  },
+  {
+    id: "featured",
+    label: "Featured Notice",
+    description: "Inquire about or purchase advertisement.",
+    emoji: "📣",
+  },
+  {
+    id: "workshop",
+    label: "Give a Workshop",
+    description: "Host a workshop on the server.",
+    emoji: "🎓",
+  },
+  {
+    id: "alliance",
+    label: "Request Server Alliance",
+    description: "Minimum 300 users, must comply with TOS.",
+    emoji: "🤝",
+  },
+  {
+    id: "general",
+    label: "General",
+    description: "If none of the above options apply.",
+    emoji: "❓",
+  },
 ] as const;
 
 export type TicketCategoryId = (typeof TICKET_CATEGORIES)[number]["id"];
@@ -51,13 +76,14 @@ function sessionKey(guildId: string, userId: string): string {
 }
 
 function buildChannelName(username: string): string {
-  const sanitized = username
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .toLowerCase() || "user";
+  const sanitized =
+    username
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .toLowerCase() || "user";
   return `ticket-${sanitized}`.slice(0, 100);
 }
 
@@ -103,11 +129,13 @@ export async function openTicket(
 
   try {
     const db = await getDb();
-    await db.collection<{ _id: string; pendingTickets?: string[] }>("guilds").updateOne(
-      { _id: guild.id } as never,
-      { $addToSet: { pendingTickets: channelId } } as never,
-      { upsert: true },
-    );
+    await db
+      .collection<{ _id: string; pendingTickets?: string[] }>("guilds")
+      .updateOne(
+        { _id: guild.id } as never,
+        { $addToSet: { pendingTickets: channelId } } as never,
+        { upsert: true },
+      );
   } catch (err) {
     log.error("Failed to record ticket in DB", err);
     // Non-fatal — channel exists, just DB tracking failed
@@ -127,8 +155,9 @@ export async function closeTicket(
 ): Promise<Result<void>> {
   // Delete the Discord channel
   try {
-    const ch = guild.channels.cache.get(channelId)
-      ?? await guild.channels.fetch(channelId).catch(() => null);
+    const ch =
+      guild.channels.cache.get(channelId) ??
+      (await guild.channels.fetch(channelId).catch(() => null));
     if (ch) await ch.delete("Ticket closed").catch(() => null);
   } catch (err) {
     log.error("Failed to delete ticket channel", err);
@@ -151,10 +180,9 @@ export async function closeTicket(
 
   try {
     const db = await getDb();
-    await db.collection<{ _id: string; pendingTickets?: string[] }>("guilds").updateOne(
-      { _id: guild.id } as never,
-      { $pull: { pendingTickets: channelId } } as never,
-    );
+    await db
+      .collection<{ _id: string; pendingTickets?: string[] }>("guilds")
+      .updateOne({ _id: guild.id } as never, { $pull: { pendingTickets: channelId } } as never);
   } catch (err) {
     log.error("Failed to remove ticket from DB", err);
     return ErrResult(new TicketError("Failed to remove ticket from DB.", "DB_ERROR"));

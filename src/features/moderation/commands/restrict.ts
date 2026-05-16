@@ -1,16 +1,16 @@
 import {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
-import { restrict } from "@/features/moderation/service";
 import { getGuild } from "@/db/repositories/guilds";
-import { dmUser } from "../notifications";
+import { restrict } from "@/features/moderation/service";
+import { defineCommand } from "@/framework";
 import { sendModLog } from "../modlog";
+import { dmUser } from "../notifications";
+import { renderModlogCase } from "../views";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("restrict")
   .setDescription("Restrict a member from specific server areas")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -34,7 +34,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("reason").setDescription("Reason for restriction").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild || !interaction.member) {
@@ -59,7 +59,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (!roleId) {
     await interaction.editReply({
-      content: "Restriction roles are not configured. Use `/modconfig restrict-roles` to set them up.",
+      content:
+        "Restriction roles are not configured. Use `/modconfig restrict-roles` to set them up.",
     });
     return;
   }
@@ -68,7 +69,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const role = await guild.roles.fetch(roleId).catch(() => null);
   if (!role) {
     await interaction.editReply({
-      content: "The configured restriction role no longer exists. Please reconfigure it with `/modconfig restrict-roles`.",
+      content:
+        "The configured restriction role no longer exists. Please reconfigure it with `/modconfig restrict-roles`.",
     });
     return;
   }
@@ -113,16 +115,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await dmUser(targetMember.user, "RESTRICT", guild.name, reason, sanctionResult.caseId);
   await sendModLog(guild, sanctionResult, { restrictionType: type });
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle("Member Restricted")
-    .setDescription(`**${targetMember.user.tag}** has been restricted from **${type}**.`)
-    .addFields(
-      { name: "Reason", value: reason },
-      { name: "Case ID", value: `#${sanctionResult.caseId}`, inline: true },
-      { name: "Restriction Type", value: type, inline: true },
-    )
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    renderModlogCase({ result: sanctionResult, extras: { restrictionType: type } }),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

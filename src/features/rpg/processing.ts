@@ -9,15 +9,15 @@
  *   - materials are consumed before the success roll; failure produces nothing
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
+import { ErrResult, OkResult, type Result } from "@/core/result";
 import { ensureRpgProfile } from "@/db/repositories/rpg";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
+import type { MaterialId } from "@/features/rpg/content/materials";
 import {
   PROCESSING_RECIPES,
-  parseProcessingInputId,
   type ProcessingInputId,
+  parseProcessingInputId,
 } from "@/features/rpg/content/recipes";
-import type { MaterialId } from "@/features/rpg/content/materials";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -96,7 +96,9 @@ export async function process(
 
   const recipeId = parseProcessingInputId(rawMaterialId);
   if (!recipeId) {
-    return ErrResult(new ProcessingError("RECIPE_NOT_FOUND", `No processing recipe for "${rawMaterialId}"`));
+    return ErrResult(
+      new ProcessingError("RECIPE_NOT_FOUND", `No processing recipe for "${rawMaterialId}"`),
+    );
   }
   const recipe = PROCESSING_RECIPES[recipeId];
 
@@ -170,7 +172,8 @@ export async function process(
   const outputGained = successes * recipe.outputPerBatch;
   if (outputGained > 0) {
     const latestUserRes = await getUser(userId);
-    const latestInventory = (latestUserRes.isOk() ? latestUserRes.unwrap()?.inventory : undefined) ?? {};
+    const latestInventory =
+      (latestUserRes.isOk() ? latestUserRes.unwrap()?.inventory : undefined) ?? {};
     const currentOutput = (latestInventory[recipe.output] as number | undefined) ?? 0;
     await updateUserPaths(userId, {
       [`inventory.${recipe.output}`]: currentOutput + outputGained,
@@ -207,7 +210,13 @@ export interface ProcessingInfo {
 export function getProcessingInfo(rawMaterialId: string, luckLevel = 0): ProcessingInfo {
   const recipeId = parseProcessingInputId(rawMaterialId);
   if (!recipeId) {
-    return { canProcess: false, outputItemId: null, materialsPerBatch: 2, successChance: 0, feePerBatch: 0 };
+    return {
+      canProcess: false,
+      outputItemId: null,
+      materialsPerBatch: 2,
+      successChance: 0,
+      feePerBatch: 0,
+    };
   }
   const recipe = PROCESSING_RECIPES[recipeId];
   return {

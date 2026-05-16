@@ -17,14 +17,19 @@ export interface LocationDef {
 }
 
 export const LOCATIONS = {
-  stone_mine:    { name: "Stone Mine",    action: "mine",   requiredTier: 1, materials: ["stone"] },
-  copper_mine:   { name: "Copper Mine",   action: "mine",   requiredTier: 2, materials: ["copper_ore"] },
-  iron_mine:     { name: "Iron Mine",     action: "mine",   requiredTier: 3, materials: ["iron_ore"] },
-  silver_mine:   { name: "Silver Mine",   action: "mine",   requiredTier: 4, materials: ["silver_ore"] },
-  oak_forest:    { name: "Oak Forest",    action: "forest", requiredTier: 1, materials: ["oak_wood"] },
-  spruce_forest: { name: "Spruce Forest", action: "forest", requiredTier: 2, materials: ["spruce_wood"] },
-  palm_forest:   { name: "Palm Forest",   action: "forest", requiredTier: 3, materials: ["palm_wood"] },
-  pine_forest:   { name: "Pine Forest",   action: "forest", requiredTier: 4, materials: ["pine_wood"] },
+  stone_mine: { name: "Stone Mine", action: "mine", requiredTier: 1, materials: ["stone"] },
+  copper_mine: { name: "Copper Mine", action: "mine", requiredTier: 2, materials: ["copper_ore"] },
+  iron_mine: { name: "Iron Mine", action: "mine", requiredTier: 3, materials: ["iron_ore"] },
+  silver_mine: { name: "Silver Mine", action: "mine", requiredTier: 4, materials: ["silver_ore"] },
+  oak_forest: { name: "Oak Forest", action: "forest", requiredTier: 1, materials: ["oak_wood"] },
+  spruce_forest: {
+    name: "Spruce Forest",
+    action: "forest",
+    requiredTier: 2,
+    materials: ["spruce_wood"],
+  },
+  palm_forest: { name: "Palm Forest", action: "forest", requiredTier: 3, materials: ["palm_wood"] },
+  pine_forest: { name: "Pine Forest", action: "forest", requiredTier: 4, materials: ["pine_wood"] },
 } as const satisfies Record<string, LocationDef>;
 
 export type LocationId = keyof typeof LOCATIONS;

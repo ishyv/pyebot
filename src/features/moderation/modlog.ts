@@ -1,35 +1,24 @@
 /**
  * Mod Log utility.
  *
- * Sends a formatted embed to the guild's configured mod log channel after any
- * moderation action. Silently skips if no channel is configured or the send
- * fails — callers must never depend on this for correctness.
+ * Sends a formatted Components V2 message to the guild's configured mod log
+ * channel after any moderation action. Silently skips if no channel is
+ * configured or the send fails — callers must never depend on this for
+ * correctness; logging is best-effort by design.
  */
 
-import { type Guild, type TextChannel, EmbedBuilder, Colors } from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
+import type { Guild, TextChannel } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { getGuild } from "@/db/repositories/guilds";
 import type { ModerationResult } from "./service";
-import type { SanctionType } from "@/db/schemas/user";
+import { renderModlogCase } from "./views";
 
 const log = createLogger("modlog");
-
-function colorForAction(type: SanctionType): number {
-  switch (type) {
-    case "BAN":     return Colors.Red;
-    case "KICK":    return Colors.Orange;
-    case "TIMEOUT": return Colors.Yellow;
-    case "WARN":    return Colors.Yellow;
-    case "RESTRICT": return Colors.Blue;
-    case "PARDON":  return Colors.Green;
-    default:        return Colors.Grey;
-  }
-}
 
 export async function sendModLog(
   guild: Guild,
   result: ModerationResult,
-  extras?: { duration?: string; restrictionType?: string },
+  extras?: { duration?: string; restrictionType?: string; note?: string },
 ): Promise<void> {
   try {
     const guildResult = await getGuild(guild.id);
@@ -43,30 +32,25 @@ export async function sendModLog(
     const channel = await guild.channels.fetch(channelId).catch(() => null);
     if (!channel?.isTextBased()) return;
 
-    const embed = new EmbedBuilder()
-      .setColor(colorForAction(result.type))
-      .setTitle(`Case #${result.caseId} — ${result.type}`)
-      .addFields(
-        { name: "Target",    value: `<@${result.targetId}> (ID: ${result.targetId})` },
-        { name: "Moderator", value: `<@${result.moderatorId}>` },
-        { name: "Reason",    value: result.reason },
-      )
-      .setTimestamp(new Date());
+    // Resolve target avatar best-effort; falls back to a plain text section if
+    // the user is uncacheable or fetch fails.
+    const targetAvatarUrl = await resolveAvatar(guild, result.targetId);
 
-    if (extras?.duration) {
-      embed.addFields({ name: "Duration", value: extras.duration });
-    }
-
-    if (extras?.restrictionType) {
-      embed.addFields({ name: "Restriction", value: extras.restrictionType });
-    }
-
-    if (result.escalated) {
-      embed.addFields({ name: "Escalation", value: "⚡ Auto-escalated: user timed out", inline: false });
-    }
-
-    await (channel as TextChannel).send({ embeds: [embed] });
+    const payload = renderModlogCase({ result, targetAvatarUrl, extras });
+    await (channel as TextChannel).send(payload);
   } catch (err) {
     log.error("Failed to send mod log", err);
   }
+}
+
+/**
+ * Returns the user's CDN avatar URL or `null` when neither cache nor a fetch
+ * yields a user object. Best-effort: any error becomes `null` so the modlog
+ * send still proceeds with the avatar-less view.
+ */
+async function resolveAvatar(guild: Guild, userId: string): Promise<string | null> {
+  const cached = guild.members.cache.get(userId);
+  if (cached) return cached.displayAvatarURL({ size: 128 });
+  const user = await guild.client.users.fetch(userId).catch(() => null);
+  return user ? user.displayAvatarURL({ size: 128 }) : null;
 }

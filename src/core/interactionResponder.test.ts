@@ -102,6 +102,8 @@ describe("interaction payload validation", () => {
 
   it("rejects oversized content and embed arrays before Discord does", () => {
     expect(validateInteractionPayload({ content: "x".repeat(2001) }).isErr()).toBe(true);
-    expect(validateInteractionPayload({ embeds: Array.from({ length: 11 }, () => ({})) }).isErr()).toBe(true);
+    expect(
+      validateInteractionPayload({ embeds: Array.from({ length: 11 }, () => ({})) }).isErr(),
+    ).toBe(true);
   });
 });

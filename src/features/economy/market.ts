@@ -9,16 +9,12 @@
  * is stubbed pending the features/inventory module implementation.
  */
 
-import { OkResult, ErrResult, type Result } from "@/core/result";
-import type { Ctx } from "@/framework/types";
-import { getBalance, adjustBalance } from "@/features/economy/mutations";
-import { ensureAccount, isAccountActive } from "@/features/economy/account";
-import {
-  marketStore,
-  findActiveListings,
-  countActiveListings,
-} from "@/db/repositories/economy";
+import { ErrResult, OkResult, type Result } from "@/core/result";
+import { countActiveListings, findActiveListings, marketStore } from "@/db/repositories/economy";
 import type { MarketListingDoc } from "@/db/schemas/market";
+import { ensureAccount, isAccountActive } from "@/features/economy/account";
+import { adjustBalance, getBalance } from "@/features/economy/mutations";
+import type { Ctx } from "@/framework/types";
 import { buildListingId } from "@/utils/ids";
 
 // ---------------------------------------------------------------------------
@@ -142,7 +138,9 @@ export async function createListing(
 
   if (ctx.cooldowns.isOnCooldown(sellerId, "market:create")) {
     const remaining = ctx.cooldowns.getRemainingMs(sellerId, "market:create");
-    return ErrResult(new MarketError("COOLDOWN_ACTIVE", `Wait ${remaining}ms before listing again`));
+    return ErrResult(
+      new MarketError("COOLDOWN_ACTIVE", `Wait ${remaining}ms before listing again`),
+    );
   }
 
   const account = await ensureAccount(ctx, sellerId);
@@ -151,11 +149,15 @@ export async function createListing(
   }
 
   const countRes = await countActiveListings(guildId, sellerId);
-  if (countRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", countRes.error.message));
+  if (countRes.isErr())
+    return ErrResult(new MarketError("TRANSACTION_FAILED", countRes.error.message));
 
   if (countRes.unwrap() >= cfg.maxActiveListings) {
     return ErrResult(
-      new MarketError("LISTING_LIMIT_REACHED", `You can have at most ${cfg.maxActiveListings} active listings`),
+      new MarketError(
+        "LISTING_LIMIT_REACHED",
+        `You can have at most ${cfg.maxActiveListings} active listings`,
+      ),
     );
   }
 
@@ -178,7 +180,8 @@ export async function createListing(
   };
 
   const saveRes = await marketStore.set(listing._id, listing);
-  if (saveRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", saveRes.error.message));
+  if (saveRes.isErr())
+    return ErrResult(new MarketError("TRANSACTION_FAILED", saveRes.error.message));
 
   ctx.cooldowns.set(sellerId, "market:create", cfg.createCooldownMs);
 
@@ -213,7 +216,8 @@ export async function buyListing(
   }
 
   const listingRes = await marketStore.get(listingId);
-  if (listingRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
+  if (listingRes.isErr())
+    return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
   const listing = listingRes.unwrap();
 
   if (!listing) {
@@ -258,18 +262,24 @@ export async function buyListing(
   } catch {
     // Best-effort rollback
     await adjustBalance(ctx, buyerId, cfg.currencyId, total).catch(() => {});
-    return ErrResult(new MarketError("TRANSACTION_FAILED", "Failed to credit seller; transaction reversed"));
+    return ErrResult(
+      new MarketError("TRANSACTION_FAILED", "Failed to credit seller; transaction reversed"),
+    );
   }
 
   // Update listing quantity / status
   const remaining = listing.quantity - quantity;
   const nextStatus = remaining <= 0 ? "sold_out" : "active";
-  await marketStore.replaceIfMatch(listingId, { version: listing.version }, {
-    quantity: remaining,
-    status: nextStatus,
-    version: listing.version + 1,
-    updatedAt: new Date(),
-  });
+  await marketStore.replaceIfMatch(
+    listingId,
+    { version: listing.version },
+    {
+      quantity: remaining,
+      status: nextStatus,
+      version: listing.version + 1,
+      updatedAt: new Date(),
+    },
+  );
 
   // TODO: Add quantity of itemId to buyer inventory when features/inventory is implemented.
 
@@ -300,7 +310,8 @@ export async function cancelListing(
 ): Promise<Result<CancelListingResult, MarketError>> {
   void ctx;
   const listingRes = await marketStore.get(listingId);
-  if (listingRes.isErr()) return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
+  if (listingRes.isErr())
+    return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
   const listing = listingRes.unwrap();
 
   if (!listing) {
@@ -315,11 +326,15 @@ export async function cancelListing(
     return ErrResult(new MarketError("PERMISSION_DENIED", "You do not own this listing"));
   }
 
-  await marketStore.replaceIfMatch(listingId, { version: listing.version }, {
-    status: "cancelled",
-    version: listing.version + 1,
-    updatedAt: new Date(),
-  });
+  await marketStore.replaceIfMatch(
+    listingId,
+    { version: listing.version },
+    {
+      status: "cancelled",
+      version: listing.version + 1,
+      updatedAt: new Date(),
+    },
+  );
 
   // TODO: Return listing.quantity of listing.itemId to listing.sellerId's inventory.
 

@@ -19,32 +19,27 @@
  * Everything above this line is internal.
  */
 
-import {
-  type AutocompleteInteraction,
-  type ButtonInteraction,
-  type ChatInputCommandInteraction,
-  type Client,
-  type Interaction,
-  type ModalSubmitInteraction,
-  type StringSelectMenuInteraction,
+import type {
+  AutocompleteInteraction,
+  ButtonInteraction,
+  ChannelSelectMenuInteraction,
+  ChatInputCommandInteraction,
+  Client,
+  Interaction,
+  MentionableSelectMenuInteraction,
+  ModalSubmitInteraction,
+  RoleSelectMenuInteraction,
+  StringSelectMenuInteraction,
+  UserSelectMenuInteraction,
 } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { buildCommandCatalog, installCommandCatalog } from "@/utils/command-registry";
 import { getListenMetadata, getOnMetadata } from "./decorators";
 import { loadFeatures } from "./loader";
 import { isFeatureEnabled, safeReply } from "./middleware";
-import {
-  buildFeaturesCommand,
-  buildToggleHandler,
-  TOGGLE_CUSTOM_ID_PREFIX,
-} from "./panel";
-import { buildCommandCatalog, installCommandCatalog } from "@/utils/command-registry";
+import { buildFeaturesCommand, buildToggleHandler, TOGGLE_CUSTOM_ID_PREFIX } from "./panel";
 import { ComponentRouter } from "./router";
-import type {
-  CommandModule,
-  Ctx,
-  FeatureDescriptor,
-  LoadedFeature,
-} from "./types";
+import type { CommandModule, Ctx, FeatureDescriptor, LoadedFeature } from "./types";
 import { World } from "./world";
 
 const log = createLogger("framework:bootstrap");
@@ -133,7 +128,14 @@ export async function bootstrapFramework(client: Client): Promise<BootstrapResul
         await handleChatInputCommand(interaction);
       } else if (interaction.isAutocomplete()) {
         await handleAutocomplete(interaction);
-      } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
+      } else if (
+        interaction.isButton() ||
+        interaction.isStringSelectMenu() ||
+        interaction.isChannelSelectMenu() ||
+        interaction.isMentionableSelectMenu() ||
+        interaction.isRoleSelectMenu() ||
+        interaction.isUserSelectMenu()
+      ) {
         await handleComponent(interaction);
       } else if (interaction.isModalSubmit()) {
         await handleModalSubmit(interaction);
@@ -178,7 +180,13 @@ export async function bootstrapFramework(client: Client): Promise<BootstrapResul
   }
 
   async function handleComponent(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
+    interaction:
+      | ButtonInteraction
+      | StringSelectMenuInteraction
+      | ChannelSelectMenuInteraction
+      | MentionableSelectMenuInteraction
+      | RoleSelectMenuInteraction
+      | UserSelectMenuInteraction,
   ): Promise<void> {
     const route = router.resolve(interaction.customId);
     if (!route) return; // stale buttons silently ignored

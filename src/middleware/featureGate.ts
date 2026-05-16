@@ -9,8 +9,8 @@
  * The key should match a value in the Features enum from db/schemas/guild.ts.
  */
 
-import { OkResult, ErrResult } from "@/core/result";
 import type { MiddlewareFn } from "@/core/feature";
+import { ErrResult, OkResult } from "@/core/result";
 
 export function featureGateMw(key: string): MiddlewareFn {
   return async (_interaction, ctx) => {

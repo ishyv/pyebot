@@ -27,22 +27,35 @@ const DomainWhitelist = z.object({
 const Shorteners = z.object({
   enabled: z.boolean().default(false),
   resolveFinalUrl: z.boolean().default(false),
-  allowedShorteners: z.array(z.string()).default(() => [
-    "bit.ly", "t.co", "tinyurl.com", "cutt.ly", "is.gd", "rebrand.ly", "goo.gl",
-  ]),
+  allowedShorteners: z
+    .array(z.string())
+    .default(() => ["bit.ly", "t.co", "tinyurl.com", "cutt.ly", "is.gd", "rebrand.ly", "goo.gl"]),
 });
 
 export const GuildAutomod = component({
   collection: "guild_automod",
   schema: z.object({
     linkSpam: LinkSpam.default(() => ({
-      enabled: false, maxLinks: 4, windowSeconds: 10, timeoutSeconds: 300,
-      action: "timeout" as const, reportChannelId: null,
+      enabled: false,
+      maxLinks: 4,
+      windowSeconds: 10,
+      timeoutSeconds: 300,
+      action: "timeout" as const,
+      reportChannelId: null,
     })),
     domainWhitelist: DomainWhitelist.default(() => ({ enabled: false, domains: [] })),
     shorteners: Shorteners.default(() => ({
-      enabled: false, resolveFinalUrl: false,
-      allowedShorteners: ["bit.ly", "t.co", "tinyurl.com", "cutt.ly", "is.gd", "rebrand.ly", "goo.gl"],
+      enabled: false,
+      resolveFinalUrl: false,
+      allowedShorteners: [
+        "bit.ly",
+        "t.co",
+        "tinyurl.com",
+        "cutt.ly",
+        "is.gd",
+        "rebrand.ly",
+        "goo.gl",
+      ],
     })),
   }),
 });

@@ -1,9 +1,10 @@
 import {
-  MessageFlags,
   type ButtonInteraction,
   type Client,
+  Events,
   type GuildMember,
   type Message,
+  MessageFlags,
   type MessageReaction,
   type PartialMessageReaction,
   type PartialUser,
@@ -11,9 +12,9 @@ import {
 } from "discord.js";
 import {
   AutoroleRule,
+  type AutoroleRuleValue,
   autoroleRuleId,
   TimedAutoroleGrant,
-  type AutoroleRuleValue,
 } from "@/components/autorole-rule";
 import { MemberJoined } from "@/events/member-joined";
 import { Handle, Listen, On } from "@/framework";
@@ -86,9 +87,14 @@ export default class AutoroleHandlers {
   @Listen("messageCreate")
   async onMessage(message: Message, ctx: Ctx): Promise<void> {
     if (message.author.bot || !message.guild) return;
-    const member = message.member ?? await message.guild.members.fetch(message.author.id).catch(() => null);
+    const member =
+      message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
     if (!member) return;
-    await applyRules(ctx, member, findMessageRules(await guildRules(ctx, message.guild.id), message.content));
+    await applyRules(
+      ctx,
+      member,
+      findMessageRules(await guildRules(ctx, message.guild.id), message.content),
+    );
   }
 
   @Handle(AUTOROLE_TOGGLE_PREFIX)
@@ -99,12 +105,21 @@ export default class AutoroleHandlers {
     }
     const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
     if (!member) {
-      await interaction.reply({ content: "Could not resolve your server member.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: "Could not resolve your server member.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
-    const rules = findButtonRules(await guildRules(ctx, interaction.guild.id), interaction.customId);
+    const rules = findButtonRules(
+      await guildRules(ctx, interaction.guild.id),
+      interaction.customId,
+    );
     if (rules.length === 0) {
-      await interaction.reply({ content: "That autorole button is no longer active.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: "That autorole button is no longer active.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
 
@@ -119,7 +134,7 @@ export default class AutoroleHandlers {
     await interaction.reply({ content: "Role added.", flags: MessageFlags.Ephemeral });
   }
 
-  @Listen("ready")
+  @Listen(Events.ClientReady)
   onReady(_client: Client, ctx: Ctx): void {
     if (this.expiryTimer) return;
     this.expiryTimer = setInterval(() => {
@@ -168,11 +183,23 @@ async function revokeRules(
     await member.roles.remove(rule.roleId, `autorole:${rule.name}`).catch((error) => {
       ctx.logger.error(`Failed to remove autorole ${rule.name}`, error);
     });
-    await ctx.delete(timedGrantId(member.guild.id, member.id, rule.roleId, autoroleRuleId(member.guild.id, rule.name)), TimedAutoroleGrant);
+    await ctx.delete(
+      timedGrantId(
+        member.guild.id,
+        member.id,
+        rule.roleId,
+        autoroleRuleId(member.guild.id, rule.name),
+      ),
+      TimedAutoroleGrant,
+    );
   }
 }
 
-async function scheduleTimedGrant(ctx: Ctx, member: GuildMember, rule: AutoroleRuleValue): Promise<void> {
+async function scheduleTimedGrant(
+  ctx: Ctx,
+  member: GuildMember,
+  rule: AutoroleRuleValue,
+): Promise<void> {
   if (!rule.durationMs) return;
   const ruleId = autoroleRuleId(member.guild.id, rule.name);
   await ctx.set(timedGrantId(member.guild.id, member.id, rule.roleId, ruleId), TimedAutoroleGrant, {
@@ -185,7 +212,9 @@ async function scheduleTimedGrant(ctx: Ctx, member: GuildMember, rule: AutoroleR
 }
 
 async function sweepExpiredGrants(ctx: Ctx): Promise<void> {
-  const grants = await ctx.query(TimedAutoroleGrant, { filter: { expiresAt: { $lte: new Date() } } });
+  const grants = await ctx.query(TimedAutoroleGrant, {
+    filter: { expiresAt: { $lte: new Date() } },
+  });
   for (const grant of grants) {
     const guild = await ctx.client.guilds.fetch(grant.guildId).catch(() => null);
     const member = guild ? await guild.members.fetch(grant.userId).catch(() => null) : null;

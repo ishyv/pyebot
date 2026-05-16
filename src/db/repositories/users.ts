@@ -1,6 +1,6 @@
-import { MongoStore } from "@/db/store";
-import { UserSchema, type User } from "@/db/schemas/user";
 import type { Result } from "@/core/result";
+import { type User, UserSchema } from "@/db/schemas/user";
+import { MongoStore } from "@/db/store";
 
 export const userStore = new MongoStore("users", UserSchema);
 

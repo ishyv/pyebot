@@ -3,7 +3,7 @@
  * Mocks @/core/state and @/db/repositories/rpg.
  */
 
-import { describe, expect, test, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { OkResult } from "@/core/result";
 import type { RpgProfileData } from "@/db/schemas/rpg-profile";
 
@@ -17,8 +17,12 @@ const lockState = new Set<string>();
 mock.module("@/core/state", () => ({
   sessions: {
     get: mock((key: string) => sessionMap.get(key)),
-    set: mock((key: string, val: unknown) => { sessionMap.set(key, val); }),
-    delete: mock((key: string) => { sessionMap.delete(key); }),
+    set: mock((key: string, val: unknown) => {
+      sessionMap.set(key, val);
+    }),
+    delete: mock((key: string) => {
+      sessionMap.delete(key);
+    }),
     has: mock((key: string) => sessionMap.has(key)),
   },
   locks: {
@@ -27,7 +31,9 @@ mock.module("@/core/state", () => ({
       lockState.add(key);
       return true;
     }),
-    release: mock((key: string) => { lockState.delete(key); }),
+    release: mock((key: string) => {
+      lockState.delete(key);
+    }),
     isHeld: mock((key: string) => lockState.has(key)),
   },
   cooldowns: {
@@ -45,7 +51,16 @@ const profileStore = new Map<string, RpgProfileData>();
 
 function makeProfile(overrides: Partial<RpgProfileData> = {}): RpgProfileData {
   return {
-    loadout: { weapon: null, shield: null, helmet: null, chest: null, pants: null, boots: null, ring: null, necklace: null },
+    loadout: {
+      weapon: null,
+      shield: null,
+      helmet: null,
+      chest: null,
+      pants: null,
+      boots: null,
+      ring: null,
+      necklace: null,
+    },
     hpCurrent: 100,
     wins: 0,
     losses: 0,
@@ -274,10 +289,12 @@ describe("submitMove", () => {
 
   test("ends combat when a player reaches 0 HP", async () => {
     // Use extreme stats to guarantee combat ends in one round
-    const { sessionId } = (await initiateFight("p1", "p2", {
-      p1Stats: { atk: 1000, def: 0, maxHp: 10 },
-      p2Stats: { atk: 1000, def: 0, maxHp: 10 },
-    })).unwrap();
+    const { sessionId } = (
+      await initiateFight("p1", "p2", {
+        p1Stats: { atk: 1000, def: 0, maxHp: 10 },
+        p2Stats: { atk: 1000, def: 0, maxHp: 10 },
+      })
+    ).unwrap();
     await acceptFight(sessionId, "p2");
 
     await submitMove(sessionId, "p1", "attack");

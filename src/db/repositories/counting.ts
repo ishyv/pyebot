@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { MongoStore } from "@/db/store";
 import type { Result } from "@/core/result";
+import { MongoStore } from "@/db/store";
 
 export const CountingStateSchema = z.object({
   _id: z.string(),
@@ -34,7 +34,10 @@ export const mongoCountingStateRepository: CountingStateRepository = {
   },
 };
 
-export function createDefaultCountingState(guildId: string, channelId: string): CountingStateRecord {
+export function createDefaultCountingState(
+  guildId: string,
+  channelId: string,
+): CountingStateRecord {
   return {
     _id: countingStateId(guildId, channelId),
     guildId,

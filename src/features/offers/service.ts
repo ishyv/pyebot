@@ -9,19 +9,14 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type Guild as DjsGuild } from "discord.js";
 import { z } from "zod";
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  Colors,
-  type Guild as DjsGuild,
-} from "discord.js";
-import { MongoStore } from "@/db/store";
-import { getGuild } from "@/db/repositories/guilds";
-import { ErrResult, OkResult, type Result } from "@/core/result";
 import { createLogger } from "@/core/logger";
+import { ErrResult, OkResult, type Result } from "@/core/result";
+import { getGuild } from "@/db/repositories/guilds";
+import { MongoStore } from "@/db/store";
+import type { AccentKey } from "@/ui/theme";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
 const log = createLogger("offers");
 
@@ -96,31 +91,36 @@ function buildReviewButtons(offerId: string, disabled = false): ActionRowBuilder
   );
 }
 
-function buildOfferEmbed(offer: Offer, status: OfferStatus): EmbedBuilder {
-  const statusColor: Record<OfferStatus, number> = {
-    PENDING_REVIEW: Colors.Yellow,
-    APPROVED: Colors.Green,
-    REJECTED: Colors.Red,
-    CHANGES_REQUESTED: Colors.Orange,
-    WITHDRAWN: Colors.Grey,
+function buildOfferContainer(offer: Offer, status: OfferStatus, authorUsername?: string) {
+  const statusAccent: Record<OfferStatus, AccentKey> = {
+    PENDING_REVIEW: "warn",
+    APPROVED: "ok",
+    REJECTED: "danger",
+    CHANGES_REQUESTED: "warn",
+    WITHDRAWN: "mute",
   };
 
-  const embed = new EmbedBuilder()
-    .setColor(statusColor[status])
-    .setTitle(offer.details.title)
-    .setDescription(offer.details.description)
-    .setFooter({ text: `Offer ID: ${offer._id} | Status: ${status}` })
-    .setTimestamp();
+  const extraLines = [
+    offer.details.requirements ? `**Requirements:** ${offer.details.requirements}` : null,
+    offer.details.salary ? `**Salary:** ${offer.details.salary}` : null,
+    offer.details.contact ? `**Contact:** ${offer.details.contact}` : null,
+    `**Author:** <@${offer.authorId}>`,
+    offer.rejectionReason ? `**Rejection Reason:** ${offer.rejectionReason}` : null,
+    offer.changesNote ? `**Changes Requested:** ${offer.changesNote}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  if (offer.details.requirements) embed.addFields({ name: "Requirements", value: offer.details.requirements });
-  if (offer.details.salary) embed.addFields({ name: "Salary", value: offer.details.salary });
-  if (offer.details.contact) embed.addFields({ name: "Contact", value: offer.details.contact });
-  embed.addFields({ name: "Author", value: `<@${offer.authorId}>`, inline: true });
-
-  if (offer.rejectionReason) embed.addFields({ name: "Rejection Reason", value: offer.rejectionReason });
-  if (offer.changesNote) embed.addFields({ name: "Changes Requested", value: offer.changesNote });
-
-  return embed;
+  return container(
+    statusAccent[status],
+    text(
+      `## ${offer.details.title}${authorUsername ? ` — ${authorUsername}` : ""}\n${offer.details.description}`,
+    ),
+    separator("sm"),
+    text(extraLines),
+    separator("sm"),
+    text(`-# Offer ID: ${offer._id} | Status: ${status}`),
+  );
 }
 
 // ─── Channel helpers ──────────────────────────────────────────────────────────
@@ -144,14 +144,22 @@ async function getChannels(guildId: string): Promise<{
 export class OfferError extends Error {
   constructor(
     message: string,
-    public readonly code: "ACTIVE_OFFER_EXISTS" | "NOT_FOUND" | "INVALID_STATUS" | "NO_REVIEW_CHANNEL" | "DB_ERROR",
+    public readonly code:
+      | "ACTIVE_OFFER_EXISTS"
+      | "NOT_FOUND"
+      | "INVALID_STATUS"
+      | "NO_REVIEW_CHANNEL"
+      | "DB_ERROR",
   ) {
     super(message);
     this.name = "OfferError";
   }
 }
 
-async function findActiveByAuthor(guildId: string, authorId: string): Promise<Result<Offer | null>> {
+async function findActiveByAuthor(
+  guildId: string,
+  authorId: string,
+): Promise<Result<Offer | null>> {
   try {
     const col = await offerStore.collection();
     const doc = await col.findOne({ guildId, authorId, status: { $in: ACTIVE_STATUSES } } as never);
@@ -201,11 +209,12 @@ export async function createOffer(
   try {
     const reviewChannel = await guild.channels.fetch(reviewChannelId);
     if (reviewChannel?.isTextBased() && "send" in reviewChannel) {
-      const embed = buildOfferEmbed(offer, "PENDING_REVIEW");
-      embed.setAuthor({ name: authorUsername });
-      const msg = await reviewChannel.send({
-        embeds: [embed],
-        components: [buildReviewButtons(id)],
+      // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+      const msg = await (reviewChannel as any).send({
+        ...v2Message(
+          buildOfferContainer(offer, "PENDING_REVIEW", authorUsername),
+          buildReviewButtons(id),
+        ),
       });
       reviewMessageId = msg.id;
     }
@@ -221,9 +230,13 @@ export async function createOffer(
       try {
         const ch = await guild.channels.fetch(reviewChannelId);
         if (ch?.isTextBased() && "messages" in ch) {
-          await (ch as { messages: { delete(id: string): Promise<unknown> } }).messages.delete(reviewMessageId).catch(() => null);
+          await (ch as { messages: { delete(id: string): Promise<unknown> } }).messages
+            .delete(reviewMessageId)
+            .catch(() => null);
         }
-      } catch { /* best-effort */ }
+      } catch {
+        /* best-effort */
+      }
     }
     return ErrResult(saveRes.error);
   }
@@ -254,10 +267,9 @@ export async function approveOffer(
     try {
       const approvedChannel = await guild.channels.fetch(approvedChannelId);
       if (approvedChannel?.isTextBased() && "send" in approvedChannel) {
-        const embed = buildOfferEmbed(offer, "APPROVED");
-        const msg = await approvedChannel.send({
-          content: `<@${offer.authorId}> ✅ Your offer has been approved!`,
-          embeds: [embed],
+        // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+        const msg = await (approvedChannel as any).send({
+          ...v2Message(buildOfferContainer(offer, "APPROVED")),
           allowedMentions: { users: [offer.authorId] },
         });
         publishedMessageId = msg.id;
@@ -284,8 +296,12 @@ export async function approveOffer(
   // DM author
   try {
     const user = await guild.client.users.fetch(offer.authorId);
-    await user.send({ content: `✅ Your offer **${offer.details.title}** has been approved!` }).catch(() => null);
-  } catch { /* best-effort */ }
+    await user
+      .send({ content: `✅ Your offer **${offer.details.title}** has been approved!` })
+      .catch(() => null);
+  } catch {
+    /* best-effort */
+  }
 
   return OkResult(updated);
 }
@@ -318,10 +334,14 @@ export async function rejectOffer(
 
   try {
     const user = await guild.client.users.fetch(offer.authorId);
-    await user.send({
-      content: `❌ Your offer **${offer.details.title}** was rejected.\n**Reason:** ${reason}`,
-    }).catch(() => null);
-  } catch { /* best-effort */ }
+    await user
+      .send({
+        content: `❌ Your offer **${offer.details.title}** was rejected.\n**Reason:** ${reason}`,
+      })
+      .catch(() => null);
+  } catch {
+    /* best-effort */
+  }
 
   return OkResult(updated);
 }
@@ -354,18 +374,19 @@ export async function requestChanges(
 
   try {
     const user = await guild.client.users.fetch(offer.authorId);
-    await user.send({
-      content: `🔄 Changes were requested for your offer **${offer.details.title}**.\n**Note:** ${note}`,
-    }).catch(() => null);
-  } catch { /* best-effort */ }
+    await user
+      .send({
+        content: `🔄 Changes were requested for your offer **${offer.details.title}**.\n**Note:** ${note}`,
+      })
+      .catch(() => null);
+  } catch {
+    /* best-effort */
+  }
 
   return OkResult(updated);
 }
 
-export async function withdrawOffer(
-  guildId: string,
-  authorId: string,
-): Promise<Result<boolean>> {
+export async function withdrawOffer(guildId: string, authorId: string): Promise<Result<boolean>> {
   const res = await findActiveByAuthor(guildId, authorId);
   if (res.isErr()) return ErrResult(res.error);
 
@@ -390,10 +411,17 @@ async function updateReviewMessage(
     const ch = await guild.channels.fetch(offer.reviewChannelId);
     if (!ch?.isTextBased() || !("messages" in ch)) return;
 
-    const embed = buildOfferEmbed({ ...offer, status, rejectionReason: note, changesNote: note }, status);
     await (ch as { messages: { edit(id: string, opts: unknown): Promise<unknown> } }).messages.edit(
       offer.reviewMessageId,
-      { embeds: [embed], components: [buildReviewButtons(offer._id, disabled)] },
+      {
+        ...v2Message(
+          buildOfferContainer(
+            { ...offer, status, rejectionReason: note, changesNote: note },
+            status,
+          ),
+          buildReviewButtons(offer._id, disabled),
+        ),
+      },
     );
   } catch (err) {
     log.error("Failed to update review message", err);

@@ -14,20 +14,19 @@
  *      builds router, generates /features, wires the event bus.
  *   5. Register `interactionCreate` → framework dispatch.
  *   6. Forward Discord events that features want via the bus.
- *   7. Log in. On ready, push slash command definitions via REST.
+ *   7. Log in. On clientReady, push slash command definitions via REST.
  */
 
 import "dotenv/config";
-import { REST, Routes } from "discord.js";
+import { Events, REST, Routes } from "discord.js";
+import { loadContentRegistry } from "@/content/registry";
 import { createClient } from "@/core/client";
 import { disconnectDb } from "@/core/db";
-import { createLogger } from "@/core/logger";
-import { loadContentRegistry } from "@/content/registry";
-import { bootstrapFramework } from "@/framework/bootstrap";
-import { MemberJoined } from "@/events/member-joined";
 import { registerMessageDeleteListener } from "@/core/importantMessages";
+import { createLogger } from "@/core/logger";
+import { MemberJoined } from "@/events/member-joined";
 import { reregisterQueueMessage } from "@/features/moderation/appeals";
-
+import { bootstrapFramework } from "@/framework/bootstrap";
 
 const log = createLogger("bootstrap");
 
@@ -56,7 +55,10 @@ async function bootstrap(): Promise<void> {
   // Discord listener themselves.
   client.on("guildMemberAdd", async (member) => {
     try {
-      await world.bus.emit(new MemberJoined(member.id, member.guild.id), world.forInteraction(null, "framework"));
+      await world.bus.emit(
+        new MemberJoined(member.id, member.guild.id),
+        world.forInteraction(null, "framework"),
+      );
     } catch (err) {
       log.error("Failed to forward guildMemberAdd", err);
     }
@@ -75,12 +77,17 @@ async function bootstrap(): Promise<void> {
   if (!token) throw new Error("TOKEN environment variable is not set.");
   await client.login(token);
 
-  client.once("ready", async (c) => {
+  client.once(Events.ClientReady, async (c) => {
     log.info(`Logged in as ${c.user.tag} (${commands.length} commands loaded)`);
 
     // Re-register appeals queue messages as important for all guilds.
     for (const guild of c.guilds.cache.values()) {
       reregisterQueueMessage(guild).catch(() => null);
+    }
+
+    if (process.env.WEBAPP === "true") {
+      const { startWebApp } = await import("@/webapp/server");
+      await startWebApp(c);
     }
 
     const clientId = process.env.CLIENT_ID ?? c.user.id;

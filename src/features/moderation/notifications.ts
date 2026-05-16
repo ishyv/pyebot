@@ -10,13 +10,20 @@ import type { SanctionType } from "@/db/schemas/user";
 
 function actionLabel(action: SanctionType): string {
   switch (action) {
-    case "BAN":      return "banned";
-    case "KICK":     return "kicked";
-    case "TIMEOUT":  return "timed out";
-    case "WARN":     return "warned";
-    case "RESTRICT": return "restricted";
-    case "PARDON":   return "pardoned";
-    default:         return (action as string).toLowerCase();
+    case "BAN":
+      return "banned";
+    case "KICK":
+      return "kicked";
+    case "TIMEOUT":
+      return "timed out";
+    case "WARN":
+      return "warned";
+    case "RESTRICT":
+      return "restricted";
+    case "PARDON":
+      return "pardoned";
+    default:
+      return (action as string).toLowerCase();
   }
 }
 

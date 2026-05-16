@@ -1,26 +1,25 @@
 import {
-  ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
-  Colors,
-  EmbedBuilder,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
   type ChatInputCommandInteraction,
   type Message,
+  MessageFlags,
+  PermissionFlagsBits,
   type Role,
+  SlashCommandBuilder,
 } from "discord.js";
-import { AutoroleRule, autoroleRuleId, type AutoroleTriggerValue } from "@/components/autorole-rule";
-import type { Ctx } from "@/framework/types";
 import {
-  autoroleButtonId,
-  normalizeEmoji,
-  parseDurationMs,
-} from "@/features/autoroles/rules";
+  AutoroleRule,
+  type AutoroleTriggerValue,
+  autoroleRuleId,
+} from "@/components/autorole-rule";
+import { autoroleButtonId, normalizeEmoji, parseDurationMs } from "@/features/autoroles/rules";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, section, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("autorole")
   .setDescription("Manage automatic role assignment rules")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
@@ -29,7 +28,9 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("create")
       .setDescription("Create a rule")
-      .addStringOption((o) => o.setName("name").setDescription("Unique rule name").setRequired(true))
+      .addStringOption((o) =>
+        o.setName("name").setDescription("Unique rule name").setRequired(true),
+      )
       .addStringOption((o) =>
         o
           .setName("trigger")
@@ -45,7 +46,9 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName("message_id").setDescription("Message ID for reactions"))
       .addStringOption((o) => o.setName("emoji").setDescription("Emoji for reactions, or *"))
       .addStringOption((o) => o.setName("keywords").setDescription("Comma-separated keywords"))
-      .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d")),
+      .addStringOption((o) =>
+        o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
+      ),
   )
   .addSubcommand((sub) =>
     sub
@@ -82,10 +85,14 @@ export const data = new SlashCommandBuilder()
               .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
           )
           .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
-          .addStringOption((o) => o.setName("emoji").setDescription("Reaction emoji").setRequired(true))
+          .addStringOption((o) =>
+            o.setName("emoji").setDescription("Reaction emoji").setRequired(true),
+          )
           .addStringOption((o) => o.setName("title").setDescription("Prompt title"))
           .addStringOption((o) => o.setName("description").setDescription("Prompt text"))
-          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) =>
+            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
+          )
           .addStringOption((o) => o.setName("name").setDescription("Rule name")),
       )
       .addSubcommand((sub) =>
@@ -99,11 +106,15 @@ export const data = new SlashCommandBuilder()
               .setRequired(true)
               .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
           )
-          .addRoleOption((o) => o.setName("role").setDescription("Role to toggle").setRequired(true))
+          .addRoleOption((o) =>
+            o.setName("role").setDescription("Role to toggle").setRequired(true),
+          )
           .addStringOption((o) => o.setName("label").setDescription("Button label"))
           .addStringOption((o) => o.setName("title").setDescription("Prompt title"))
           .addStringOption((o) => o.setName("description").setDescription("Prompt text"))
-          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) =>
+            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
+          )
           .addStringOption((o) => o.setName("name").setDescription("Rule name")),
       ),
   )
@@ -115,25 +126,37 @@ export const data = new SlashCommandBuilder()
         sub
           .setName("reaction")
           .setDescription("Attach a reaction-role rule")
-          .addStringOption((o) => o.setName("message_id").setDescription("Message ID").setRequired(true))
+          .addStringOption((o) =>
+            o.setName("message_id").setDescription("Message ID").setRequired(true),
+          )
           .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
-          .addStringOption((o) => o.setName("emoji").setDescription("Reaction emoji").setRequired(true))
-          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) =>
+            o.setName("emoji").setDescription("Reaction emoji").setRequired(true),
+          )
+          .addStringOption((o) =>
+            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
+          )
           .addStringOption((o) => o.setName("name").setDescription("Rule name")),
       )
       .addSubcommand((sub) =>
         sub
           .setName("button")
           .setDescription("Attach a button self-role rule")
-          .addStringOption((o) => o.setName("message_id").setDescription("Message ID").setRequired(true))
-          .addRoleOption((o) => o.setName("role").setDescription("Role to toggle").setRequired(true))
+          .addStringOption((o) =>
+            o.setName("message_id").setDescription("Message ID").setRequired(true),
+          )
+          .addRoleOption((o) =>
+            o.setName("role").setDescription("Role to toggle").setRequired(true),
+          )
           .addStringOption((o) => o.setName("label").setDescription("Button label"))
-          .addStringOption((o) => o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"))
+          .addStringOption((o) =>
+            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
+          )
           .addStringOption((o) => o.setName("name").setDescription("Rule name")),
       ),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const group = interaction.options.getSubcommandGroup(false);
   const sub = interaction.options.getSubcommand();
 
@@ -179,7 +202,15 @@ async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx):
   const durationMs = parseDurationForReply(interaction);
   if (durationMs === undefined) return;
   await saveRule(ctx, guildId, name, trigger, role.id, durationMs);
-  await interaction.editReply({ embeds: [createdEmbed(name, trigger, role.id, durationMs)] });
+  const summary = [
+    `**Name:** ${name}`,
+    `**Trigger:** ${trigger.type}`,
+    `**Role:** <@&${role.id}>`,
+    `**Duration:** ${durationMs ? formatDuration(durationMs) : "Permanent"}`,
+  ].join("\n");
+  await interaction.editReply(
+    v2Message(container("ok", text(`## Autorole Rule Created\n${summary}`))),
+  );
 }
 
 async function handlePrompt(
@@ -203,13 +234,21 @@ async function handlePrompt(
   const title = interaction.options.getString("title") ?? `Choose ${role.name}`;
   const description =
     interaction.options.getString("description") ?? `Use this prompt to manage <@&${role.id}>.`;
-  const embed = new EmbedBuilder().setColor(Colors.Blue).setTitle(title).setDescription(description);
   const durationMs = parseDurationForReply(interaction);
   if (durationMs === undefined) return;
 
+  /**
+   * Channel prompt messages use V2 containers so they match the rest of the bot
+   * UI. The `components` array is cast at the send/edit boundary because discord.js
+   * types don't yet include ContainerBuilder in MessageCreateOptions/MessageEditOptions.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in discord.js MessageCreateOptions types.
+  const message = await channel.send(
+    v2Message(container("info", text(`## ${title}\n${description}`))) as any,
+  );
+
   if (sub === "reaction") {
     const emojiInput = interaction.options.getString("emoji", true);
-    const message = await channel.send({ embeds: [embed] });
     await message.react(emojiInput).catch(() => null);
     const name = interaction.options.getString("name") ?? `reaction-${message.id}-${role.id}`;
     await saveRule(
@@ -225,16 +264,24 @@ async function handlePrompt(
   }
 
   const label = interaction.options.getString("label") ?? role.name;
-  const message = await channel.send({ embeds: [embed] });
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(autoroleButtonId(message.id, role.id))
-      .setLabel(label)
-      .setStyle(ButtonStyle.Primary),
-  );
-  await message.edit({ components: [row] });
   const name = interaction.options.getString("name") ?? `button-${message.id}-${role.id}`;
-  await saveRule(ctx, guildId, name, { type: "onButton", messageId: message.id, label }, role.id, durationMs);
+  const selfRoleButton = new ButtonBuilder()
+    .setCustomId(autoroleButtonId(message.id, role.id))
+    .setLabel(label)
+    .setStyle(ButtonStyle.Primary);
+  // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in discord.js MessageEditOptions types.
+  await message.edit({
+    components: [container("info", section(`## ${title}\n${description}`, selfRoleButton))] as any,
+    flags: MessageFlags.IsComponentsV2,
+  });
+  await saveRule(
+    ctx,
+    guildId,
+    name,
+    { type: "onButton", messageId: message.id, label },
+    role.id,
+    durationMs,
+  );
   await interaction.editReply({ content: `Button role prompt posted: ${message.url}` });
 }
 
@@ -313,9 +360,9 @@ async function handleList(interaction: ChatInputCommandInteraction, ctx: Ctx): P
     return `${rule.enabled ? "On" : "Off"} **${rule.name}** -> <@&${rule.roleId}> (${trigger}${duration})`;
   });
 
-  await interaction.editReply({
-    embeds: [new EmbedBuilder().setColor(Colors.Blue).setTitle("Autorole Rules").setDescription(lines.join("\n"))],
-  });
+  await interaction.editReply(
+    v2Message(container("info", text(`## Autorole Rules\n${lines.join("\n")}`))),
+  );
 }
 
 async function handleToggle(
@@ -335,7 +382,9 @@ async function handleToggle(
     return;
   }
   await ctx.patch(id, AutoroleRule, { enabled });
-  await interaction.editReply({ content: `Rule **${name}** is now ${enabled ? "enabled" : "disabled"}.` });
+  await interaction.editReply({
+    content: `Rule **${name}** is now ${enabled ? "enabled" : "disabled"}.`,
+  });
 }
 
 async function saveRule(
@@ -367,16 +416,21 @@ function requireGuild(interaction: ChatInputCommandInteraction): string | null {
   return null;
 }
 
-async function requireManageableRole(interaction: ChatInputCommandInteraction): Promise<Role | null> {
+async function requireManageableRole(
+  interaction: ChatInputCommandInteraction,
+): Promise<Role | null> {
   const selected = interaction.options.getRole("role", true);
   const role = await interaction.guild?.roles.fetch(selected.id);
-  const me = interaction.guild?.members.me ?? await interaction.guild?.members.fetchMe().catch(() => null);
+  const me =
+    interaction.guild?.members.me ?? (await interaction.guild?.members.fetchMe().catch(() => null));
   if (!role || !me) {
     await interaction.editReply({ content: "I could not resolve that role or my member record." });
     return null;
   }
   if (role.managed) {
-    await interaction.editReply({ content: "Managed integration roles cannot be assigned by autoroles." });
+    await interaction.editReply({
+      content: "Managed integration roles cannot be assigned by autoroles.",
+    });
     return null;
   }
   if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
@@ -392,7 +446,8 @@ async function requireManageableRole(interaction: ChatInputCommandInteraction): 
 
 type PromptChannel = {
   isTextBased(): boolean;
-  send(payload: { embeds: EmbedBuilder[] }): Promise<Message>;
+  // biome-ignore lint/suspicious/noExplicitAny: V2 payload is valid at runtime; discord.js types lag behind.
+  send(payload: any): Promise<Message>;
 };
 
 function canSend(channel: unknown): channel is PromptChannel {
@@ -414,7 +469,9 @@ function parseKeywords(value: string | null): string[] {
     .filter(Boolean);
 }
 
-function parseDurationForReply(interaction: ChatInputCommandInteraction): number | null | undefined {
+function parseDurationForReply(
+  interaction: ChatInputCommandInteraction,
+): number | null | undefined {
   try {
     return parseDurationMs(interaction.options.getString("duration"));
   } catch (error) {
@@ -424,25 +481,14 @@ function parseDurationForReply(interaction: ChatInputCommandInteraction): number
   }
 }
 
-function createdEmbed(
-  name: string,
-  trigger: AutoroleTriggerValue,
-  roleId: string,
-  durationMs: number | null,
-): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle("Autorole Rule Created")
-    .addFields(
-      { name: "Name", value: name, inline: true },
-      { name: "Trigger", value: trigger.type, inline: true },
-      { name: "Role", value: `<@&${roleId}>`, inline: true },
-      { name: "Duration", value: durationMs ? formatDuration(durationMs) : "Permanent", inline: true },
-    );
-}
-
 function formatDuration(ms: number): string {
   if (ms % (24 * 60 * 60_000) === 0) return `${ms / (24 * 60 * 60_000)}d`;
   if (ms % (60 * 60_000) === 0) return `${ms / (60 * 60_000)}h`;
   return `${ms / 60_000}m`;
 }
+
+export default defineCommand({
+  data,
+  help: { hints: [] },
+  execute,
+});

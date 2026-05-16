@@ -1,9 +1,9 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 @config '../tailwind.config.js';
 
-@import '@hyvnt/hyvui/styles.css';
+@import "@hyvnt/hyvui/styles.css";
 
 @theme {
 	--color-bg: var(--bg);

@@ -22,6 +22,7 @@ import {
   type ChatInputCommandInteraction,
   MessageFlags,
   ModalBuilder,
+  PermissionFlagsBits,
   RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
@@ -44,10 +45,18 @@ import {
   type GuildRoleRecord,
   type RoleCommandOverride,
   type RoleLimitRecord,
+  type TempRoleAccessRule,
+  type TempRoleMessageRule,
 } from "@/db/schemas/guild";
 import { aiConfig } from "@/features/ai/config";
 import { invalidatePatternCache } from "@/features/automod/service";
-import { Colors } from "@/utils/embeds";
+import {
+  accessOverwritePreview,
+  formatTempRoleAccessRule,
+  formatTempRoleMessageRule,
+  formatTempRolePolicyReview,
+  parseDurationSeconds,
+} from "./newUsersPolicy";
 import {
   makePanelCustomId,
   openPanelFromCommand,
@@ -55,7 +64,7 @@ import {
   type PanelId,
   type PanelPayload,
   type PanelState,
-  panelEmbed,
+  panelContainer,
   panelSessions,
   parsePanelCustomId,
   replyPanelError,
@@ -101,6 +110,20 @@ const AUTOMOD_SECTIONS = [
   "shorteners",
 ] as const;
 type AutomodSection = (typeof AUTOMOD_SECTIONS)[number];
+const NEW_USERS_SECTIONS = ["setup", "messageRules", "accessRules", "review"] as const;
+type NewUsersSection = (typeof NEW_USERS_SECTIONS)[number];
+const TEMP_ROLE_RULE_KINDS = [
+  "links",
+  "media",
+  "mentions",
+  "invites",
+  "repeatedText",
+  "caps",
+  "crossChannel",
+  "shortLinks",
+  "regex",
+] as const;
+type TempRoleRuleKind = (typeof TEMP_ROLE_RULE_KINDS)[number];
 const MODERATION_CHANNEL_FIELDS = [
   { value: "moderation.modLogChannelId", label: "Mod log channel" },
   { value: "moderation.appealsChannelId", label: "Appeals channel" },
@@ -193,8 +216,8 @@ export async function handlePanelInteraction(interaction: ComponentInteraction):
   if (parsed.action === "close") {
     panelSessions.delete(session.id);
     await updatePanelMessage(interaction, {
-      embeds: [panelEmbed({ title: "Panel closed", color: Colors.neutral as number })],
-      components: [],
+      container: panelContainer({ title: "Panel closed", accent: "mute" }),
+      actionRows: [],
     });
     return;
   }
@@ -230,6 +253,8 @@ async function renderPanelBody(session: PanelState, cfg: GuildConfig): Promise<P
       return renderModerationPanel(session, cfg);
     case "automod":
       return renderAutomodPanel(session, cfg);
+    case "new-users":
+      return renderNewUsersPanel(session, cfg);
     case "roles":
       return renderRolesPanel(session, cfg);
     case "autoroles":
@@ -280,21 +305,24 @@ function renderHomePanel(_session: PanelState, cfg: GuildConfig): PanelPayload {
       inline: true,
     },
     {
+      name: "New users",
+      value: `${yesNo(cfg.automod.tempRolePolicies.recentlyJoined.enabled)}\nRole: ${roleMention(cfg.automod.tempRolePolicies.recentlyJoined.roleId)}`,
+      inline: true,
+    },
+    {
       name: "Economy",
       value: `Daily ${cfg.economy.daily.dailyReward} ${cfg.economy.daily.dailyCurrencyId}\nWork cap ${cfg.economy.work.workDailyCap}/day`,
       inline: true,
     },
   ];
   return {
-    embeds: [
-      panelEmbed({
-        title: "Admin Dashboard",
-        description: "Choose a panel below. All controls in this session are private to you.",
-        fields,
-        footer: "Ephemeral admin session expires after 5 minutes of inactivity.",
-      }),
-    ],
-    components: [],
+    container: panelContainer({
+      title: "Admin Dashboard",
+      description: "Choose a panel below. All controls in this session are private to you.",
+      fields,
+      footer: "Ephemeral admin session expires after 5 minutes of inactivity.",
+    }),
+    actionRows: [],
   };
 }
 
@@ -352,20 +380,18 @@ function renderChannelsPanel(session: PanelState, cfg: GuildConfig): PanelPayloa
         ),
     );
   return {
-    embeds: [
-      panelEmbed({
-        title: "Channels Panel",
-        description: `Selected core slot: **${session.selectedChannelSlot ?? "none"}**\nPending managed channel: ${channelMention(session.pendingManagedChannelId)}`,
-        fields: [
-          { name: "Core channels", value: limitText(coreLines.join("\n"), 1000) },
-          {
-            name: "Managed channels",
-            value: limitText(managed.length ? managed.join("\n") : "Nothing configured.", 1000),
-          },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Channels Panel",
+      description: `Selected core slot: **${session.selectedChannelSlot ?? "none"}**\nPending managed channel: ${channelMention(session.pendingManagedChannelId)}`,
+      fields: [
+        { name: "Core channels", value: limitText(coreLines.join("\n"), 1000) },
+        {
+          name: "Managed channels",
+          value: limitText(managed.length ? managed.join("\n") : "Nothing configured.", 1000),
+        },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(slotSelect),
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channelSelect),
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(managedChannelSelect),
@@ -389,17 +415,15 @@ function renderFeaturesPanel(session: PanelState, cfg: GuildConfig): PanelPayloa
       ),
     );
   return {
-    embeds: [
-      panelEmbed({
-        title: "Features Panel",
-        fields: Object.entries(flags).map(([name, enabled]) => ({
-          name,
-          value: yesNo(enabled),
-          inline: true,
-        })),
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Features Panel",
+      fields: Object.entries(flags).map(([name, enabled]) => ({
+        name,
+        value: yesNo(enabled),
+        inline: true,
+      })),
+    }),
+    actionRows: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(featureSelect),
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -466,22 +490,20 @@ export function renderFeatureConfigPanel(
   }
 
   return {
-    embeds: [
-      panelEmbed({
-        title: "Feature Config Panel",
-        description: selectedFeature
-          ? `Selected feature: **${selectedFeature.id}**\nSelected field: **${selectedField?.label ?? "none"}**`
-          : "No configurable features are currently loaded.",
-        fields: fields.length
-          ? fields.map((field) => ({
-              name: field.label,
-              value: `${formatFeatureConfigValue(field, getConfigPathValue(cfg, field.path))}\nPath: \`${field.path}\``,
-              inline: true,
-            }))
-          : [{ name: "Fields", value: "No declared config fields.", inline: false }],
-      }),
-    ],
-    components,
+    container: panelContainer({
+      title: "Feature Config Panel",
+      description: selectedFeature
+        ? `Selected feature: **${selectedFeature.id}**\nSelected field: **${selectedField?.label ?? "none"}**`
+        : "No configurable features are currently loaded.",
+      fields: fields.length
+        ? fields.map((field) => ({
+            name: field.label,
+            value: `${formatFeatureConfigValue(field, getConfigPathValue(cfg, field.path))}\nPath: \`${field.path}\``,
+            inline: true,
+          }))
+        : [{ name: "Fields", value: "No declared config fields.", inline: false }],
+    }),
+    actionRows: components,
   };
 }
 
@@ -600,40 +622,38 @@ function renderModerationPanel(session: PanelState, cfg: GuildConfig): PanelPayl
       ),
     );
   return {
-    embeds: [
-      panelEmbed({
-        title: "Moderation Panel",
-        description: `Selected field: **${session.selectedModerationField ?? "none"}**`,
-        fields: [
-          {
-            name: "Channels",
-            value: [
-              `Mod log: ${channelMention(mod.modLogChannelId)}`,
-              `Appeals: ${channelMention(mod.appealsChannelId)}`,
-              `Quarantine: ${channelMention(mod.quarantine.channelId)}`,
-              `Verification: ${channelMention(mod.verification.channelId)}`,
-            ].join("\n"),
-          },
-          {
-            name: "Escalation",
-            value: `${yesNo(mod.escalation.enabled)} - ${mod.escalation.thresholds.length} threshold(s)`,
-            inline: true,
-          },
-          {
-            name: "Quarantine",
-            value: `${yesNo(mod.quarantine.enabled)}\nRole: ${roleMention(mod.quarantine.roleId)}`,
-            inline: true,
-          },
-          {
-            name: "Verification",
-            value: `${yesNo(mod.verification.enabled)}\nMode: ${mod.verification.mode}\nRole: ${roleMention(mod.verification.roleId)}\nMin age: ${mod.verification.minAccountAgeDays}d`,
-            inline: true,
-          },
-          { name: "Alt detection", value: yesNo(mod.altDetectionEnabled), inline: true },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Moderation Panel",
+      description: `Selected field: **${session.selectedModerationField ?? "none"}**`,
+      fields: [
+        {
+          name: "Channels",
+          value: [
+            `Mod log: ${channelMention(mod.modLogChannelId)}`,
+            `Appeals: ${channelMention(mod.appealsChannelId)}`,
+            `Quarantine: ${channelMention(mod.quarantine.channelId)}`,
+            `Verification: ${channelMention(mod.verification.channelId)}`,
+          ].join("\n"),
+        },
+        {
+          name: "Escalation",
+          value: `${yesNo(mod.escalation.enabled)} - ${mod.escalation.thresholds.length} threshold(s)`,
+          inline: true,
+        },
+        {
+          name: "Quarantine",
+          value: `${yesNo(mod.quarantine.enabled)}\nRole: ${roleMention(mod.quarantine.roleId)}`,
+          inline: true,
+        },
+        {
+          name: "Verification",
+          value: `${yesNo(mod.verification.enabled)}\nMode: ${mod.verification.mode}\nRole: ${roleMention(mod.verification.roleId)}\nMin age: ${mod.verification.minAccountAgeDays}d`,
+          inline: true,
+        },
+        { name: "Alt detection", value: yesNo(mod.altDetectionEnabled), inline: true },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(fieldSelect),
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
         new ChannelSelectMenuBuilder()
@@ -702,22 +722,20 @@ export function renderAutomodPanel(session: PanelState, cfg: GuildConfig): Panel
       }),
     );
   return {
-    embeds: [
-      panelEmbed({
-        title: "Automod Panel",
-        description: [
-          `Editing **${automodSectionLabel(section)}**.`,
-          "Use the menu to switch protections, then configure the selected section below.",
-        ].join("\n"),
-        fields: [
-          automodPolicyField(cfg),
-          automodSelectedField(section, cfg),
-          automodCoverageField(cfg),
-          automodPatternsField(cfg),
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Automod Panel",
+      description: [
+        `Editing **${automodSectionLabel(section)}**.`,
+        "Use the menu to switch protections, then configure the selected section below.",
+      ].join("\n"),
+      fields: [
+        automodPolicyField(cfg),
+        automodSelectedField(section, cfg),
+        automodCoverageField(cfg),
+        automodPatternsField(cfg),
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(sectionSelect),
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
         new ChannelSelectMenuBuilder()
@@ -959,6 +977,247 @@ function automodPatternsField(cfg: GuildConfig): APIEmbedField {
   };
 }
 
+function selectedNewUsersSection(session: PanelState): NewUsersSection {
+  return NEW_USERS_SECTIONS.includes(session.selectedNewUsersSection as NewUsersSection)
+    ? (session.selectedNewUsersSection as NewUsersSection)
+    : "setup";
+}
+
+function tempRoleRuleKindLabel(kind: TempRoleRuleKind): string {
+  const labels: Record<TempRoleRuleKind, string> = {
+    links: "Links",
+    media: "Media",
+    mentions: "Mentions",
+    invites: "Invites",
+    repeatedText: "Repeated text",
+    caps: "Caps",
+    crossChannel: "Cross-channel spam",
+    shortLinks: "Short links",
+    regex: "Regex",
+  };
+  return labels[kind];
+}
+
+function renderNewUsersPanel(session: PanelState, cfg: GuildConfig): PanelPayload {
+  const section = selectedNewUsersSection(session);
+  const policy = cfg.automod.tempRolePolicies.recentlyJoined;
+  const sectionSelect = new StringSelectMenuBuilder()
+    .setCustomId(makePanelCustomId(session, "new-users", "section"))
+    .setPlaceholder("Choose setup step")
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Setup")
+        .setDescription("Role, duration, assignment, reports")
+        .setValue("setup")
+        .setDefault(section === "setup"),
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Message rules")
+        .setDescription("Links, media, mentions, invites, regex")
+        .setValue("messageRules")
+        .setDefault(section === "messageRules"),
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Access blocklist")
+        .setDescription("Block view/send in channels or categories")
+        .setValue("accessRules")
+        .setDefault(section === "accessRules"),
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Review")
+        .setDescription("Plain-language policy summary")
+        .setValue("review")
+        .setDefault(section === "review"),
+    );
+
+  return {
+    container: panelContainer({
+      title: "New Users Panel",
+      description: `Editing **${section}** for the Recently Joined policy.`,
+      fields: [
+        { name: "Setup", value: newUsersSetupSummary(policy), inline: false },
+        {
+          name: "Message rules",
+          value: policy.messageRules.length
+            ? limitText(
+                policy.messageRules.slice(0, 6).map(formatTempRoleMessageRule).join("\n"),
+                1000,
+              )
+            : "No message rules configured.",
+        },
+        {
+          name: "Access blocklist",
+          value: policy.accessRules.length
+            ? limitText(
+                policy.accessRules.slice(0, 6).map(formatTempRoleAccessRule).join("\n"),
+                1000,
+              )
+            : "No access blocklist rules configured.",
+        },
+        {
+          name: "Review",
+          value: limitText(
+            `${formatTempRolePolicyReview(policy)}\n${accessOverwritePreview(policy)}`,
+            1000,
+          ),
+        },
+      ],
+    }),
+    actionRows: [
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(sectionSelect),
+      ...newUsersSectionRows(session, section),
+    ],
+  };
+}
+
+function newUsersSetupSummary(
+  policy: GuildConfig["automod"]["tempRolePolicies"]["recentlyJoined"],
+): string {
+  return [
+    `Status: **${yesNo(policy.enabled)}**`,
+    `Role: ${roleMention(policy.roleId)}`,
+    `Duration: **${policy.durationSeconds}s**`,
+    `Assign to accounts up to **${policy.maxAccountAgeDays}d** old`,
+    `Skip roles: **${policy.skipRoleIds.length}**`,
+    `Reports: ${channelMention(policy.reportChannelId)}`,
+  ].join("\n");
+}
+
+function newUsersSectionRows(session: PanelState, section: NewUsersSection): PanelActionRow[] {
+  if (section === "setup") {
+    return [
+      new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
+        new RoleSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "role"))
+          .setPlaceholder("Set Recently Joined role")
+          .setMinValues(1)
+          .setMaxValues(1),
+      ),
+      new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
+        new RoleSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "skip-roles"))
+          .setPlaceholder("Set trusted/verified skip roles")
+          .setMinValues(0)
+          .setMaxValues(10),
+      ),
+      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "report-channel"))
+          .setPlaceholder("Set report channel")
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setMinValues(1)
+          .setMaxValues(1),
+      ),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "toggle"))
+          .setLabel("Toggle")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "setup-modal"))
+          .setLabel("Set timing")
+          .setStyle(ButtonStyle.Primary),
+      ),
+    ];
+  }
+
+  if (section === "messageRules") {
+    return [
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "rule-kind"))
+          .setPlaceholder("What should this rule watch?")
+          .addOptions(
+            TEMP_ROLE_RULE_KINDS.map((kind) =>
+              new StringSelectMenuOptionBuilder()
+                .setLabel(tempRoleRuleKindLabel(kind))
+                .setValue(kind)
+                .setDefault((session.selectedNewUsersRuleKind ?? "links") === kind),
+            ),
+          ),
+      ),
+      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "scope"))
+          .setPlaceholder("Where should the rule apply? Empty means server-wide")
+          .addChannelTypes(
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement,
+            ChannelType.GuildForum,
+            ChannelType.GuildMedia,
+            ChannelType.GuildCategory,
+          )
+          .setMinValues(0)
+          .setMaxValues(10),
+      ),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "message-rule-modal"))
+          .setLabel("Add rule")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "clear-message-rules"))
+          .setLabel("Clear rules")
+          .setStyle(ButtonStyle.Danger),
+      ),
+    ];
+  }
+
+  if (section === "accessRules") {
+    return [
+      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "access-targets"))
+          .setPlaceholder("Choose channels/categories to block")
+          .addChannelTypes(
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement,
+            ChannelType.GuildForum,
+            ChannelType.GuildMedia,
+            ChannelType.GuildCategory,
+          )
+          .setMinValues(1)
+          .setMaxValues(10),
+      ),
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "access-mode"))
+          .setPlaceholder("Choose block type")
+          .addOptions(
+            new StringSelectMenuOptionBuilder()
+              .setLabel("Block sending")
+              .setValue("send")
+              .setDefault(session.selectedNewUsersAccessMode === "send"),
+            new StringSelectMenuOptionBuilder()
+              .setLabel("Block viewing")
+              .setValue("view")
+              .setDefault(session.selectedNewUsersAccessMode === "view"),
+          ),
+      ),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "add-access-rule"))
+          .setLabel("Add block")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "apply-access"))
+          .setLabel("Apply overwrites")
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "new-users", "clear-access-rules"))
+          .setLabel("Clear blocks")
+          .setStyle(ButtonStyle.Danger),
+      ),
+    ];
+  }
+
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(makePanelCustomId(session, "new-users", "apply-access"))
+        .setLabel("Apply access preview")
+        .setStyle(ButtonStyle.Danger),
+    ),
+  ];
+}
+
 async function renderRolesPanel(session: PanelState, cfg: GuildConfig): Promise<PanelPayload> {
   const roles = Object.entries(cfg.roles);
   const selected = session.selectedRoleIds;
@@ -971,44 +1230,42 @@ async function renderRolesPanel(session: PanelState, cfg: GuildConfig): Promise<
     return `<@&${roleId}> - ${formatOverride(override)} - ${formatLimit(limit)}`;
   });
   return {
-    embeds: [
-      panelEmbed({
-        title: "Role Moderation Panel",
-        description: [
-          `Selected action: **${action}**`,
-          `Selected roles: ${selected.length ? selected.map((id) => `<@&${id}>`).join(", ") : "none"}`,
-        ].join("\n"),
-        fields: [
-          {
-            name: "Managed roles",
-            value: roles.length
-              ? limitText(
-                  roles
-                    .map(
-                      ([key, role]) =>
-                        `**${role.label}** (${key}) - ${roleMention(role.discordRoleId)}`,
-                    )
-                    .join("\n"),
-                  1000,
-                )
-              : "No managed roles yet.",
-          },
-          {
-            name: "Selected policy",
-            value: selectedSummaries.length
-              ? selectedSummaries.join("\n")
-              : "Select roles to manage.",
-          },
-          {
-            name: "Role performance",
-            value: performanceLines.length
-              ? performanceLines.join("\n")
-              : "No post-panel moderation actions recorded for the selected roles.",
-          },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Role Moderation Panel",
+      description: [
+        `Selected action: **${action}**`,
+        `Selected roles: ${selected.length ? selected.map((id) => `<@&${id}>`).join(", ") : "none"}`,
+      ].join("\n"),
+      fields: [
+        {
+          name: "Managed roles",
+          value: roles.length
+            ? limitText(
+                roles
+                  .map(
+                    ([key, role]) =>
+                      `**${role.label}** (${key}) - ${roleMention(role.discordRoleId)}`,
+                  )
+                  .join("\n"),
+                1000,
+              )
+            : "No managed roles yet.",
+        },
+        {
+          name: "Selected policy",
+          value: selectedSummaries.length
+            ? selectedSummaries.join("\n")
+            : "Select roles to manage.",
+        },
+        {
+          name: "Role performance",
+          value: performanceLines.length
+            ? performanceLines.join("\n")
+            : "No post-panel moderation actions recorded for the selected roles.",
+        },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
         new RoleSelectMenuBuilder()
           .setCustomId(makePanelCustomId(session, "roles", "select-roles"))
@@ -1064,18 +1321,16 @@ async function renderRolesPanel(session: PanelState, cfg: GuildConfig): Promise<
 async function renderAutorolesPanel(session: PanelState): Promise<PanelPayload> {
   void session;
   return {
-    embeds: [
-      panelEmbed({
-        title: "Autoroles Panel",
-        fields: [
-          {
-            name: "Configuration",
-            value: "Use `/autorole list` and `/autorole enable|disable` for v2 autorole rules.",
-          },
-        ],
-      }),
-    ],
-    components: [],
+    container: panelContainer({
+      title: "Autoroles Panel",
+      fields: [
+        {
+          name: "Configuration",
+          value: "Use `/autorole list` and `/autorole enable|disable` for v2 autorole rules.",
+        },
+      ],
+    }),
+    actionRows: [],
   };
 }
 
@@ -1148,14 +1403,12 @@ function renderChannelPairPanel(
     .setMinValues(1)
     .setMaxValues(1);
   return {
-    embeds: [
-      panelEmbed({
-        title,
-        description: `Selected field: **${selectedField ?? "none"}**`,
-        fields: embedFields,
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title,
+      description: `Selected field: **${selectedField ?? "none"}**`,
+      fields: embedFields,
+    }),
+    actionRows: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(fieldSelect),
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channelSelect),
     ],
@@ -1168,21 +1421,19 @@ function renderAiPanel(session: PanelState, cfg: GuildConfig): PanelPayload {
     ...Object.values(aiConfig.providers.google),
   ].slice(0, 25);
   return {
-    embeds: [
-      panelEmbed({
-        title: "AI Panel",
-        fields: [
-          { name: "Provider", value: cfg.ai.provider, inline: true },
-          { name: "Model", value: `\`${cfg.ai.model}\``, inline: true },
-          {
-            name: "Rate limits",
-            value: `${cfg.ai.rateLimit.perUserPerMinute}/user/min\n${cfg.ai.rateLimit.perGuildPerMinute}/guild/min`,
-            inline: true,
-          },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "AI Panel",
+      fields: [
+        { name: "Provider", value: cfg.ai.provider, inline: true },
+        { name: "Model", value: `\`${cfg.ai.model}\``, inline: true },
+        {
+          name: "Rate limits",
+          value: `${cfg.ai.rateLimit.perUserPerMinute}/user/min\n${cfg.ai.rateLimit.perGuildPerMinute}/guild/min`,
+          inline: true,
+        },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId(makePanelCustomId(session, "ai", "provider"))
@@ -1224,44 +1475,42 @@ function renderAiPanel(session: PanelState, cfg: GuildConfig): PanelPayload {
 function renderEconomyPanel(session: PanelState, cfg: GuildConfig): PanelPayload {
   const features = cfg.economy.features;
   return {
-    embeds: [
-      panelEmbed({
-        title: "Economy Panel",
-        fields: [
-          {
-            name: "Daily",
-            value: `${cfg.economy.daily.dailyReward} ${cfg.economy.daily.dailyCurrencyId}\nCooldown ${cfg.economy.daily.dailyCooldownHours}h\nFee ${(cfg.economy.daily.dailyFeeRate * 100).toFixed(2)}%`,
-            inline: true,
-          },
-          {
-            name: "Work",
-            value: `Base ${cfg.economy.work.workBaseMintReward}\nBonus max ${cfg.economy.work.workBonusFromWorksMax}\nCooldown ${cfg.economy.work.workCooldownMinutes}m\nCap ${cfg.economy.work.workDailyCap}`,
-            inline: true,
-          },
-          {
-            name: "Tax",
-            value: `${yesNo(cfg.economy.tax.enabled)}\nRate ${(cfg.economy.tax.rate * 100).toFixed(1)}%\nMin ${cfg.economy.tax.minimumTaxableAmount}`,
-            inline: true,
-          },
-          {
-            name: "Sectors",
-            value:
-              Object.entries(cfg.economy.sectors ?? {})
-                .map(([name, value]) => `${name}: ${value}`)
-                .join("\n") || "None",
-            inline: true,
-          },
-          {
-            name: "Features",
-            value: Object.entries(features)
-              .map(([name, enabled]) => `${name}: ${yesNo(enabled)}`)
-              .join("\n"),
-            inline: true,
-          },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Economy Panel",
+      fields: [
+        {
+          name: "Daily",
+          value: `${cfg.economy.daily.dailyReward} ${cfg.economy.daily.dailyCurrencyId}\nCooldown ${cfg.economy.daily.dailyCooldownHours}h\nFee ${(cfg.economy.daily.dailyFeeRate * 100).toFixed(2)}%`,
+          inline: true,
+        },
+        {
+          name: "Work",
+          value: `Base ${cfg.economy.work.workBaseMintReward}\nBonus max ${cfg.economy.work.workBonusFromWorksMax}\nCooldown ${cfg.economy.work.workCooldownMinutes}m\nCap ${cfg.economy.work.workDailyCap}`,
+          inline: true,
+        },
+        {
+          name: "Tax",
+          value: `${yesNo(cfg.economy.tax.enabled)}\nRate ${(cfg.economy.tax.rate * 100).toFixed(1)}%\nMin ${cfg.economy.tax.minimumTaxableAmount}`,
+          inline: true,
+        },
+        {
+          name: "Sectors",
+          value:
+            Object.entries(cfg.economy.sectors ?? {})
+              .map(([name, value]) => `${name}: ${value}`)
+              .join("\n") || "None",
+          inline: true,
+        },
+        {
+          name: "Features",
+          value: Object.entries(features)
+            .map(([name, enabled]) => `${name}: ${yesNo(enabled)}`)
+            .join("\n"),
+          inline: true,
+        },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId(makePanelCustomId(session, "economy", "feature-toggle"))
@@ -1295,26 +1544,24 @@ function renderEconomyPanel(session: PanelState, cfg: GuildConfig): PanelPayload
 
 function renderReputationPanel(session: PanelState, cfg: GuildConfig): PanelPayload {
   return {
-    embeds: [
-      panelEmbed({
-        title: "Reputation Panel",
-        fields: [
-          { name: "Detection", value: yesNo(cfg.reputation.detectionEnabled), inline: true },
-          {
-            name: "Request channel",
-            value: channelMention(
-              cfg.reputation.requestChannelId ?? coreChannelValue(cfg, "repRequests"),
-            ),
-            inline: true,
-          },
-          {
-            name: "Keywords",
-            value: cfg.reputation.keywords.length ? cfg.reputation.keywords.join(", ") : "None",
-          },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Reputation Panel",
+      fields: [
+        { name: "Detection", value: yesNo(cfg.reputation.detectionEnabled), inline: true },
+        {
+          name: "Request channel",
+          value: channelMention(
+            cfg.reputation.requestChannelId ?? coreChannelValue(cfg, "repRequests"),
+          ),
+          inline: true,
+        },
+        {
+          name: "Keywords",
+          value: cfg.reputation.keywords.length ? cfg.reputation.keywords.join(", ") : "None",
+        },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
         new ChannelSelectMenuBuilder()
           .setCustomId(makePanelCustomId(session, "reputation", "channel"))
@@ -1338,21 +1585,19 @@ function renderReputationPanel(session: PanelState, cfg: GuildConfig): PanelPayl
 
 function renderForumsPanel(session: PanelState, cfg: GuildConfig): PanelPayload {
   return {
-    embeds: [
-      panelEmbed({
-        title: "Forums Panel",
-        fields: [
-          { name: "Auto-reply", value: yesNo(cfg.forumAutoReply.enabled), inline: true },
-          {
-            name: "Forums",
-            value: cfg.forumAutoReply.forumIds.length
-              ? cfg.forumAutoReply.forumIds.map((id) => `<#${id}>`).join("\n")
-              : "None",
-          },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Forums Panel",
+      fields: [
+        { name: "Auto-reply", value: yesNo(cfg.forumAutoReply.enabled), inline: true },
+        {
+          name: "Forums",
+          value: cfg.forumAutoReply.forumIds.length
+            ? cfg.forumAutoReply.forumIds.map((id) => `<#${id}>`).join("\n")
+            : "None",
+        },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
         new ChannelSelectMenuBuilder()
           .setCustomId(makePanelCustomId(session, "forums", "channels"))
@@ -1377,21 +1622,19 @@ function renderForumsPanel(session: PanelState, cfg: GuildConfig): PanelPayload 
 
 function renderTopsPanel(session: PanelState, cfg: GuildConfig): PanelPayload {
   return {
-    embeds: [
-      panelEmbed({
-        title: "Tops Panel",
-        fields: [
-          { name: "Enabled", value: yesNo(cfg.tops.enabled), inline: true },
-          { name: "Channel", value: channelMention(cfg.tops.channelId), inline: true },
-          {
-            name: "Cadence",
-            value: `Every ${cfg.tops.intervalHours}h\nTop ${cfg.tops.topSize}`,
-            inline: true,
-          },
-        ],
-      }),
-    ],
-    components: [
+    container: panelContainer({
+      title: "Tops Panel",
+      fields: [
+        { name: "Enabled", value: yesNo(cfg.tops.enabled), inline: true },
+        { name: "Channel", value: channelMention(cfg.tops.channelId), inline: true },
+        {
+          name: "Cadence",
+          value: `Every ${cfg.tops.intervalHours}h\nTop ${cfg.tops.topSize}`,
+          inline: true,
+        },
+      ],
+    }),
+    actionRows: [
       new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
         new ChannelSelectMenuBuilder()
           .setCustomId(makePanelCustomId(session, "tops", "channel"))
@@ -1430,6 +1673,7 @@ async function applyPanelAction(
   if (panelId === "feature-config") return applyFeatureConfigAction(interaction, session, action);
   if (panelId === "moderation") return applyModerationAction(interaction, session, action);
   if (panelId === "automod") return applyAutomodAction(interaction, session, action);
+  if (panelId === "new-users") return applyNewUsersAction(interaction, session, action);
   if (panelId === "roles") return applyRolesAction(interaction, session, action);
   if (panelId === "autoroles") return applyAutorolesAction(session, action);
   if (panelId === "tickets") return applyTicketsAction(interaction, session, action);
@@ -1813,6 +2057,233 @@ async function applyAutomodAction(
     invalidatePatternCache(session.guildId);
   }
   return true;
+}
+
+async function applyNewUsersAction(
+  interaction: ComponentInteraction,
+  session: PanelState,
+  action: string,
+): Promise<boolean> {
+  const cfg = await loadGuildConfig(session.guildId);
+  const policy = cfg.automod.tempRolePolicies.recentlyJoined;
+  const base = "automod.tempRolePolicies.recentlyJoined";
+
+  if (interaction.isStringSelectMenu() && action === "section") {
+    session.selectedNewUsersSection = interaction.values[0];
+    return true;
+  }
+  if (interaction.isRoleSelectMenu() && action === "role") {
+    await updateGuildPaths(
+      session.guildId,
+      { [`${base}.roleId`]: interaction.values[0] },
+      { upsert: true },
+    );
+    return true;
+  }
+  if (interaction.isRoleSelectMenu() && action === "skip-roles") {
+    await updateGuildPaths(
+      session.guildId,
+      { [`${base}.skipRoleIds`]: [...interaction.values] },
+      { upsert: true },
+    );
+    return true;
+  }
+  if (interaction.isChannelSelectMenu() && action === "report-channel") {
+    await updateGuildPaths(
+      session.guildId,
+      { [`${base}.reportChannelId`]: interaction.values[0] },
+      { upsert: true },
+    );
+    return true;
+  }
+  if (action === "toggle") {
+    await updateGuildPaths(
+      session.guildId,
+      { [`${base}.enabled`]: !policy.enabled },
+      { upsert: true },
+    );
+    return true;
+  }
+  if (action === "setup-modal" && interaction.isButton()) {
+    const modal = new ModalBuilder()
+      .setCustomId(makePanelCustomId(session, "new-users", "setup-submit"))
+      .setTitle("Recently Joined timing")
+      .addComponents(
+        modalInput("duration", "Role duration: 10m, 2h, 7d", "7d", true),
+        modalInput(
+          "age",
+          "Max Discord account age in days",
+          String(policy.maxAccountAgeDays),
+          true,
+        ),
+      );
+    await interaction.showModal(modal);
+    return false;
+  }
+  if (action === "setup-submit" && interaction.isModalSubmit()) {
+    const duration = parseDurationSeconds(interaction.fields.getTextInputValue("duration"));
+    if (!duration.ok) throw new Error(duration.error);
+    const maxAge = Number(interaction.fields.getTextInputValue("age"));
+    if (!Number.isInteger(maxAge) || maxAge < 0 || maxAge > 365)
+      throw new Error("Max account age must be a whole number from 0 to 365.");
+    await updateGuildPaths(
+      session.guildId,
+      { [`${base}.durationSeconds`]: duration.seconds, [`${base}.maxAccountAgeDays`]: maxAge },
+      { upsert: true },
+    );
+    return true;
+  }
+  if (interaction.isStringSelectMenu() && action === "rule-kind") {
+    session.selectedNewUsersRuleKind = interaction.values[0];
+    return true;
+  }
+  if (interaction.isChannelSelectMenu() && (action === "scope" || action === "access-targets")) {
+    session.selectedNewUsersScopeIds = [...interaction.values];
+    return true;
+  }
+  if (interaction.isStringSelectMenu() && action === "access-mode") {
+    const mode = interaction.values[0];
+    if (mode === "view" || mode === "send") session.selectedNewUsersAccessMode = mode;
+    return true;
+  }
+  if (action === "message-rule-modal" && interaction.isButton()) {
+    const kind = (session.selectedNewUsersRuleKind ?? "links") as TempRoleRuleKind;
+    const modal = new ModalBuilder()
+      .setCustomId(makePanelCustomId(session, "new-users", "message-rule-submit"))
+      .setTitle(`Add ${tempRoleRuleKindLabel(kind)} rule`)
+      .addComponents(
+        modalInput("limit", "Limit/count", kind === "crossChannel" ? "3" : "1", true),
+        modalInput("window", "Window seconds (blank for per-message)", "600", false),
+        modalInput("action", "Action: report, delete, timeout", "delete", true),
+        modalInput("timeout", "Timeout seconds", "300", false),
+        modalInput("pattern", "Regex pattern (regex rules only)", "", false),
+      );
+    await interaction.showModal(modal);
+    return false;
+  }
+  if (action === "message-rule-submit" && interaction.isModalSubmit()) {
+    const kind = (session.selectedNewUsersRuleKind ?? "links") as TempRoleRuleKind;
+    const ruleAction = interaction.fields.getTextInputValue("action").trim().toLowerCase();
+    if (!["report", "delete", "timeout"].includes(ruleAction))
+      throw new Error("Action must be report, delete, or timeout.");
+    const limit = Number(interaction.fields.getTextInputValue("limit"));
+    if (!Number.isInteger(limit) || limit < 1)
+      throw new Error("Limit must be a positive whole number.");
+    const rawWindow = interaction.fields.getTextInputValue("window").trim();
+    const windowSeconds = rawWindow ? Number(rawWindow) : null;
+    if (windowSeconds !== null && (!Number.isInteger(windowSeconds) || windowSeconds < 1))
+      throw new Error("Window seconds must be blank or a positive whole number.");
+    const timeoutSeconds = Number(interaction.fields.getTextInputValue("timeout") || "300");
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1)
+      throw new Error("Timeout seconds must be a positive whole number.");
+    const { channelIds, categoryIds } = await splitSelectedChannels(
+      interaction,
+      session.selectedNewUsersScopeIds,
+    );
+    const rule: TempRoleMessageRule = {
+      id: `${kind}-${Date.now().toString(36)}`,
+      enabled: true,
+      kind,
+      action: ruleAction as "report" | "delete" | "timeout",
+      channelIds,
+      categoryIds,
+      limit,
+      windowSeconds,
+      timeoutSeconds,
+      pattern: interaction.fields.getTextInputValue("pattern").trim() || null,
+    };
+    await updateGuildPaths(
+      session.guildId,
+      { [`${base}.messageRules`]: [...policy.messageRules, rule] },
+      { upsert: true },
+    );
+    return true;
+  }
+  if (action === "clear-message-rules") {
+    await updateGuildPaths(session.guildId, { [`${base}.messageRules`]: [] }, { upsert: true });
+    return true;
+  }
+  if (action === "add-access-rule") {
+    if (!session.selectedNewUsersScopeIds.length)
+      throw new Error("Choose at least one channel or category first.");
+    const { channelIds, categoryIds } = await splitSelectedChannels(
+      interaction,
+      session.selectedNewUsersScopeIds,
+    );
+    const rules: TempRoleAccessRule[] = [
+      ...categoryIds.map((targetId) => ({
+        id: `access-${targetId}-${Date.now().toString(36)}`,
+        enabled: true,
+        targetId,
+        targetType: "category" as const,
+        mode: session.selectedNewUsersAccessMode,
+      })),
+      ...channelIds.map((targetId) => ({
+        id: `access-${targetId}-${Date.now().toString(36)}`,
+        enabled: true,
+        targetId,
+        targetType: "channel" as const,
+        mode: session.selectedNewUsersAccessMode,
+      })),
+    ];
+    await updateGuildPaths(
+      session.guildId,
+      { [`${base}.accessRules`]: [...policy.accessRules, ...rules] },
+      { upsert: true },
+    );
+    return true;
+  }
+  if (action === "clear-access-rules") {
+    await updateGuildPaths(session.guildId, { [`${base}.accessRules`]: [] }, { upsert: true });
+    return true;
+  }
+  if (action === "apply-access") {
+    await applyNewUserAccessOverwrites(interaction, policy);
+    return true;
+  }
+  return true;
+}
+
+async function splitSelectedChannels(
+  interaction: ComponentInteraction,
+  ids: readonly string[],
+): Promise<{ channelIds: string[]; categoryIds: string[] }> {
+  const channelIds: string[] = [];
+  const categoryIds: string[] = [];
+  for (const id of ids) {
+    const channel =
+      interaction.guild?.channels.cache.get(id) ??
+      (interaction.guild ? await interaction.guild.channels.fetch(id).catch(() => null) : null);
+    if (channel?.type === ChannelType.GuildCategory) categoryIds.push(id);
+    else channelIds.push(id);
+  }
+  return { channelIds, categoryIds };
+}
+
+async function applyNewUserAccessOverwrites(
+  interaction: ComponentInteraction,
+  policy: GuildConfig["automod"]["tempRolePolicies"]["recentlyJoined"],
+): Promise<void> {
+  if (!interaction.guild) throw new Error("This action needs a server.");
+  if (!policy.roleId) throw new Error("Set the Recently Joined role before applying access rules.");
+  const me =
+    interaction.guild.members.me ?? (await interaction.guild.members.fetchMe().catch(() => null));
+  if (!me?.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    throw new Error("I need Manage Channels to apply access blocklist rules.");
+  }
+
+  const role = await interaction.guild.roles.fetch(policy.roleId).catch(() => null);
+  if (!role) throw new Error("The configured Recently Joined role no longer exists.");
+
+  for (const rule of policy.accessRules.filter((item) => item.enabled)) {
+    const channel = await interaction.guild.channels.fetch(rule.targetId).catch(() => null);
+    if (!channel || !("permissionOverwrites" in channel)) continue;
+    await channel.permissionOverwrites.edit(
+      role,
+      rule.mode === "view" ? { ViewChannel: false } : { SendMessages: false },
+      { reason: "New Users access blocklist" },
+    );
+  }
 }
 
 async function applyRolesAction(

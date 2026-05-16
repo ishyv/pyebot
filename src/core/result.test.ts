@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Ok, Err, OkResult, ErrResult } from "./result";
+import { Err, ErrResult, Ok, OkResult } from "./result";
 
 describe("Ok", () => {
   test("isOk returns true", () => {
@@ -32,13 +32,17 @@ describe("Ok", () => {
 
   test("inspect calls fn with value", () => {
     let called = false;
-    new Ok(1).inspect(() => { called = true; });
+    new Ok(1).inspect(() => {
+      called = true;
+    });
     expect(called).toBe(true);
   });
 
   test("inspectErr does not call fn on Ok", () => {
     let called = false;
-    new Ok(1).inspectErr(() => { called = true; });
+    new Ok(1).inspectErr(() => {
+      called = true;
+    });
     expect(called).toBe(false);
   });
 });
@@ -74,13 +78,17 @@ describe("Err", () => {
 
   test("inspect does not call fn on Err", () => {
     let called = false;
-    new Err<number, Error>(new Error()).inspect(() => { called = true; });
+    new Err<number, Error>(new Error()).inspect(() => {
+      called = true;
+    });
     expect(called).toBe(false);
   });
 
   test("inspectErr calls fn with error", () => {
     let called = false;
-    new Err(new Error("x")).inspectErr(() => { called = true; });
+    new Err(new Error("x")).inspectErr(() => {
+      called = true;
+    });
     expect(called).toBe(true);
   });
 });

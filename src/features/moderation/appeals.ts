@@ -11,17 +11,11 @@
  * appeal list rather than applying incremental diffs, so the message is always
  * consistent with DB state regardless of order-of-operations.
  */
-import {
-  ButtonBuilder,
-  ButtonStyle,
-  type Client,
-  type Guild,
-  type TextChannel,
-} from "discord.js";
-import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
-import { getPendingAppeals } from "@/db/repositories/appeals";
-import type { Appeal } from "@/db/schemas/appeal";
+import { ButtonBuilder, ButtonStyle, type Client, type Guild, type TextChannel } from "discord.js";
 import { markImportant, unmarkImportant } from "@/core/importantMessages";
+import { getPendingAppeals } from "@/db/repositories/appeals";
+import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
+import type { Appeal } from "@/db/schemas/appeal";
 import { container, section, text, v2Message } from "@/ui/v2";
 import type { V2Payload } from "@/ui/views";
 
@@ -46,8 +40,7 @@ export function buildQueuePayload(appeals: Appeal[]): V2Payload {
 
   const children: Parameters<typeof container>[1][] = capped.map((appeal) => {
     const ts = Math.floor(new Date(appeal.submittedAt).getTime() / 1000);
-    const reason =
-      appeal.reason.length > 150 ? `${appeal.reason.slice(0, 150)}…` : appeal.reason;
+    const reason = appeal.reason.length > 150 ? `${appeal.reason.slice(0, 150)}…` : appeal.reason;
 
     const reviewButton = new ButtonBuilder()
       .setCustomId(`appeal:review:${appeal.guildId}:${appeal.caseId}`)
@@ -139,7 +132,9 @@ export async function reregisterQueueMessage(guild: Guild): Promise<void> {
   const { appealsChannelId, appealsQueueMessageId } = guildData.moderation;
   if (!appealsChannelId || !appealsQueueMessageId) return;
 
-  const channel = (await guild.channels.fetch(appealsChannelId).catch(() => null)) as TextChannel | null;
+  const channel = (await guild.channels
+    .fetch(appealsChannelId)
+    .catch(() => null)) as TextChannel | null;
   if (!channel) return;
 
   const message = await channel.messages.fetch(appealsQueueMessageId).catch(() => null);

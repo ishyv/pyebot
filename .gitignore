@@ -24,7 +24,9 @@ docs/ai
 .superpowers
 .worktrees
 
-webapp
+/webapp/build/
+/webapp/.svelte-kit/
+/webapp/node_modules/
 
 CLAUDE.md
 AGENTS.md

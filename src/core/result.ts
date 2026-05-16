@@ -31,17 +31,34 @@ export class Ok<T, E> {
 
   constructor(public readonly value: T) {}
 
-  isOk(): this is Ok<T, E> { return true; }
-  isErr(): this is Err<T, E> { return false; }
+  isOk(): this is Ok<T, E> {
+    return true;
+  }
+  isErr(): this is Err<T, E> {
+    return false;
+  }
 
-  unwrap(): T { return this.value; }
-  unwrapOr(_default: T): T { return this.value; }
+  unwrap(): T {
+    return this.value;
+  }
+  unwrapOr(_default: T): T {
+    return this.value;
+  }
 
-  map<U>(fn: (value: T) => U): Result<U, E> { return new Ok(fn(this.value)); }
-  mapErr<F>(_fn: (error: E) => F): Result<T, F> { return new Ok<T, F>(this.value); }
+  map<U>(fn: (value: T) => U): Result<U, E> {
+    return new Ok(fn(this.value));
+  }
+  mapErr<F>(_fn: (error: E) => F): Result<T, F> {
+    return new Ok<T, F>(this.value);
+  }
 
-  inspect(fn: (value: T) => void): Result<T, E> { fn(this.value); return this; }
-  inspectErr(_fn: (error: E) => void): Result<T, E> { return this; }
+  inspect(fn: (value: T) => void): Result<T, E> {
+    fn(this.value);
+    return this;
+  }
+  inspectErr(_fn: (error: E) => void): Result<T, E> {
+    return this;
+  }
 }
 
 export class Err<T, E> {
@@ -50,8 +67,12 @@ export class Err<T, E> {
 
   constructor(public readonly error: E) {}
 
-  isOk(): this is Ok<T, E> { return false; }
-  isErr(): this is Err<T, E> { return true; }
+  isOk(): this is Ok<T, E> {
+    return false;
+  }
+  isErr(): this is Err<T, E> {
+    return true;
+  }
 
   /** Does NOT throw. Logs and returns undefined. Caller must check isOk() first. */
   unwrap(): T {
@@ -59,13 +80,24 @@ export class Err<T, E> {
     return undefined as unknown as T;
   }
 
-  unwrapOr(defaultValue: T): T { return defaultValue; }
+  unwrapOr(defaultValue: T): T {
+    return defaultValue;
+  }
 
-  map<U>(_fn: (value: T) => U): Result<U, E> { return new Err<U, E>(this.error); }
-  mapErr<F>(fn: (error: E) => F): Result<T, F> { return new Err<T, F>(fn(this.error)); }
+  map<U>(_fn: (value: T) => U): Result<U, E> {
+    return new Err<U, E>(this.error);
+  }
+  mapErr<F>(fn: (error: E) => F): Result<T, F> {
+    return new Err<T, F>(fn(this.error));
+  }
 
-  inspect(_fn: (value: T) => void): Result<T, E> { return this; }
-  inspectErr(fn: (error: E) => void): Result<T, E> { fn(this.error); return this; }
+  inspect(_fn: (value: T) => void): Result<T, E> {
+    return this;
+  }
+  inspectErr(fn: (error: E) => void): Result<T, E> {
+    fn(this.error);
+    return this;
+  }
 }
 
 /** Creates a successful result wrapping `value`. */

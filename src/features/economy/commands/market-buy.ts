@@ -1,14 +1,10 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { buyListing } from "@/features/economy/market";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("market-buy")
   .setDescription("Purchase a market listing")
   .addStringOption((opt) =>
@@ -22,7 +18,7 @@ export const data = new SlashCommandBuilder()
       .setMinValue(1),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -43,10 +39,18 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
 
   const { itemId, quantity: qty, total } = result.unwrap();
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blue)
-    .setTitle("Purchase Successful")
-    .setDescription(`Purchased **${qty}x ${itemId}** for **${total} coins**`);
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        text(`## Purchase Successful\nPurchased **${qty}x ${itemId}** for **${total} coins**`),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/market-browse", "/balance"] },
+  execute,
+});

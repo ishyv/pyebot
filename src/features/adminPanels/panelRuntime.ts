@@ -20,13 +20,14 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
+  type ContainerBuilder,
   MessageFlags,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { Colors } from "@/utils/embeds";
+import type { AccentKey } from "@/ui/theme";
+import { container, separator, text } from "@/ui/v2";
 
 export const PANEL_PREFIX = "panel:";
 
@@ -48,6 +49,7 @@ export const PANEL_DEFINITIONS = [
     description: "Logs, escalation, quarantine, verification",
   },
   { id: "automod", label: "Automod", description: "Spam, raid, slowmode, patterns" },
+  { id: "new-users", label: "New Users", description: "Recently joined role and limits" },
   { id: "roles", label: "Roles", description: "Moderation permissions, limits, performance" },
   { id: "autoroles", label: "Autoroles", description: "Automatic role rules" },
   { id: "tickets", label: "Tickets", description: "Ticket channels and category" },
@@ -78,6 +80,10 @@ export interface PanelState {
   selectedFeatureConfigField?: string;
   selectedRoleIds: string[];
   selectedRoleAction: string;
+  selectedNewUsersSection?: string;
+  selectedNewUsersRuleKind?: string;
+  selectedNewUsersScopeIds: string[];
+  selectedNewUsersAccessMode: "view" | "send";
 }
 
 export interface PanelCustomId {
@@ -86,9 +92,17 @@ export interface PanelCustomId {
   action: string;
 }
 
+/**
+ * A rendered admin panel: one V2 Container carrying the panel body plus zero or
+ * more action rows for field selects, channel selects, and navigation controls.
+ *
+ * `withNavigationRows` appends the nav select + refresh/close buttons to
+ * `actionRows` before the payload is sent. Callers should never add nav rows
+ * themselves; call `withNavigationRows(session, rawPayload)` instead.
+ */
 export interface PanelPayload {
-  embeds: EmbedBuilder[];
-  components: PanelActionRow[];
+  container: ContainerBuilder;
+  actionRows: PanelActionRow[];
 }
 
 export type PanelActionRow = ActionRowBuilder<MessageActionRowComponentBuilder>;
@@ -112,6 +126,8 @@ export class PanelSessionRegistry {
       updatedAt: now,
       selectedRoleIds: [],
       selectedRoleAction: "timeout",
+      selectedNewUsersScopeIds: [],
+      selectedNewUsersAccessMode: "send",
     };
     this.sessions.set(session.id, session);
     return session;
@@ -173,22 +189,37 @@ export function parsePanelCustomId(customId: string): PanelCustomId | null {
   return { sessionId, panelId, action: actionParts.join(":") };
 }
 
-export function panelEmbed(params: {
+/**
+ * Builds a V2 Container for an admin panel body.
+ *
+ * Fields are rendered as a text block rather than embed fields, because V2
+ * has no inline-field concept. The `inline` property on `APIEmbedField` is
+ * accepted but ignored so callers don't need to be updated.
+ *
+ * Replaces the old `panelEmbed()` factory.
+ */
+export function panelContainer(params: {
   title: string;
   description?: string;
-  color?: number;
+  accent?: AccentKey;
   fields?: APIEmbedField[];
   footer?: string;
-}): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setColor(params.color ?? (Colors.info as number))
-    .setTitle(params.title)
-    .setTimestamp();
+}): ContainerBuilder {
+  const headLines: string[] = [`## ${params.title}`];
+  if (params.description) headLines.push("", params.description);
 
-  if (params.description) embed.setDescription(params.description);
-  if (params.fields?.length) embed.addFields(params.fields);
-  if (params.footer) embed.setFooter({ text: params.footer });
-  return embed;
+  const children: Parameters<typeof container>[1][] = [text(headLines.join("\n"))];
+
+  if (params.fields?.length) {
+    const fieldLines = params.fields.map((f) => `**${f.name}:** ${f.value}`);
+    children.push(separator("sm"), text(fieldLines.join("\n")));
+  }
+
+  if (params.footer) {
+    children.push(separator("sm"), text(`-# ${params.footer}`));
+  }
+
+  return container(params.accent ?? "info", ...children);
 }
 
 export function navigationRows(session: PanelState): PanelActionRow[] {
@@ -221,24 +252,33 @@ export function navigationRows(session: PanelState): PanelActionRow[] {
   ];
 }
 
+/**
+ * Merges body action rows with the nav select + refresh/close buttons.
+ *
+ * The total action-row count is capped at `maxRows` (default 5). Body rows
+ * come first; nav rows fill remaining slots. When the body already fills all
+ * slots, nav is dropped — a concession to Discord's limit; prefer panels with
+ * ≤ 3 body rows so both the body controls and nav are always visible.
+ */
 export function withNavigationRows(
   session: PanelState,
   payload: PanelPayload,
   maxRows = 5,
 ): PanelPayload {
-  const bodyRows = payload.components.slice(0, maxRows);
+  const navRows = navigationRows(session);
+  const bodyRows = payload.actionRows.slice(0, maxRows);
   const remainingRows = Math.max(0, maxRows - bodyRows.length);
   return {
-    ...payload,
-    components: [...bodyRows, ...navigationRows(session).slice(0, remainingRows)],
+    container: payload.container,
+    actionRows: [...bodyRows, ...navRows.slice(0, remainingRows)],
   };
 }
 
 export function commandPanelReply(payload: PanelPayload): InteractionReplyOptions {
   return {
-    embeds: payload.embeds,
-    components: payload.components,
-    flags: MessageFlags.Ephemeral,
+    // biome-ignore lint/suspicious/noExplicitAny: V2 top-level ContainerBuilder is valid at runtime but not yet reflected in discord.js InteractionReplyOptions types.
+    components: [payload.container, ...payload.actionRows] as any,
+    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
   };
 }
 
@@ -264,9 +304,10 @@ export async function updatePanelMessage(
   interaction: ComponentInteraction,
   payload: PanelPayload,
 ): Promise<void> {
+  // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in MessageEditOptions types.
   const options: MessageEditOptions & MessageCreateOptions = {
-    embeds: payload.embeds,
-    components: payload.components,
+    components: [payload.container, ...payload.actionRows] as any,
+    flags: MessageFlags.IsComponentsV2,
   };
 
   if (!interaction.isModalSubmit() && "update" in interaction) {

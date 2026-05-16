@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { RpgProfileSchema, type RpgProfileData } from "./rpg-profile";
-import { EconomyAccountSchema, type EconomyAccountData } from "./economy-account";
 import { CurrencyInventorySchema } from "./currency";
+import { type EconomyAccountData, EconomyAccountSchema } from "./economy-account";
+import { type RpgProfileData, RpgProfileSchema } from "./rpg-profile";
 
 export const WarnSchema = z.object({
   reason: z.string().catch(""),
@@ -17,12 +17,31 @@ export type SanctionType = z.infer<typeof SanctionType>;
 export const SanctionHistoryEntrySchema = z.object({
   type: SanctionType,
   description: z.string(),
-  date: z.string().optional().catch(() => new Date().toISOString()),
-  caseId: z.number().int().optional().catch(() => undefined),
-  moderatorId: z.string().optional().catch(() => undefined),
-  moderatorRoleIds: z.array(z.string()).optional().catch(() => undefined),
-  source: z.enum(["manual", "automod", "appeal", "escalation", "system"]).optional().catch(() => undefined),
-  evidenceSummary: z.string().optional().catch(() => undefined),
+  date: z
+    .string()
+    .optional()
+    .catch(() => new Date().toISOString()),
+  caseId: z
+    .number()
+    .int()
+    .optional()
+    .catch(() => undefined),
+  moderatorId: z
+    .string()
+    .optional()
+    .catch(() => undefined),
+  moderatorRoleIds: z
+    .array(z.string())
+    .optional()
+    .catch(() => undefined),
+  source: z
+    .enum(["manual", "automod", "appeal", "escalation", "system"])
+    .optional()
+    .catch(() => undefined),
+  evidenceSummary: z
+    .string()
+    .optional()
+    .catch(() => undefined),
 });
 export type SanctionHistoryEntry = z.infer<typeof SanctionHistoryEntrySchema>;
 
@@ -40,22 +59,57 @@ export const UserSchema = z.object({
   openTickets: z.array(z.string()).catch(() => []),
   currency: CurrencyInventorySchema.catch(() => ({})),
   inventory: z.record(z.string(), z.unknown()).catch(() => ({})),
-  bank: z.record(z.string(), z.number()).optional().catch(() => ({})),
-  mod_notes: z.record(z.string(), z.array(ModNoteSchema).catch(() => [])).catch(() => ({})),
-  quarantine_roles: z.record(z.string(), z.array(z.string()).catch(() => [])).catch(() => ({})),
+  bank: z
+    .record(z.string(), z.number())
+    .optional()
+    .catch(() => ({})),
+  mod_notes: z
+    .record(
+      z.string(),
+      z.array(ModNoteSchema).catch(() => []),
+    )
+    .catch(() => ({})),
+  quarantine_roles: z
+    .record(
+      z.string(),
+      z.array(z.string()).catch(() => []),
+    )
+    .catch(() => ({})),
   // Economy account data
-  economyAccount: EconomyAccountSchema.optional().catch(() => undefined) as z.ZodType<EconomyAccountData | undefined>,
+  economyAccount: EconomyAccountSchema.optional().catch(() => undefined) as z.ZodType<
+    EconomyAccountData | undefined
+  >,
   // RPG profile — embedded subdocument
-  rpgProfile: RpgProfileSchema.optional().catch(() => undefined) as z.ZodType<RpgProfileData | undefined>,
-  minigames: z.record(z.string(), z.unknown()).optional().catch(() => ({})),
-  votingStats: z.record(z.string(), z.unknown()).optional().catch(() => ({})),
-  voteAggregates: z.record(z.string(), z.unknown()).optional().catch(() => ({})),
-  votingPrefs: z.object({
-    optOut: z.boolean().optional(),
-    showVotes: z.boolean().optional(),
-    updatedAt: z.date().optional(),
-  }).optional().catch(() => ({})),
-  createdAt: z.coerce.date().optional().catch(() => undefined),
-  updatedAt: z.coerce.date().optional().catch(() => undefined),
+  rpgProfile: RpgProfileSchema.optional().catch(() => undefined) as z.ZodType<
+    RpgProfileData | undefined
+  >,
+  minigames: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .catch(() => ({})),
+  votingStats: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .catch(() => ({})),
+  voteAggregates: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .catch(() => ({})),
+  votingPrefs: z
+    .object({
+      optOut: z.boolean().optional(),
+      showVotes: z.boolean().optional(),
+      updatedAt: z.date().optional(),
+    })
+    .optional()
+    .catch(() => ({})),
+  createdAt: z.coerce
+    .date()
+    .optional()
+    .catch(() => undefined),
+  updatedAt: z.coerce
+    .date()
+    .optional()
+    .catch(() => undefined),
 });
 export type User = z.infer<typeof UserSchema>;

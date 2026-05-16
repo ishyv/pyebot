@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  deepClone,
-  collectTouchedPaths,
-  buildSafeUpsertUpdate,
-} from "./helpers";
+import { buildSafeUpsertUpdate, collectTouchedPaths, deepClone } from "./helpers";
 
 describe("deepClone", () => {
   test("returns a new object, not the same reference", () => {
@@ -47,21 +43,14 @@ describe("collectTouchedPaths", () => {
 
 describe("buildSafeUpsertUpdate", () => {
   test("adds updatedAt to $set by default", () => {
-    const result = buildSafeUpsertUpdate(
-      { $set: { name: "test" } },
-      {},
-      new Date("2025-01-01"),
-    );
+    const result = buildSafeUpsertUpdate({ $set: { name: "test" } }, {}, new Date("2025-01-01"));
     expect((result as any).$set.updatedAt).toEqual(new Date("2025-01-01"));
   });
 
   test("does not add updatedAt when setUpdatedAt is false", () => {
-    const result = buildSafeUpsertUpdate(
-      { $setOnInsert: { _id: "x" } },
-      {},
-      new Date(),
-      { setUpdatedAt: false },
-    );
+    const result = buildSafeUpsertUpdate({ $setOnInsert: { _id: "x" } }, {}, new Date(), {
+      setUpdatedAt: false,
+    });
     expect((result as any).$set?.updatedAt).toBeUndefined();
   });
 

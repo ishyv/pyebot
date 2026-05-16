@@ -1,14 +1,10 @@
-import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { process } from "@/features/rpg/processing";
+import { defineCommand } from "@/framework";
+import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("process")
   .setDescription("Process raw materials into refined materials")
   .addStringOption((opt) =>
@@ -22,7 +18,7 @@ export const data = new SlashCommandBuilder()
       .setMinValue(1),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -38,11 +34,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (result.isErr()) {
     const err = result.error;
-    const errorEmbed = new EmbedBuilder()
-      .setColor(Colors.Red)
-      .setDescription(err.message)
-      .setFooter({ text: getHints("process") });
-    await interaction.editReply({ embeds: [errorEmbed] });
+    await interaction.editReply(
+      v2Message(container("danger", text(`${err.message}\n-# ${getHints("process")}`))),
+    );
     return;
   }
 
@@ -57,26 +51,30 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   } = result.unwrap();
 
   const allSucceeded = batchesSucceeded === batchesAttempted;
-  const outputText =
-    outputGained > 0 ? `${outputGained}x ${outputMaterialId}` : "0 (all failed)";
+  const outputText = outputGained > 0 ? `${outputGained}x ${outputMaterialId}` : "0 (all failed)";
 
-  const embed = new EmbedBuilder()
-    .setColor(allSucceeded ? Colors.Green : Colors.Orange)
-    .setTitle("Processing Complete")
-    .addFields(
-      { name: "Input", value: `${materialsConsumed}x ${rawMaterialId}`, inline: true },
-      { name: "Output", value: outputText, inline: true },
-      {
-        name: "Batches",
-        value: `${batchesSucceeded}/${batchesAttempted} succeeded`,
-        inline: true,
-      },
-    )
-    .setFooter({ text: getHints("process") });
+  const feeText = feePaid > 0 ? `\n**Fee Paid:** ${feePaid} coins` : "";
 
-  if (feePaid > 0) {
-    embed.addFields({ name: "Fee Paid", value: `${feePaid} coins`, inline: true });
-  }
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        allSucceeded ? "ok" : "warn",
+        text("## Processing Complete"),
+        separator("sm"),
+        text(
+          `**Input:** ${materialsConsumed}x ${rawMaterialId}\n` +
+            `**Output:** ${outputText}\n` +
+            `**Batches:** ${batchesSucceeded}/${batchesAttempted} succeeded` +
+            feeText +
+            `\n-# ${getHints("process")}`,
+        ),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/craft", "/inventory", "/market-list"] },
+  execute,
+});

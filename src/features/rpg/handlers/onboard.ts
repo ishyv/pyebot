@@ -1,8 +1,8 @@
-import { EmbedBuilder, Colors, type ButtonInteraction } from "discord.js";
+import type { ButtonInteraction } from "discord.js";
 import { patchRpgProfile } from "@/db/repositories/rpg";
-import type { StarterKitType } from "@/db/schemas/rpg-profile";
-import type { EquippedItem } from "@/db/schemas/rpg-profile";
+import type { EquippedItem, StarterKitType } from "@/db/schemas/rpg-profile";
 import { TOOLS } from "@/features/rpg/content/tools";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
 export const ONBOARD_PREFIX = "rpg:onboard:";
 
@@ -11,8 +11,16 @@ export function isOnboardButton(customId: string): boolean {
 }
 
 const STARTER_TOOLS: Record<StarterKitType, EquippedItem> = {
-  miner: { instanceId: "starter", itemId: "starter_pickaxe", durability: TOOLS.starter_pickaxe.startingDurability },
-  lumber: { instanceId: "starter", itemId: "starter_axe", durability: TOOLS.starter_axe.startingDurability },
+  miner: {
+    instanceId: "starter",
+    itemId: "starter_pickaxe",
+    durability: TOOLS.starter_pickaxe.startingDurability,
+  },
+  lumber: {
+    instanceId: "starter",
+    itemId: "starter_axe",
+    durability: TOOLS.starter_axe.startingDurability,
+  },
 };
 
 export async function handleOnboard(interaction: ButtonInteraction): Promise<void> {
@@ -54,21 +62,25 @@ export async function handleOnboard(interaction: ButtonInteraction): Promise<voi
       ? "You start with a **starter pickaxe** — use `/expedition` to enter the mine and begin gathering."
       : "You start with a **starter axe** — use `/expedition` to enter the forest and begin gathering.";
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle(`${label} Path Chosen!`)
-    .setDescription(
-      profession === "miner"
-        ? "You've chosen the **Miner Path**! Use `/expedition` to enter the mine and start gathering ore."
-        : "You've chosen the **Lumber Path**! Use `/expedition` to enter the forest and start cutting wood.",
-    )
-    .addFields(
-      { name: "❤️ HP", value: "100/100", inline: true },
-      { name: "🏆 Wins", value: "0", inline: true },
-      { name: "💀 Losses", value: "0", inline: true },
-      { name: "💡 Next Step", value: gatherHint, inline: false },
-    )
-    .setFooter({ text: "💡 Use /rpg-profile anytime to see your stats" });
+  const description =
+    profession === "miner"
+      ? "You've chosen the **Miner Path**! Use `/expedition` to enter the mine and start gathering ore."
+      : "You've chosen the **Lumber Path**! Use `/expedition` to enter the forest and start cutting wood.";
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        text(`## ${label} Path Chosen!\n${description}`),
+        separator("sm"),
+        text(
+          `**❤️ HP:** 100/100\n` +
+            `**🏆 Wins:** 0\n` +
+            `**💀 Losses:** 0\n\n` +
+            `**💡 Next Step**\n${gatherHint}\n\n` +
+            `-# 💡 Use /rpg-profile anytime to see your stats`,
+        ),
+      ),
+    ),
+  );
 }

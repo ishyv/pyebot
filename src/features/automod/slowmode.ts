@@ -8,9 +8,9 @@
  * Configuration: guild.automod.slowmode
  */
 
-import { type Message, type TextChannel } from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
+import type { Message, TextChannel } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { getGuild } from "@/db/repositories/guilds";
 
 const log = createLogger("automod:slowmode");
 
@@ -53,7 +53,9 @@ export async function checkSlowmode(message: Message): Promise<void> {
 
   // Threshold crossed — apply slowmode
   channelMessages.delete(message.channelId);
-  log.info(`Applying auto-slowmode to #${message.channelId} (${times.length} msgs/${config.windowSeconds}s)`);
+  log.info(
+    `Applying auto-slowmode to #${message.channelId} (${times.length} msgs/${config.windowSeconds}s)`,
+  );
 
   const channel = message.channel as TextChannel;
   try {

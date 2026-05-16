@@ -1,20 +1,17 @@
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { UserCurrency } from "@/components/user-currency";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, section, thumb, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("balance")
   .setDescription("Check a user's coin balance")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to check (defaults to you)").setRequired(false),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -26,10 +23,21 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
   const wallet = await ctx.get(target.id, UserCurrency);
   const balance = wallet?.balances["coins"] ?? 0;
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Green)
-    .setTitle(`${target.username}'s Balance`)
-    .setDescription(`**${balance} coins**`);
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(
+    v2Message(
+      container(
+        "ok",
+        section(
+          `## ${target.username}'s Balance\n**${balance} coins**`,
+          thumb(target.displayAvatarURL(), "avatar"),
+        ),
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/work", "/transfer"] },
+  execute,
+});

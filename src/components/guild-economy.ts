@@ -12,7 +12,10 @@ import { z } from "zod";
 import { component } from "@/framework/component";
 
 const EconomySector = z.union([
-  z.literal("global"), z.literal("works"), z.literal("trade"), z.literal("tax"),
+  z.literal("global"),
+  z.literal("works"),
+  z.literal("trade"),
+  z.literal("tax"),
 ]);
 
 const DailyConfig = z.object({

@@ -1,18 +1,14 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
-import { getCaseById, editCase, deleteCase } from "@/features/moderation/service";
+import { deleteCase, editCase, getCaseById } from "@/features/moderation/service";
+import { renderCaseView } from "@/features/moderation/views";
+import { defineCommand } from "@/framework";
 
-const SANCTION_EMOJI: Record<string, string> = {
-  BAN: "🔨", KICK: "👢", TIMEOUT: "🔇", WARN: "⚠️", RESTRICT: "🚫",
-};
-
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("case")
   .setDescription("Manage a specific moderation case")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -37,9 +33,12 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((o) => o.setName("id").setDescription("Case ID").setRequired(true)),
   );
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -58,20 +57,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       await interaction.editReply({ content: `Case #${caseId} not found.` });
       return;
     }
-    const { entry, userId } = found;
-    const emoji = SANCTION_EMOJI[entry.type] ?? "📝";
-    const ts = entry.date ? `<t:${Math.floor(new Date(entry.date).getTime() / 1000)}:F>` : "Unknown";
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Blurple)
-      .setTitle(`Case #${caseId} — ${emoji} ${entry.type}`)
-      .addFields(
-        { name: "User", value: `<@${userId}>`, inline: true },
-        { name: "Moderator", value: entry.moderatorId ? `<@${entry.moderatorId}>` : "Unknown", inline: true },
-        { name: "Date", value: ts, inline: true },
-        { name: "Reason", value: entry.description },
-      )
-      .setTimestamp();
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(renderCaseView(found.entry, found.userId, caseId));
     return;
   }
 
@@ -105,3 +91,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.editReply({ content: `Case #${caseId} deleted.` });
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/cases"] },
+  execute,
+});

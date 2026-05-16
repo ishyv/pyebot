@@ -61,22 +61,34 @@ describe("feature config declarations", () => {
     const guild = GuildSchema.parse({ _id: "guild-1", counting: { channelId: "channel-1" } });
     const client = {
       channels: {
-        fetch: async (id: string) => ({ id, type: ChannelType.GuildText, guild: { id: "guild-1" } }),
+        fetch: async (id: string) => ({
+          id,
+          type: ChannelType.GuildText,
+          guild: { id: "guild-1" },
+        }),
       },
     };
 
-    await expect(resolveConfiguredChannel(client as never, guild, countingLikeConfig, "channel")).resolves.toEqual(
-      expect.objectContaining({ id: "channel-1" }),
-    );
+    await expect(
+      resolveConfiguredChannel(client as never, guild, countingLikeConfig, "channel"),
+    ).resolves.toEqual(expect.objectContaining({ id: "channel-1" }));
 
     const deletedClient = { channels: { fetch: async () => null } };
-    await expect(resolveConfiguredChannel(deletedClient as never, guild, countingLikeConfig, "channel")).resolves.toBeNull();
+    await expect(
+      resolveConfiguredChannel(deletedClient as never, guild, countingLikeConfig, "channel"),
+    ).resolves.toBeNull();
 
     const wrongTypeClient = {
       channels: {
-        fetch: async (id: string) => ({ id, type: ChannelType.GuildVoice, guild: { id: "guild-1" } }),
+        fetch: async (id: string) => ({
+          id,
+          type: ChannelType.GuildVoice,
+          guild: { id: "guild-1" },
+        }),
       },
     };
-    await expect(resolveConfiguredChannel(wrongTypeClient as never, guild, countingLikeConfig, "channel")).resolves.toBeNull();
+    await expect(
+      resolveConfiguredChannel(wrongTypeClient as never, guild, countingLikeConfig, "channel"),
+    ).resolves.toBeNull();
   });
 });

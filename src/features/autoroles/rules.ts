@@ -43,7 +43,9 @@ export function autoroleButtonId(messageId: string, roleId: string): string {
   return `${AUTOROLE_TOGGLE_PREFIX}${messageId}:${roleId}`;
 }
 
-export function parseAutoroleButtonId(customId: string): { messageId: string; roleId: string } | null {
+export function parseAutoroleButtonId(
+  customId: string,
+): { messageId: string; roleId: string } | null {
   if (!customId.startsWith(AUTOROLE_TOGGLE_PREFIX)) return null;
   const rest = customId.slice(AUTOROLE_TOGGLE_PREFIX.length);
   const [messageId, roleId] = rest.split(":");

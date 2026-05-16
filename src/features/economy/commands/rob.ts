@@ -1,20 +1,15 @@
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  type ChatInputCommandInteraction,
-} from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import { MinigameError, rob } from "@/features/economy/minigames";
+import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
-import { rob, MinigameError } from "@/features/economy/minigames";
+import { container, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("rob")
   .setDescription("Attempt to rob another user")
-  .addUserOption((opt) =>
-    opt.setName("user").setDescription("User to rob").setRequired(true),
-  );
+  .addUserOption((opt) => opt.setName("user").setDescription("User to rob").setRequired(true));
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply();
 
   if (!interaction.guild) {
@@ -27,20 +22,32 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
   try {
     const { stolenAmount, fineAmount } = await rob(ctx, interaction.user.id, target.id);
 
-    const embed =
+    const payload =
       stolenAmount > 0
-        ? new EmbedBuilder()
-            .setColor(Colors.Orange)
-            .setTitle("Robbery Successful!")
-            .setDescription(`You stole **${stolenAmount} coins** from <@${target.id}>!`)
-        : new EmbedBuilder()
-            .setColor(Colors.Red)
-            .setTitle("Caught!")
-            .setDescription(`You got caught! Lost **${fineAmount} coins** as penalty.`);
+        ? v2Message(
+            container(
+              "warn",
+              text(
+                `## Robbery Successful!\nYou stole **${stolenAmount} coins** from <@${target.id}>!`,
+              ),
+            ),
+          )
+        : v2Message(
+            container(
+              "danger",
+              text(`## Caught!\nYou got caught! Lost **${fineAmount} coins** as penalty.`),
+            ),
+          );
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(payload);
   } catch (err) {
     const msg = err instanceof MinigameError ? err.message : "An error occurred.";
     await interaction.editReply({ content: `Error: ${msg}` });
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/balance"] },
+  execute,
+});

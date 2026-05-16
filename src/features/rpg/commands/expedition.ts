@@ -1,20 +1,21 @@
 import {
-  SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Colors,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  SlashCommandBuilder,
 } from "discord.js";
 import { getUser } from "@/db/repositories/users";
+import { defineCommand } from "@/framework";
+import { container, separator, text, v2Message } from "@/ui/v2";
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("expedition")
   .setDescription("Enter an expedition — explore a biome, gather resources, and venture deeper");
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "This command can only be used in a server." });
@@ -34,26 +35,38 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(Colors.DarkGold)
-    .setTitle("⚔️ Begin an Expedition")
-    .setDescription(
-      "Choose a biome to explore. Each depth requires a better tool — but yields rarer materials.\n\n" +
-      "**⛏️ Mine** — Stone, copper, iron, and silver ore. Requires a pickaxe.\n" +
-      "**🌲 Forest** — Oak, spruce, palm, and pine wood. Requires an axe.",
-    )
-    .setFooter({ text: "💡 /equip • /craft • /inventory" });
+  const mineButton = new ButtonBuilder()
+    .setCustomId("expedition:start:mine")
+    .setLabel("⛏️ Enter Mine")
+    .setStyle(ButtonStyle.Primary);
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("expedition:start:mine")
-      .setLabel("⛏️ Enter Mine")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId("expedition:start:forest")
-      .setLabel("🌲 Enter Forest")
-      .setStyle(ButtonStyle.Success),
-  );
+  const forestButton = new ButtonBuilder()
+    .setCustomId("expedition:start:forest")
+    .setLabel("🌲 Enter Forest")
+    .setStyle(ButtonStyle.Success);
 
-  await interaction.editReply({ embeds: [embed], components: [row] });
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(mineButton, forestButton);
+
+  await interaction.editReply({
+    ...v2Message(
+      container(
+        "info",
+        text("## ⚔️ Begin an Expedition"),
+        separator("sm"),
+        text(
+          "Choose a biome to explore. Each depth requires a better tool — but yields rarer materials.\n\n" +
+            "**⛏️ Mine** — Stone, copper, iron, and silver ore. Requires a pickaxe.\n" +
+            "**🌲 Forest** — Oak, spruce, palm, and pine wood. Requires an axe.\n\n" +
+            "-# 💡 /equip • /craft • /inventory",
+        ),
+      ),
+    ),
+    components: [buttonRow],
+  });
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/inventory", "/process", "/craft"], requires: "pickaxe or axe in weapon slot" },
+  execute,
+});

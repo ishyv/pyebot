@@ -10,11 +10,7 @@
  * These definitions are config, not state. Runtime/session data belongs in a
  * repository or feature-owned collection instead of a FeatureConfigDefinition.
  */
-import {
-  ChannelType,
-  type Client,
-  type GuildBasedChannel,
-} from "discord.js";
+import type { ChannelType, Client, GuildBasedChannel } from "discord.js";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import type { Guild } from "@/db/schemas/guild";
 
@@ -62,7 +58,9 @@ export type FeatureConfigField<TKey extends string = string> =
   | StringFeatureConfigField<TKey>
   | SelectFeatureConfigField<TKey>;
 
-export interface FeatureConfigDefinition<TFields extends Record<string, FeatureConfigField> = Record<string, FeatureConfigField>> {
+export interface FeatureConfigDefinition<
+  TFields extends Record<string, FeatureConfigField> = Record<string, FeatureConfigField>,
+> {
   readonly fields: TFields;
 }
 
@@ -192,7 +190,11 @@ export async function resolveConfiguredChannel(
 }
 
 function validateFieldMetadata(recordKey: string, field: FeatureConfigField): void {
-  for (const [name, value] of [["key", field.key], ["label", field.label], ["path", field.path]] as const) {
+  for (const [name, value] of [
+    ["key", field.key],
+    ["label", field.label],
+    ["path", field.path],
+  ] as const) {
     if (value.trim().length === 0) {
       throw new Error(`Feature config field "${recordKey}" has an empty ${name}.`);
     }
@@ -218,9 +220,13 @@ function validateFieldValue(
   switch (field.kind) {
     case "channel":
     case "string":
-      return typeof value === "string" ? validateStringBounds(field, value) : issue(field, `${field.label} must be text.`);
+      return typeof value === "string"
+        ? validateStringBounds(field, value)
+        : issue(field, `${field.label} must be text.`);
     case "boolean":
-      return typeof value === "boolean" ? null : issue(field, `${field.label} must be true or false.`);
+      return typeof value === "boolean"
+        ? null
+        : issue(field, `${field.label} must be true or false.`);
     case "number":
       return validateNumber(field, value);
     case "select":
@@ -235,16 +241,25 @@ function validateStringBounds(
   value: string,
 ): FeatureConfigValidationIssue | null {
   if (field.kind !== "string") return null;
-  if (field.minLength !== undefined && value.length < field.minLength) return issue(field, `${field.label} is too short.`);
-  if (field.maxLength !== undefined && value.length > field.maxLength) return issue(field, `${field.label} is too long.`);
+  if (field.minLength !== undefined && value.length < field.minLength)
+    return issue(field, `${field.label} is too short.`);
+  if (field.maxLength !== undefined && value.length > field.maxLength)
+    return issue(field, `${field.label} is too long.`);
   return null;
 }
 
-function validateNumber(field: NumberFeatureConfigField, value: unknown): FeatureConfigValidationIssue | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return issue(field, `${field.label} must be a finite number.`);
-  if (field.integer && !Number.isInteger(value)) return issue(field, `${field.label} must be a whole number.`);
-  if (field.min !== undefined && value < field.min) return issue(field, `${field.label} is too small.`);
-  if (field.max !== undefined && value > field.max) return issue(field, `${field.label} is too large.`);
+function validateNumber(
+  field: NumberFeatureConfigField,
+  value: unknown,
+): FeatureConfigValidationIssue | null {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return issue(field, `${field.label} must be a finite number.`);
+  if (field.integer && !Number.isInteger(value))
+    return issue(field, `${field.label} must be a whole number.`);
+  if (field.min !== undefined && value < field.min)
+    return issue(field, `${field.label} is too small.`);
+  if (field.max !== undefined && value > field.max)
+    return issue(field, `${field.label} is too large.`);
   return null;
 }
 

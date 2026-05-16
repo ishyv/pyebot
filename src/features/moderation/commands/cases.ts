@@ -1,25 +1,16 @@
 import {
-  MessageFlags,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  Colors,
-  PermissionFlagsBits,
   type ChatInputCommandInteraction,
+  MessageFlags,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
 } from "discord.js";
 import { getCases } from "@/features/moderation/service";
-import type { SanctionType } from "@/db/schemas/user";
+import { renderSanctionHistory } from "@/features/moderation/views";
+import { defineCommand } from "@/framework";
 import { hasPermission } from "@/middleware/permissions";
+import { container, text, v2Message } from "@/ui/v2";
 
-const SANCTION_EMOJI: Record<SanctionType, string> = {
-  BAN: "🔨",
-  KICK: "👢",
-  TIMEOUT: "🔇",
-  WARN: "⚠️",
-  RESTRICT: "🚫",
-  PARDON: "✅",
-};
-
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("cases")
   .setDescription("View the sanction history of a user on this server")
   .addUserOption((opt) =>
@@ -27,9 +18,12 @@ export const data = new SlashCommandBuilder()
   )
   .setDMPermission(false);
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "This command can only be used in a server.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -40,15 +34,18 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   // Privacy gate: only allow viewing other users' history if caller has ModerateMembers
   const isSelf = targetUser.id === interaction.user.id;
   if (!isSelf) {
-    const callerMember = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+    const callerMember = await interaction.guild.members
+      .fetch(interaction.user.id)
+      .catch(() => null);
     if (!callerMember || !hasPermission(callerMember, PermissionFlagsBits.ModerateMembers)) {
-      const embed = new EmbedBuilder()
-        .setColor(Colors.Red)
-        .setTitle("Permission Denied")
-        .setDescription("You can only view your own case history.")
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply(
+        v2Message(
+          container(
+            "danger",
+            text("**Permission denied.** You can only view your own case history."),
+          ),
+        ),
+      );
       return;
     }
   }
@@ -63,29 +60,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const history = result.unwrap();
 
   if (history.length === 0) {
-    await interaction.editReply({ content: `**${targetUser.tag}** has no cases recorded on this server.` });
+    await interaction.editReply({
+      content: `**${targetUser.tag}** has no cases recorded on this server.`,
+    });
     return;
   }
 
   // Most recent first, cap at 15
   const entries = [...history].reverse().slice(0, 15);
 
-  const description = entries
-    .map((entry, i) => {
-      const emoji = SANCTION_EMOJI[entry.type] ?? "📝";
-      const ts = entry.date
-        ? `<t:${Math.floor(new Date(entry.date).getTime() / 1000)}:d>`
-        : "N/A";
-      return `**${i + 1}.** ${emoji} **${entry.type}** — ${ts}\n> ${entry.description}`;
-    })
-    .join("\n\n");
-
-  const embed = new EmbedBuilder()
-    .setColor(Colors.Blurple)
-    .setTitle(`Case History — ${targetUser.tag}`)
-    .setDescription(description)
-    .setFooter({ text: `Showing ${entries.length} of ${history.length} cases | ID: ${targetUser.id}` })
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply(renderSanctionHistory(targetUser.tag, entries));
 }
+
+export default defineCommand({
+  data,
+  help: { hints: [] },
+  execute,
+});

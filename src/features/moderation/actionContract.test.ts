@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
+  isDestructiveModerationAction,
   MODERATION_ACTIONS,
   MODERATION_SOURCES,
-  isDestructiveModerationAction,
   moderationActionLabel,
 } from "./actionContract";
 

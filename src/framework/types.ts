@@ -16,11 +16,15 @@
 import type {
   AutocompleteInteraction,
   ButtonInteraction,
+  ChannelSelectMenuInteraction,
   ChatInputCommandInteraction,
   Client,
   Interaction,
+  MentionableSelectMenuInteraction,
   ModalSubmitInteraction,
+  RoleSelectMenuInteraction,
   StringSelectMenuInteraction,
+  UserSelectMenuInteraction,
 } from "discord.js";
 import type { Collection, Document, Filter, FindOptions } from "mongodb";
 import type { ZodType } from "zod";
@@ -119,7 +123,14 @@ export interface ComponentRoute {
 
 /** A bound component handler ready to be invoked by the router. */
 export type BoundComponentHandler = (
-  interaction: ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction,
+  interaction:
+    | ButtonInteraction
+    | StringSelectMenuInteraction
+    | ChannelSelectMenuInteraction
+    | MentionableSelectMenuInteraction
+    | RoleSelectMenuInteraction
+    | UserSelectMenuInteraction
+    | ModalSubmitInteraction,
   ctx: Ctx,
 ) => Promise<void>;
 
@@ -209,7 +220,12 @@ export interface Ctx {
    */
   query<T>(
     component: Component<T>,
-    options?: { filter?: Filter<Document>; sort?: Record<string, 1 | -1>; limit?: number; skip?: number },
+    options?: {
+      filter?: Filter<Document>;
+      sort?: Record<string, 1 | -1>;
+      limit?: number;
+      skip?: number;
+    },
   ): Promise<ReadonlyArray<ComponentRecord<T>>>;
 
   // -- Events -------------------------------------------------------------

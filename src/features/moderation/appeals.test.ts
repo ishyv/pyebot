@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { buildQueuePayload } from "./appeals";
-import type { Appeal } from "@/db/schemas/appeal";
 import { MessageFlags } from "discord.js";
+import type { Appeal } from "@/db/schemas/appeal";
+import { buildQueuePayload } from "./appeals";
 
 function makeAppeal(overrides: Partial<Omit<Appeal, "_id">> = {}): Appeal {
   const base = {

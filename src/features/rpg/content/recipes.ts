@@ -17,12 +17,12 @@ export interface CraftingRecipeDef {
 }
 
 export const CRAFTING_RECIPES = {
-  stone_pickaxe:  { requires: { stone: 3 } },
+  stone_pickaxe: { requires: { stone: 3 } },
   copper_pickaxe: { requires: { copper_ingot: 3 } },
-  iron_pickaxe:   { requires: { iron_ingot: 3 } },
-  stone_axe:      { requires: { oak_plank: 3 } },
-  copper_axe:     { requires: { copper_ingot: 3 } },
-  iron_axe:       { requires: { iron_ingot: 3 } },
+  iron_pickaxe: { requires: { iron_ingot: 3 } },
+  stone_axe: { requires: { oak_plank: 3 } },
+  copper_axe: { requires: { copper_ingot: 3 } },
+  iron_axe: { requires: { iron_ingot: 3 } },
 } as const satisfies Record<string, CraftingRecipeDef>;
 
 export type CraftingRecipeId = keyof typeof CRAFTING_RECIPES;
@@ -40,14 +40,14 @@ export interface ProcessingRecipeDef {
 }
 
 export const PROCESSING_RECIPES = {
-  stone:       { output: "stone_block",  materialsPerBatch: 2, outputPerBatch: 1, tier: 1 },
-  copper_ore:  { output: "copper_ingot", materialsPerBatch: 2, outputPerBatch: 1, tier: 2 },
-  iron_ore:    { output: "iron_ingot",   materialsPerBatch: 2, outputPerBatch: 1, tier: 3 },
-  silver_ore:  { output: "silver_ingot", materialsPerBatch: 2, outputPerBatch: 1, tier: 4 },
-  oak_wood:    { output: "oak_plank",    materialsPerBatch: 2, outputPerBatch: 1, tier: 1 },
+  stone: { output: "stone_block", materialsPerBatch: 2, outputPerBatch: 1, tier: 1 },
+  copper_ore: { output: "copper_ingot", materialsPerBatch: 2, outputPerBatch: 1, tier: 2 },
+  iron_ore: { output: "iron_ingot", materialsPerBatch: 2, outputPerBatch: 1, tier: 3 },
+  silver_ore: { output: "silver_ingot", materialsPerBatch: 2, outputPerBatch: 1, tier: 4 },
+  oak_wood: { output: "oak_plank", materialsPerBatch: 2, outputPerBatch: 1, tier: 1 },
   spruce_wood: { output: "spruce_plank", materialsPerBatch: 2, outputPerBatch: 1, tier: 2 },
-  palm_wood:   { output: "palm_plank",   materialsPerBatch: 2, outputPerBatch: 1, tier: 3 },
-  pine_wood:   { output: "pine_plank",   materialsPerBatch: 2, outputPerBatch: 1, tier: 4 },
+  palm_wood: { output: "palm_plank", materialsPerBatch: 2, outputPerBatch: 1, tier: 3 },
+  pine_wood: { output: "pine_plank", materialsPerBatch: 2, outputPerBatch: 1, tier: 4 },
 } as const satisfies Record<string, ProcessingRecipeDef>;
 
 /** A processing recipe is indexed by its raw-input MaterialId. */

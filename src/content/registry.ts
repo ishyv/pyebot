@@ -29,18 +29,15 @@
 // content files. They are NOT session/cooldown state — that lives in src/core/state.ts.
 
 import {
-  loadContentPacks,
   type LoadedContentPacks,
+  loadContentPacks,
   type SourcedDropTableDef,
   type SourcedItemDef,
   type SourcedLocationDef,
   type SourcedRecipeDef,
 } from "@/content/loader";
-import {
-  validateLoadedContent,
-  ContentValidationError,
-} from "@/content/validation";
 import type { GatherAction, Profession } from "@/content/schemas";
+import { ContentValidationError, validateLoadedContent } from "@/content/validation";
 
 export { ContentValidationError };
 
@@ -104,12 +101,8 @@ class RuntimeContentRegistry implements ContentRegistry {
 
     this.itemsById = new Map(packs.items.map((item) => [item.id, item]));
     this.recipesById = new Map(packs.recipes.map((recipe) => [recipe.id, recipe]));
-    this.locationsById = new Map(
-      packs.locations.map((location) => [location.id, location]),
-    );
-    this.locationsSorted = packs.locations.slice().sort((a, b) =>
-      a.requiredTier - b.requiredTier,
-    );
+    this.locationsById = new Map(packs.locations.map((location) => [location.id, location]));
+    this.locationsSorted = packs.locations.slice().sort((a, b) => a.requiredTier - b.requiredTier);
 
     const grouped = new Map<string, SourcedDropTableDef[]>();
     for (const dropTable of packs.dropTables) {
@@ -250,9 +243,9 @@ class RuntimeContentRegistry implements ContentRegistry {
 let cachedRegistry: ContentRegistry | null = null;
 let cachedSource: string | null = null;
 
-export async function loadContentRegistry(
-  options?: { forceReload?: boolean },
-): Promise<ContentRegistry>;
+export async function loadContentRegistry(options?: {
+  forceReload?: boolean;
+}): Promise<ContentRegistry>;
 export async function loadContentRegistry(
   packDir?: string,
   options?: { forceReload?: boolean },
@@ -265,11 +258,7 @@ export async function loadContentRegistry(
   const loadOptions = typeof arg === "string" ? options : arg;
   const cacheKey = packDir ?? "typed:default";
 
-  if (
-    !loadOptions?.forceReload &&
-    cachedRegistry &&
-    cachedSource === cacheKey
-  ) {
+  if (!loadOptions?.forceReload && cachedRegistry && cachedSource === cacheKey) {
     return cachedRegistry;
   }
 

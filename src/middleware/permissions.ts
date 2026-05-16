@@ -11,13 +11,16 @@
  */
 
 import type { GuildMember, PermissionResolvable } from "discord.js";
-import { OkResult, ErrResult } from "@/core/result";
 import type { MiddlewareFn } from "@/core/feature";
+import { ErrResult, OkResult } from "@/core/result";
 
 /**
  * Returns true if the member has all of the specified permissions.
  */
-export function hasPermission(member: GuildMember, ...permissions: PermissionResolvable[]): boolean {
+export function hasPermission(
+  member: GuildMember,
+  ...permissions: PermissionResolvable[]
+): boolean {
   return permissions.every((perm) => member.permissions.has(perm));
 }
 
@@ -46,7 +49,9 @@ export function requirePermissions(...permissions: PermissionResolvable[]): Midd
     if (!member || typeof member.permissions === "string") {
       return ErrResult({ content: "Could not verify your permissions." });
     }
-    const missing = permissions.find((perm) => !(member.permissions as { has(p: PermissionResolvable): boolean }).has(perm));
+    const missing = permissions.find(
+      (perm) => !(member.permissions as { has(p: PermissionResolvable): boolean }).has(perm),
+    );
     if (missing) {
       return ErrResult({ content: "You don't have permission to use this command." });
     }

@@ -4,18 +4,18 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  createRng,
-  nextRandom,
-  nextInt,
-  nextFloat,
-  calculateDamage,
-  resolveRound,
-  isCombatEnded,
-  determineWinner,
-  buildCombatResult,
-  generateSessionId,
-  COMBAT_CONFIG,
   type ActiveCombatSession,
+  buildCombatResult,
+  COMBAT_CONFIG,
+  calculateDamage,
+  createRng,
+  determineWinner,
+  generateSessionId,
+  isCombatEnded,
+  nextFloat,
+  nextInt,
+  nextRandom,
+  resolveRound,
 } from "./engine";
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,13 @@ describe("calculateDamage", () => {
   test("blocking attacker deals 0 damage", () => {
     const rng = createRng(1);
     const result = calculateDamage(
-      { attackerAtk: 20, defenderDef: 5, attackerMove: "block", defenderMove: "attack", defenderHasShieldItem: false },
+      {
+        attackerAtk: 20,
+        defenderDef: 5,
+        attackerMove: "block",
+        defenderMove: "attack",
+        defenderHasShieldItem: false,
+      },
       rng,
     );
     expect(result.damage).toBe(0);
@@ -124,7 +130,13 @@ describe("calculateDamage", () => {
     for (let seed = 1; seed < 100; seed++) {
       const rng = createRng(seed);
       const result = calculateDamage(
-        { attackerAtk: 10, defenderDef: 0, attackerMove: "attack", defenderMove: "attack", defenderHasShieldItem: false },
+        {
+          attackerAtk: 10,
+          defenderDef: 0,
+          attackerMove: "attack",
+          defenderMove: "attack",
+          defenderHasShieldItem: false,
+        },
         rng,
       );
       expect(result.damage).toBeGreaterThanOrEqual(COMBAT_CONFIG.minDamage);
@@ -136,7 +148,13 @@ describe("calculateDamage", () => {
     for (let seed = 1; seed < 1000; seed++) {
       const rng = createRng(seed);
       const result = calculateDamage(
-        { attackerAtk: 20, defenderDef: 5, attackerMove: "attack", defenderMove: "block", defenderHasShieldItem: true },
+        {
+          attackerAtk: 20,
+          defenderDef: 5,
+          attackerMove: "attack",
+          defenderMove: "block",
+          defenderHasShieldItem: true,
+        },
         rng,
       );
       if (result.isBlocked) {
@@ -156,7 +174,13 @@ describe("calculateDamage", () => {
     for (let seed = 1; seed < 200; seed++) {
       const rng = createRng(seed);
       const result = calculateDamage(
-        { attackerAtk: 20, defenderDef: 5, attackerMove: "attack", defenderMove: "block", defenderHasShieldItem: false },
+        {
+          attackerAtk: 20,
+          defenderDef: 5,
+          attackerMove: "attack",
+          defenderMove: "block",
+          defenderHasShieldItem: false,
+        },
         rng,
       );
       if (result.isFailedBlock) {
@@ -173,12 +197,20 @@ describe("calculateDamage", () => {
     for (let seed = 1; seed < 500; seed++) {
       const rng = createRng(seed);
       const result = calculateDamage(
-        { attackerAtk: 100, defenderDef: 0, attackerMove: "attack", defenderMove: "attack", defenderHasShieldItem: false },
+        {
+          attackerAtk: 100,
+          defenderDef: 0,
+          attackerMove: "attack",
+          defenderMove: "attack",
+          defenderHasShieldItem: false,
+        },
         rng,
       );
       if (result.isCrit) {
         // Crit min = 1.5 * 100 = 150
-        expect(result.damage).toBeGreaterThanOrEqual(Math.floor(COMBAT_CONFIG.critMultiplier.min * 100 * 0.9));
+        expect(result.damage).toBeGreaterThanOrEqual(
+          Math.floor(COMBAT_CONFIG.critMultiplier.min * 100 * 0.9),
+        );
         foundCrit = true;
         break;
       }
@@ -289,7 +321,9 @@ describe("determineWinner", () => {
 
   test("double KO: p1 wins when HP% equal", () => {
     // Both at 0 HP → p1 wins ties
-    expect(determineWinner(makeSession({ p1Hp: 0, p2Hp: 0, p1MaxHp: 100, p2MaxHp: 100 }))).toBe("p1");
+    expect(determineWinner(makeSession({ p1Hp: 0, p2Hp: 0, p1MaxHp: 100, p2MaxHp: 100 }))).toBe(
+      "p1",
+    );
   });
 
   test("double KO: higher HP% player wins", () => {

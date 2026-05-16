@@ -3,7 +3,7 @@
  * Provides lazy-connecting `getDb()` and `getMongoClient()`.
  * Call `disconnectDb()` in tests and on graceful shutdown.
  */
-import { MongoClient, type Db } from "mongodb";
+import { type Db, MongoClient } from "mongodb";
 
 let client: MongoClient | null = null;
 let dbInstance: Db | null = null;

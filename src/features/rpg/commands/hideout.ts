@@ -1,6 +1,8 @@
-import { type ChatInputCommandInteraction, EmbedBuilder, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { getRpgProfile, patchRpgProfile } from "@/db/repositories/rpg";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
+import { defineCommand } from "@/framework";
+import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
 const HEAL_COST_PER_HP = 5;
@@ -17,7 +19,7 @@ const STASH_QUOTES = [
   "Larger holding approved. The guards who protect it are no more attentive than before.",
 ];
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName("hideout")
   .setDescription("Your Hideout: heal, upgrade your stash, and check your standing.")
   .addSubcommand((sub) =>
@@ -67,29 +69,30 @@ function hpBarStr(current: number, max: number, length = 10): string {
   return "█".repeat(filled) + "░".repeat(empty);
 }
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
 
   const sub = interaction.options.getSubcommand();
   const userId = interaction.user.id;
 
   if (sub === "help") {
-    await interaction.editReply({ embeds: [hideoutHelpEmbed()] });
+    await interaction.editReply(hideoutHelpV2());
     return;
   }
 
   const profileRes = await getRpgProfile(userId);
   const profile = profileRes.isOk() ? profileRes.unwrap() : null;
   if (!profile) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x3a1a1a)
-          .setTitle("No Profile Found")
-          .setDescription("You haven't started your RPG journey. Use `/rpg-profile` to begin.")
-          .setFooter({ text: "Ashenmoor · Hideout" }),
-      ],
-    });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "mute",
+          text(
+            "## No Profile Found\nYou haven't started your RPG journey. Use `/rpg-profile` to begin.\n-# Ashenmoor · Hideout",
+          ),
+        ),
+      ),
+    );
     return;
   }
 
@@ -109,43 +112,47 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const healable = Math.min(100 - profile.hpCurrent, Math.floor(balance / HEAL_COST_PER_HP));
     const healCost = healable * HEAL_COST_PER_HP;
 
-    const embed = new EmbedBuilder()
-      .setColor(0x1a2a1a)
-      .setTitle("🏚️ Hideout Status")
-      .setDescription(
-        `**HP** \`${hpBar}\` ${profile.hpCurrent}/100\n` +
-          `**Balance** ${coins(balance)}\n\n` +
-          `Healing ${healable} HP would cost **${coins(healCost)}**.\n` +
-          (profile.hpCurrent >= 100
-            ? "*You are at full health.*"
-            : balance < HEAL_COST_PER_HP
-              ? "*You cannot afford any healing.*"
-              : ""),
-      )
-      .addFields({
-        name: "📦 Stash",
-        value: upgrade
-          ? `Current max: **${stashSize}** slots\nUpgrade to **${upgrade.nextMax}** costs **${coins(upgrade.cost)}**`
-          : `**${stashSize}** slots — *fully upgraded*`,
-        inline: false,
-      })
-      .setFooter({ text: "Ashenmoor · Hideout — /hideout heal · /hideout stash_upgrade" });
+    const stashText = upgrade
+      ? `Current max: **${stashSize}** slots\nUpgrade to **${upgrade.nextMax}** costs **${coins(upgrade.cost)}**`
+      : `**${stashSize}** slots — *fully upgraded*`;
 
-    await interaction.editReply({ embeds: [embed] });
+    const healNote =
+      profile.hpCurrent >= 100
+        ? "*You are at full health.*"
+        : balance < HEAL_COST_PER_HP
+          ? "*You cannot afford any healing.*"
+          : `Healing ${healable} HP would cost **${coins(healCost)}**.`;
+
+    await interaction.editReply(
+      v2Message(
+        container(
+          "ok",
+          text(
+            `## 🏚️ Hideout Status\n**HP** \`${hpBar}\` ${profile.hpCurrent}/100\n**Balance** ${coins(balance)}\n\n${healNote}`,
+          ),
+          separator("lg"),
+          text(
+            `**📦 Stash**\n${stashText}\n\n-# Ashenmoor · Hideout — /hideout heal · /hideout stash_upgrade`,
+          ),
+        ),
+      ),
+    );
     return;
   }
 
   // ── HEAL ───────────────────────────────────────────────────────────────
   if (sub === "heal") {
     if (profile.hpCurrent >= 100) {
-      const embed = new EmbedBuilder()
-        .setColor(0x1a3a1a)
-        .setTitle("🏥 Therapist")
-        .setDescription(
-          "*The Therapist looks you over and shakes their head.*\n\nYou are at full health. There is nothing to bill you for.",
-        )
-        .setFooter({ text: "Ashenmoor · Hideout" });
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply(
+        v2Message(
+          container(
+            "ok",
+            text(
+              "## 🏥 Therapist\n*The Therapist looks you over and shakes their head.*\n\nYou are at full health. There is nothing to bill you for.\n\n-# Ashenmoor · Hideout",
+            ),
+          ),
+        ),
+      );
       return;
     }
 
@@ -153,16 +160,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const maxAffordable = Math.floor(balance / HEAL_COST_PER_HP);
 
     if (maxAffordable <= 0) {
-      const embed = new EmbedBuilder()
-        .setColor(0x3a1a1a)
-        .setTitle("🏥 Insufficient Funds")
-        .setDescription(
-          `*The Therapist doesn't look up from their ledger.*\n\n` +
-            `Healing costs **${coins(HEAL_COST_PER_HP)} per HP**. ` +
-            `You have **${coins(balance)}**. Come back with coin.`,
-        )
-        .setFooter({ text: "Ashenmoor · Hideout" });
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply(
+        v2Message(
+          container(
+            "danger",
+            text(
+              `## 🏥 Insufficient Funds\n*The Therapist doesn't look up from their ledger.*\n\nHealing costs **${coins(HEAL_COST_PER_HP)} per HP**. You have **${coins(balance)}**. Come back with coin.\n\n-# Ashenmoor · Hideout`,
+            ),
+          ),
+        ),
+      );
       return;
     }
 
@@ -178,46 +185,46 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const quote =
       HEAL_QUOTES[Math.floor(Math.random() * HEAL_QUOTES.length)] ?? HEAL_QUOTES[0] ?? "";
 
-    const embed = new EmbedBuilder()
-      .setColor(0x1a3a1a)
-      .setTitle("🏥 Therapist")
-      .setDescription(
-        `*${quote}*\n\n` +
-          `Healed **+${toHeal} HP** for **${coins(totalCost)}**.\n\n` +
-          `**HP** \`${hpBar}\` ${newHp}/100\n` +
-          `**Remaining Balance** ${coins(balance - totalCost)}`,
-      )
-      .setFooter({ text: `Ashenmoor · Hideout · ${HEAL_COST_PER_HP} coins/HP` });
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "ok",
+          text(
+            `## 🏥 Therapist\n*${quote}*\n\nHealed **+${toHeal} HP** for **${coins(totalCost)}**.\n\n**HP** \`${hpBar}\` ${newHp}/100\n**Remaining Balance** ${coins(balance - totalCost)}\n\n-# Ashenmoor · Hideout · ${HEAL_COST_PER_HP} coins/HP`,
+          ),
+        ),
+      ),
+    );
     return;
   }
 
   // ── STASH UPGRADE ──────────────────────────────────────────────────────
   if (sub === "stash_upgrade") {
     if (!upgrade) {
-      const embed = new EmbedBuilder()
-        .setColor(0x2a2a3a)
-        .setTitle("📦 Stash — Fully Upgraded")
-        .setDescription(
-          `Your stash holds **${stashSize} slots**. There are no further expansions available.\n\n*The clerk's ledger has no line for this.*`,
-        )
-        .setFooter({ text: "Ashenmoor · Hideout" });
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply(
+        v2Message(
+          container(
+            "mute",
+            text(
+              `## 📦 Stash — Fully Upgraded\nYour stash holds **${stashSize} slots**. There are no further expansions available.\n\n*The clerk's ledger has no line for this.*\n\n-# Ashenmoor · Hideout`,
+            ),
+          ),
+        ),
+      );
       return;
     }
 
     if (balance < upgrade.cost) {
-      const embed = new EmbedBuilder()
-        .setColor(0x3a1a1a)
-        .setTitle("📦 Insufficient Funds")
-        .setDescription(
-          `Expanding from **${stashSize}** to **${upgrade.nextMax}** slots costs **${coins(upgrade.cost)}**.\n\n` +
-            `You have **${coins(balance)}**. You are short by **${coins(upgrade.cost - balance)}**.\n\n` +
-            `*The clerk doesn't blink. Coin or go home.*`,
-        )
-        .setFooter({ text: "Ashenmoor · Hideout" });
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply(
+        v2Message(
+          container(
+            "danger",
+            text(
+              `## 📦 Insufficient Funds\nExpanding from **${stashSize}** to **${upgrade.nextMax}** slots costs **${coins(upgrade.cost)}**.\n\nYou have **${coins(balance)}**. You are short by **${coins(upgrade.cost - balance)}**.\n\n*The clerk doesn't blink. Coin or go home.*\n\n-# Ashenmoor · Hideout`,
+            ),
+          ),
+        ),
+      );
       return;
     }
 
@@ -227,50 +234,40 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const quote =
       STASH_QUOTES[Math.floor(Math.random() * STASH_QUOTES.length)] ?? STASH_QUOTES[0] ?? "";
 
-    const embed = new EmbedBuilder()
-      .setColor(0xc89b3c)
-      .setTitle("📦 Stash Expanded")
-      .setDescription(
-        `*${quote}*\n\n` +
-          `Paid **${coins(upgrade.cost)}** to expand stash capacity.\n\n` +
-          `**New Capacity:** ${upgrade.nextMax} slots\n` +
-          `**Remaining Balance:** ${coins(balance - upgrade.cost)}`,
-      )
-      .setFooter({ text: "Ashenmoor · Hideout" });
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(
+      v2Message(
+        container(
+          "ok",
+          text(
+            `## 📦 Stash Expanded\n*${quote}*\n\nPaid **${coins(upgrade.cost)}** to expand stash capacity.\n\n**New Capacity:** ${upgrade.nextMax} slots\n**Remaining Balance:** ${coins(balance - upgrade.cost)}\n\n-# Ashenmoor · Hideout`,
+          ),
+        ),
+      ),
+    );
   }
 }
 
-function hideoutHelpEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(0x1a2a1a)
-    .setTitle("Hideout Guide")
-    .setDescription(
-      "The hideout is your RPG recovery screen. Check health, pay for healing, and expand stash space before taking bigger risks.",
-    )
-    .addFields(
-      {
-        name: "Status",
-        value: "`/hideout status` shows HP, coins, stash size, and the next upgrade cost.",
-        inline: false,
-      },
-      {
-        name: "Healing",
-        value:
-          "`/hideout heal` restores as much HP as you can afford. Use `amount` to heal a specific number.",
-        inline: false,
-      },
-      {
-        name: "Stash",
-        value: "`/hideout stash_upgrade` buys more item capacity when you have enough coins.",
-        inline: false,
-      },
-      {
-        name: "Expeditions",
-        value: "`/expedition` explains raids. Heal before you enter; death strips equipped gear.",
-        inline: false,
-      },
-    )
-    .setFooter({ text: `Ashenmoor · Hideout · Healing costs ${HEAL_COST_PER_HP} coins/HP` });
+function hideoutHelpV2() {
+  return v2Message(
+    container(
+      "info",
+      text(
+        "## Hideout Guide\nThe hideout is your RPG recovery screen. Check health, pay for healing, and expand stash space before taking bigger risks.",
+      ),
+      separator("lg"),
+      text(
+        "**Status**\n`/hideout status` shows HP, coins, stash size, and the next upgrade cost.\n\n" +
+          "**Healing**\n`/hideout heal` restores as much HP as you can afford. Use `amount` to heal a specific number.\n\n" +
+          "**Stash**\n`/hideout stash_upgrade` buys more item capacity when you have enough coins.\n\n" +
+          "**Expeditions**\n`/expedition` explains raids. Heal before you enter; death strips equipped gear.\n\n" +
+          `-# Ashenmoor · Hideout · Healing costs ${HEAL_COST_PER_HP} coins/HP`,
+      ),
+    ),
+  );
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/expedition", "/balance"] },
+  execute,
+});

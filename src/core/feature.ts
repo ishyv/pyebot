@@ -7,20 +7,20 @@
  */
 
 import type {
-  Client,
-  ChatInputCommandInteraction,
   ButtonInteraction,
-  StringSelectMenuInteraction,
   ChannelSelectMenuInteraction,
+  ChatInputCommandInteraction,
+  Client,
   MentionableSelectMenuInteraction,
-  RoleSelectMenuInteraction,
-  UserSelectMenuInteraction,
   ModalSubmitInteraction,
+  RoleSelectMenuInteraction,
+  StringSelectMenuInteraction,
+  UserSelectMenuInteraction,
 } from "discord.js";
-import type { Result } from "@/core/result";
-import type { Guild } from "@/db/schemas/guild";
 import type { FeatureConfigDefinition } from "@/core/featureConfig";
 import type { InteractionResponder, InteractionVisibility } from "@/core/interactionResponder";
+import type { Result } from "@/core/result";
+import type { Guild } from "@/db/schemas/guild";
 
 // ---------------------------------------------------------------------------
 // Middleware
@@ -59,7 +59,10 @@ export type MiddlewareFn = (
 export interface FeatureCommand {
   /** Slash command data with .name and .toJSON(). */
   readonly data: { name: string; toJSON(): unknown };
-  readonly execute: (interaction: ChatInputCommandInteraction, ctx: CommandContext) => Promise<void>;
+  readonly execute: (
+    interaction: ChatInputCommandInteraction,
+    ctx: CommandContext,
+  ) => Promise<void>;
   readonly response?: {
     readonly defer?: "immediate" | "none";
     readonly visibility: InteractionVisibility;
@@ -146,7 +149,7 @@ export interface RuntimeFeature {
   readonly onLoad?: () => Promise<void> | void;
 
   /**
-   * Called after the Discord client emits "ready".
+   * Called after the Discord client emits "clientReady".
    * Use for: actions that require the live client (e.g. scheduling jobs with guild data).
    */
   readonly onReady?: (client: Client) => Promise<void> | void;

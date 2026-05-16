@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { SlashCommandBuilder } from "discord.js";
-import { OkResult, ErrResult } from "@/core/result";
 import type { RuntimeFeature } from "@/core/feature";
+import { ErrResult, OkResult } from "@/core/result";
 
 mock.module("@/db/repositories/guilds", () => ({
   guildStore: {},
@@ -79,9 +79,7 @@ describe("dispatcher interaction responses", () => {
       commands: [
         {
           data: new SlashCommandBuilder().setName("blocked").setDescription("Blocked"),
-          middleware: [
-            async () => ErrResult({ content: "Nope", ephemeral: true }),
-          ],
+          middleware: [async () => ErrResult({ content: "Nope", ephemeral: true })],
           execute: async () => {
             throw new Error("should not execute");
           },

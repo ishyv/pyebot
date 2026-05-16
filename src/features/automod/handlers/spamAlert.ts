@@ -9,12 +9,12 @@
  */
 
 import {
-  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
   type ButtonInteraction,
+  ButtonStyle,
   type MessageActionRowComponentBuilder,
+  MessageFlags,
 } from "discord.js";
 import { createLogger } from "@/core/logger";
 import { guardModerationComponentAction } from "@/features/moderation/authorization";
@@ -52,7 +52,9 @@ async function disableButtons(interaction: ButtonInteraction): Promise<void> {
         .setDisabled(true),
     );
     await interaction.message.edit({ components: [disabledRow] });
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort */
+  }
 }
 
 // ─── Timeout ─────────────────────────────────────────────────────────────────
@@ -70,11 +72,16 @@ export async function handleSpamTimeout(interaction: ButtonInteraction): Promise
 
   try {
     const member = await interaction.guild.members.fetch(userId);
-    await member.timeout(60 * 60 * 1000, `Cross-channel spam — actioned by ${interaction.user.tag}`);
+    await member.timeout(
+      60 * 60 * 1000,
+      `Cross-channel spam — actioned by ${interaction.user.tag}`,
+    );
     await interaction.editReply({ content: `<@${userId}> has been timed out for 1 hour.` });
   } catch (err) {
     log.error("Spam alert timeout failed", err);
-    await interaction.editReply({ content: "Failed to apply timeout. The user may have left the server." });
+    await interaction.editReply({
+      content: "Failed to apply timeout. The user may have left the server.",
+    });
   }
 }
 

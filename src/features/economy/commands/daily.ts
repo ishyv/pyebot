@@ -1,18 +1,13 @@
-import {
-  type ChatInputCommandInteraction,
-  Colors,
-  EmbedBuilder,
-  SlashCommandBuilder,
-} from "discord.js";
-import type { Ctx } from "@/framework/types";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { claimDaily, DailyError } from "@/features/economy/daily";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, text, v2Message } from "@/ui/v2";
 import { coins, relativeTs } from "@/utils/fmt";
 
-export const data = new SlashCommandBuilder()
-  .setName("daily")
-  .setDescription("Claim your daily reward");
+const data = new SlashCommandBuilder().setName("daily").setDescription("Claim your daily reward");
 
-export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply();
 
   if (!interaction.guild) {
@@ -21,35 +16,47 @@ export async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx
   }
 
   try {
-    const { base, streakBonus, total, newBalance, streak, currencyId } = await claimDaily(ctx, interaction.user.id, interaction.guild.id);
+    const { base, streakBonus, total, newBalance, streak, currencyId } = await claimDaily(
+      ctx,
+      interaction.user.id,
+      interaction.guild.id,
+    );
 
     const streakLine = "🔥".repeat(Math.min(streak, 10));
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Gold)
-      .setTitle("🎁 Daily Reward")
-      .setDescription(streak > 0 ? `${streakLine} **${streak}-day streak!**` : "Start your streak by claiming again tomorrow!")
-      .addFields({ name: "💰 Base Reward", value: `+${coins(base, currencyId)}`, inline: true });
+    const streakText =
+      streak > 0
+        ? `${streakLine} **${streak}-day streak!**`
+        : "Start your streak by claiming again tomorrow!";
 
+    let body = `## 🎁 Daily Reward\n${streakText}\n\n💰 **Base Reward:** +${coins(base, currencyId)}`;
     if (streakBonus > 0) {
-      embed.addFields({ name: "🔥 Streak Bonus", value: `+${coins(streakBonus, currencyId)}`, inline: true });
+      body += `\n🔥 **Streak Bonus:** +${coins(streakBonus, currencyId)}`;
     }
-    embed.addFields(
-      { name: "📊 Total", value: `+${coins(total, currencyId)}`, inline: false },
-      { name: "💳 New Balance", value: coins(newBalance, currencyId), inline: true },
-    );
-    embed.setFooter({ text: "💡 Keep your streak going! Come back tomorrow" });
+    body += `\n📊 **Total:** +${coins(total, currencyId)}\n💳 **New Balance:** ${coins(newBalance, currencyId)}\n\n-# 💡 Keep your streak going! Come back tomorrow`;
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(v2Message(container("ok", text(body))));
   } catch (err) {
     if (err instanceof DailyError && err.code === "ON_COOLDOWN" && err.expiresAt) {
-      const embed = new EmbedBuilder()
-        .setColor(Colors.Yellow)
-        .setTitle("⏳ Daily on Cooldown")
-        .setDescription(`You've already claimed your daily reward.\n\nCome back ${relativeTs(err.expiresAt)}`)
-        .setFooter({ text: "💡 Keep your streak going! Come back tomorrow" });
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply(
+        v2Message(
+          container(
+            "warn",
+            text(
+              `## ⏳ Daily on Cooldown\nYou've already claimed your daily reward.\n\nCome back ${relativeTs(err.expiresAt)}\n\n-# 💡 Keep your streak going! Come back tomorrow`,
+            ),
+          ),
+        ),
+      );
       return;
     }
-    await interaction.editReply({ content: `Error: ${err instanceof Error ? err.message : "Unknown error"}` });
+    await interaction.editReply({
+      content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
+    });
   }
 }
+
+export default defineCommand({
+  data,
+  help: { hints: ["/balance", "/work"] },
+  execute,
+});

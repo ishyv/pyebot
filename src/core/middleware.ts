@@ -12,8 +12,8 @@
  * without needing to inspect a Result — cleaner call site.
  */
 
-import { MessageFlags, type ChatInputCommandInteraction } from "discord.js";
-import type { MiddlewareFn, CommandContext } from "@/core/feature";
+import { type ChatInputCommandInteraction, MessageFlags } from "discord.js";
+import type { CommandContext, MiddlewareFn } from "@/core/feature";
 
 export async function runMiddleware(
   fns: readonly MiddlewareFn[],

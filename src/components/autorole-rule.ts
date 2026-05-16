@@ -9,12 +9,26 @@ import { z } from "zod";
 import { component } from "@/framework/component";
 
 const OnJoinTrigger = z.object({ type: z.literal("onJoin") });
-const OnReactTrigger = z.object({ type: z.literal("onReact"), messageId: z.string(), emoji: z.string() });
-const OnButtonTrigger = z.object({ type: z.literal("onButton"), messageId: z.string(), label: z.string() });
-const MessageContainsTrigger = z.object({ type: z.literal("messageContains"), keywords: z.array(z.string()) });
+const OnReactTrigger = z.object({
+  type: z.literal("onReact"),
+  messageId: z.string(),
+  emoji: z.string(),
+});
+const OnButtonTrigger = z.object({
+  type: z.literal("onButton"),
+  messageId: z.string(),
+  label: z.string(),
+});
+const MessageContainsTrigger = z.object({
+  type: z.literal("messageContains"),
+  keywords: z.array(z.string()),
+});
 
 export const AutoroleTrigger = z.discriminatedUnion("type", [
-  OnJoinTrigger, OnReactTrigger, OnButtonTrigger, MessageContainsTrigger,
+  OnJoinTrigger,
+  OnReactTrigger,
+  OnButtonTrigger,
+  MessageContainsTrigger,
 ]);
 export type AutoroleTriggerValue = z.infer<typeof AutoroleTrigger>;
 

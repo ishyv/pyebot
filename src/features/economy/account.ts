@@ -6,8 +6,8 @@
  * upsert with defaults, eliminating the need for manual atomicTransition logic.
  */
 
-import type { Ctx } from "@/framework/types";
 import { EconomyAccount } from "@/components/economy-account";
+import type { Ctx } from "@/framework/types";
 
 export type { EconomyAccountValue } from "@/components/economy-account";
 export type AccountStatus = "ok" | "blocked" | "banned";

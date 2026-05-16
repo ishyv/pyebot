@@ -6,9 +6,9 @@
  * Usage (pipeline):   Pass cooldownMiddleware(ms) in a command's middleware array.
  */
 
-import { cooldowns } from "@/core/state";
-import { OkResult, ErrResult } from "@/core/result";
 import type { MiddlewareFn } from "@/core/feature";
+import { ErrResult, OkResult } from "@/core/result";
+import { cooldowns } from "@/core/state";
 
 /**
  * Returns remaining cooldown in ms (> 0 means on cooldown), or 0 if not on cooldown.

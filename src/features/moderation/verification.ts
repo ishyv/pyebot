@@ -10,17 +10,15 @@
  */
 
 import {
-  ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
-  Colors,
   type Client,
   type GuildMember,
   type TextChannel,
 } from "discord.js";
-import { getGuild } from "@/db/repositories/guilds";
 import { createLogger } from "@/core/logger";
+import { getGuild } from "@/db/repositories/guilds";
+import { container, row, text, v2Message } from "@/ui/v2";
 
 const log = createLogger("moderation:verification");
 
@@ -45,13 +43,19 @@ async function onMemberJoin(member: GuildMember): Promise<void> {
 
   // Account age gate — kick regardless of mode
   if (config.minAccountAgeDays > 0 && accountAgeDays < config.minAccountAgeDays) {
-    log.info(`Kicking ${member.user.tag}: account age ${Math.floor(accountAgeDays)}d < ${config.minAccountAgeDays}d`);
+    log.info(
+      `Kicking ${member.user.tag}: account age ${Math.floor(accountAgeDays)}d < ${config.minAccountAgeDays}d`,
+    );
     try {
-      await member.send(
-        `You were removed from **${member.guild.name}** because your account is too new. ` +
-        `Please wait until your account is at least ${config.minAccountAgeDays} days old.`,
-      ).catch(() => {});
-      await member.kick(`Account age check: ${Math.floor(accountAgeDays)}d < ${config.minAccountAgeDays}d`);
+      await member
+        .send(
+          `You were removed from **${member.guild.name}** because your account is too new. ` +
+            `Please wait until your account is at least ${config.minAccountAgeDays} days old.`,
+        )
+        .catch(() => {});
+      await member.kick(
+        `Account age check: ${Math.floor(accountAgeDays)}d < ${config.minAccountAgeDays}d`,
+      );
     } catch (err) {
       log.error("Failed to kick new account", err);
     }
@@ -68,19 +72,25 @@ async function postVerifyPrompt(member: GuildMember, channelId: string): Promise
     const channel = await member.guild.channels.fetch(channelId);
     if (!channel?.isTextBased() || !("send" in channel)) return;
 
-    const embed = new EmbedBuilder()
-      .setColor(Colors.Blue)
-      .setTitle("Welcome! Please verify to access the server.")
-      .setDescription(`<@${member.id}>, click the button below to confirm you're human and gain access.`);
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    const verifyRow = row(
       new ButtonBuilder()
         .setCustomId(`mod:verify:${member.id}`)
         .setLabel("✓ Verify")
         .setStyle(ButtonStyle.Success),
     );
 
-    await (channel as TextChannel).send({ embeds: [embed], components: [row] });
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+    await (channel as TextChannel).send(
+      v2Message(
+        container(
+          "info",
+          text(
+            `## Welcome! Please verify to access the server.\n<@${member.id}>, click the button below to confirm you're human and gain access.`,
+          ),
+          verifyRow,
+        ),
+      ) as any,
+    );
   } catch (err) {
     log.error("Failed to post verify prompt", err);
   }
