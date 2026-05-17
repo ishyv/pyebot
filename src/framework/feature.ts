@@ -30,7 +30,11 @@
 
 import type { FeatureDescriptor } from "./types";
 
+type NoExtraKeys<T, Shape> = T & Record<Exclude<keyof T, keyof Shape>, never>;
+
 /** Define a feature manifest. See file header for details. */
-export function defineFeature<T extends FeatureDescriptor>(descriptor: T): T {
+export function defineFeature<const T extends FeatureDescriptor>(
+  descriptor: NoExtraKeys<T, FeatureDescriptor>,
+): T {
   return descriptor;
 }

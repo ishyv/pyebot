@@ -41,6 +41,12 @@ const policy = GuildSchema.parse({
     },
   },
 }).automod.tempRolePolicies.recentlyJoined;
+const messageRule = policy.messageRules[0];
+const accessRule = policy.accessRules[0];
+
+if (!messageRule || !accessRule) {
+  throw new Error("new users policy test fixture must include both rule types");
+}
 
 describe("new users panel policy helpers", () => {
   it("parses compact durations into seconds", () => {
@@ -51,15 +57,13 @@ describe("new users panel policy helpers", () => {
   });
 
   it("formats message rules in human language", () => {
-    expect(formatTempRoleMessageRule(policy.messageRules[0]!)).toContain(
+    expect(formatTempRoleMessageRule(messageRule)).toContain(
       "Links: 2 per 600s in <#general> -> timeout for 300s",
     );
   });
 
   it("formats and previews access blocklist rules", () => {
-    expect(formatTempRoleAccessRule(policy.accessRules[0]!)).toBe(
-      "Block sending in category support",
-    );
+    expect(formatTempRoleAccessRule(accessRule)).toBe("Block sending in category support");
     expect(accessOverwritePreview(policy)).toContain(
       "Recently Joined cannot send messages in category support",
     );

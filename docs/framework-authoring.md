@@ -1,72 +1,92 @@
 # Framework Authoring
 
-New bot code should be written as decorated feature classes and passed to `createBot`.
+New bot behavior is authored as feature folders under `src/features/<id>/`.
+The active runtime scans those folders at startup and compiles one loaded
+feature list for dispatch, command registration, component routing, and admin
+feature summaries.
 
-## Feature Classes
+## Feature Descriptor
+
+Every feature folder needs an `index.ts` default export:
 
 ```ts
-import type { ChatInputCommandInteraction } from "discord.js";
-import { Feature, SlashCommand } from "@/framework";
+import { defineFeature } from "@/framework";
 
-@Feature({ id: "polls", gate: "polls", intents: ["Guilds"] })
-export class PollsFeature {
-  @SlashCommand({ name: "poll", description: "Create a poll" })
-  async poll(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.reply("Poll created.");
-  }
-}
+export default defineFeature({
+  id: "polls",
+  name: "Polls",
+  description: "Create and manage polls.",
+  defaultEnabled: true,
+});
 ```
 
-Decorators collect metadata only. Startup compiles feature classes into explicit registry records and validates duplicate feature IDs, duplicate command names, duplicate component prefixes, and event intent declarations.
+The folder name and descriptor `id` must match. Feature toggles are keyed by
+that `id`; there is no separate toggle key in the active runtime.
+The only supported descriptor fields are `id`, `name`, `description`, and
+optional `defaultEnabled`. Commands, handlers, config, gates, and arbitrary
+metadata are rejected by TypeScript and belong in their own feature files.
+
+## Commands
+
+Command files live in `commands/*.ts` and default-export `defineCommand(...)`.
+The loader rejects malformed command modules at boot instead of silently
+skipping them.
+
+```ts
+import { SlashCommandBuilder } from "discord.js";
+import { defineCommand } from "@/framework";
+
+export default defineCommand({
+  data: new SlashCommandBuilder()
+    .setName("poll")
+    .setDescription("Create a poll"),
+  help: { hints: ["Use the generated buttons to vote."] },
+  async execute(interaction, ctx) {
+    ctx.logger.info("Creating poll");
+    await interaction.reply("Poll created.");
+  },
+});
+```
 
 ## Components
 
+Component routes live in an optional `handlers.ts` class. Use `@Handle` with
+the custom ID prefix the route owns.
+
 ```ts
 import type { ButtonInteraction } from "discord.js";
-import { Button, Feature } from "@/framework";
+import { Handle } from "@/framework";
 
-@Feature({ id: "confirm", intents: ["Guilds"] })
-export class ConfirmFeature {
-  @Button({
-    prefix: "confirm:",
-    parse: (customId) => ({ actionId: customId.slice("confirm:".length) }),
-  })
-  async confirm(interaction: ButtonInteraction, parsed: { actionId: string }): Promise<void> {
-    await interaction.reply(`Confirmed ${parsed.actionId}.`);
+export default class PollHandlers {
+  @Handle("poll:")
+  async handlePollButton(interaction: ButtonInteraction): Promise<void> {
+    const actionId = interaction.customId.slice("poll:".length);
+    await interaction.reply(`Handled ${actionId}.`);
   }
 }
 ```
 
-The prefix is both documentation and a startup uniqueness key. Do not use one generic prefix for unrelated actions.
+The router chooses the longest matching prefix, so specific prefixes can sit
+beside broader ones.
 
-## Events And Intents
+## Events
+
+Use `@On(EventClass)` for framework events and `@Listen("discordEvent")` for
+raw Discord.js events that need direct client event access.
 
 ```ts
-@Feature({ id: "counting", intents: ["GuildMessages", "MessageContent"] })
-class CountingFeature {
-  @Event({ name: "messageCreate", intents: ["GuildMessages"] })
+import { Listen } from "@/framework";
+
+export default class CountingHandlers {
+  @Listen("messageCreate")
   async onMessage(message: import("discord.js").Message): Promise<void> {
     // ...
   }
 }
 ```
 
-Event decorators can declare required intents. The compiler rejects a feature that handles an event without declaring those intents in `@Feature`.
-
-## Jobs
-
-```ts
-@Feature({ id: "maintenance" })
-class MaintenanceFeature {
-  @Job({ name: "sweep-expired", everyMs: 60_000, runOnReady: true })
-  async sweepExpired(): Promise<void> {
-    // ...
-  }
-}
-```
-
-Jobs are owned by the framework runtime. Shutdown clears their intervals before calling feature shutdown hooks.
-
 ## Latest-Only Boundary
 
-`createBot({ features })` accepts decorated feature classes only. Plain feature objects are rejected during startup validation. If a feature needs commands, components, events, config, or jobs, declare them on the class with decorators so the compiler can build one explicit registry record.
+The active runtime is `bootstrapFramework(...)` plus folder discovery. Do not
+reintroduce the deleted `RuntimeFeature` registry/dispatcher path or the older
+`createBot` decorated-class API while refactoring.

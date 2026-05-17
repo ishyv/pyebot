@@ -6,14 +6,15 @@
  */
 
 import { type ButtonInteraction, MessageFlags } from "discord.js";
-import { TICKET_CLOSE_BUTTON_PREFIX } from "@/features/tickets/commands/ticket";
+import { TICKET_CLOSE_BUTTON_PREFIX } from "@/features/tickets/customIds";
 import { closeTicket } from "@/features/tickets/service";
+import type { Ctx } from "@/framework/types";
 
 export function isTicketCloseButton(customId: string): boolean {
   return customId.startsWith(TICKET_CLOSE_BUTTON_PREFIX);
 }
 
-export async function handleTicketClose(interaction: ButtonInteraction): Promise<void> {
+export async function handleTicketClose(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
   const channelId = interaction.customId.slice(TICKET_CLOSE_BUTTON_PREFIX.length);
   if (!channelId) {
     await interaction.reply({ content: "Invalid close button.", flags: MessageFlags.Ephemeral });
@@ -30,5 +31,5 @@ export async function handleTicketClose(interaction: ButtonInteraction): Promise
   }
 
   await interaction.reply({ content: "Closing ticket...", flags: MessageFlags.Ephemeral });
-  await closeTicket(guild, channelId, interaction.user.id);
+  await closeTicket(ctx, guild, channelId, interaction.user.id);
 }

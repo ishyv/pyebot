@@ -7,7 +7,7 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { OkResult } from "@/core/result";
+import { ErrResult, OkResult } from "@/core/result";
 import type { MarketListingDoc } from "@/db/schemas/market";
 import type { User } from "@/db/schemas/user";
 
@@ -56,7 +56,7 @@ function makeUser(currency: Record<string, number> = { coins: 500 }): User {
 const mockUserGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
 const mockUserEnsure = mock(async (_id: string) => OkResult(makeUser()));
 const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
-  OkResult(undefined as void),
+  OkResult(undefined as undefined),
 );
 
 mock.module("@/db/repositories/users", () => ({
@@ -100,9 +100,16 @@ const mockMarketSet = mock(async (_id: string, doc: MarketListingDoc) => {
   return OkResult(doc);
 });
 const mockMarketReplaceIfMatch = mock(
-  async (id: string, _expected: Partial<MarketListingDoc>, next: Partial<MarketListingDoc>) => {
+  async (id: string, expected: Partial<MarketListingDoc>, next: Partial<MarketListingDoc>) => {
     const existing = listingStore.get(id);
     if (!existing) return OkResult<MarketListingDoc | null>(null);
+    if (
+      Object.entries(expected).some(
+        ([key, value]) => existing[key as keyof MarketListingDoc] !== value,
+      )
+    ) {
+      return OkResult<MarketListingDoc | null>(null);
+    }
     const updated = { ...existing, ...next };
     listingStore.set(id, updated);
     return OkResult<MarketListingDoc | null>(updated);
@@ -147,8 +154,24 @@ mock.module("@/db/repositories/economy", () => ({
 // Ctx stub (wires mock cooldowns + in-memory wallets for mutations)
 // ---------------------------------------------------------------------------
 
-function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
-  const walletStore: Record<string, Record<string, number>> = { ...wallets };
+function stackSlots(items: Record<string, number> = {}) {
+  return Object.fromEntries(Object.entries(items).map(([itemId, qty]) => [itemId, { qty }]));
+}
+
+function slotQuantities(slots: Record<string, { qty?: number }>) {
+  return Object.fromEntries(Object.entries(slots).map(([itemId, slot]) => [itemId, slot.qty ?? 0]));
+}
+
+function makeCtx(
+  wallets: Record<string, Record<string, number>> = {},
+  inventories: Record<string, Record<string, number>> = {},
+  options: { failCurrencyPatchForUser?: string[]; failInventoryPatchForUser?: string[] } = {},
+) {
+  const walletStore = wallets;
+  const inventoryStore = inventories;
+  const locks = new Set<string>();
+  const failCurrency = new Set(options.failCurrencyPatchForUser ?? []);
+  const failInventory = new Set(options.failInventoryPatchForUser ?? []);
   return {
     cooldowns: {
       isOnCooldown: mockIsOnCooldown,
@@ -156,7 +179,17 @@ function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
       set: mockSetCooldown,
     },
     sessions: { get: () => undefined, set: () => {}, delete: () => {}, has: () => false },
-    locks: { tryAcquire: () => true, release: () => {}, isHeld: () => false },
+    locks: {
+      tryAcquire: (key: string) => {
+        if (locks.has(key)) return false;
+        locks.add(key);
+        return true;
+      },
+      release: (key: string) => {
+        locks.delete(key);
+      },
+      isHeld: (key: string) => locks.has(key),
+    },
     client: {} as never,
     logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
     interaction: null,
@@ -164,6 +197,10 @@ function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
     get: async (id: string, component: { collection?: string }) => {
       if (component.collection === "economy_accounts") {
         return makeAccountValue() as never;
+      }
+      if (component.collection === "user_inventories") {
+        const slots = inventoryStore[id];
+        return slots ? ({ slots: stackSlots(slots) } as never) : null;
       }
 
       const bal = walletStore[id];
@@ -173,11 +210,27 @@ function makeCtx(wallets: Record<string, Record<string, number>> = {}) {
       if (component.collection === "economy_accounts") {
         return makeAccountValue() as never;
       }
+      if (component.collection === "user_inventories") {
+        if (!inventoryStore[id]) inventoryStore[id] = {};
+        return { slots: stackSlots(inventoryStore[id]) } as never;
+      }
 
       if (!walletStore[id]) walletStore[id] = { coins: 0 };
       return { balances: walletStore[id], bankBalances: {} } as never;
     },
-    patch: async (id: string, _: unknown, fn: unknown) => {
+    patch: async (id: string, component: { collection?: string }, fn: unknown) => {
+      if (component.collection === "user_inventories") {
+        if (failInventory.has(id)) throw new Error("inventory patch failed");
+        if (!inventoryStore[id]) inventoryStore[id] = {};
+        const cur = { slots: stackSlots(inventoryStore[id]) };
+        const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
+          slots?: Record<string, { qty?: number }>;
+        };
+        if (patch.slots) inventoryStore[id] = slotQuantities(patch.slots);
+        return;
+      }
+
+      if (failCurrency.has(id)) throw new Error("currency patch failed");
       if (!walletStore[id]) walletStore[id] = { coins: 0 };
       const cur = { balances: walletStore[id], bankBalances: {} };
       const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
@@ -223,7 +276,7 @@ function resetAll() {
   mockSetCooldown.mockImplementation(() => {});
   mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
   mockUserEnsure.mockImplementation(async () => OkResult(makeUser()));
-  mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined as void));
+  mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined as undefined));
   mockMarketGet.mockImplementation(async (id: string) => {
     const doc = listingStore.get(id);
     return OkResult<MarketListingDoc | null>(doc ?? null);
@@ -233,9 +286,16 @@ function resetAll() {
     return OkResult(doc);
   });
   mockMarketReplaceIfMatch.mockImplementation(
-    async (id: string, _expected: Partial<MarketListingDoc>, next: Partial<MarketListingDoc>) => {
+    async (id: string, expected: Partial<MarketListingDoc>, next: Partial<MarketListingDoc>) => {
       const existing = listingStore.get(id);
       if (!existing) return OkResult<MarketListingDoc | null>(null);
+      if (
+        Object.entries(expected).some(
+          ([key, value]) => existing[key as keyof MarketListingDoc] !== value,
+        )
+      ) {
+        return OkResult<MarketListingDoc | null>(null);
+      }
       const updated = { ...existing, ...next };
       listingStore.set(id, updated);
       return OkResult<MarketListingDoc | null>(updated);
@@ -255,7 +315,16 @@ describe("createListing", () => {
   beforeEach(resetAll);
 
   test("creates a listing successfully", async () => {
-    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 10, 50);
+    const inventory = { "seller-1": { wood: 10 } };
+
+    const result = await createListing(
+      makeCtx({}, inventory),
+      "seller-1",
+      "guild-1",
+      "wood",
+      10,
+      50,
+    );
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -263,7 +332,40 @@ describe("createListing", () => {
     expect(data.quantity).toBe(10);
     expect(data.pricePerUnit).toBe(50);
     expect(data.listingId).toMatch(/^listing:/);
+    expect(inventory["seller-1"]?.wood).toBe(0);
     expect(mockSetCooldown).toHaveBeenCalledWith("seller-1", "market:create", 3_000);
+  });
+
+  test("rejects when seller lacks enough stackable inventory", async () => {
+    const result = await createListing(
+      makeCtx({}, { "seller-1": { wood: 4 } }),
+      "seller-1",
+      "guild-1",
+      "wood",
+      10,
+      50,
+    );
+
+    expect(result.isErr()).toBe(true);
+    const err = result.error as InstanceType<typeof MarketError>;
+    expect(err.code).toBe("INSUFFICIENT_INVENTORY");
+  });
+
+  test("restores seller inventory if listing save fails", async () => {
+    const inventory = { "seller-1": { wood: 10 } };
+    mockMarketSet.mockImplementation(async () => ErrResult(new Error("save failed")));
+
+    const result = await createListing(
+      makeCtx({}, inventory),
+      "seller-1",
+      "guild-1",
+      "wood",
+      10,
+      50,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(inventory["seller-1"]?.wood).toBe(10);
   });
 
   test("rejects invalid quantity", async () => {
@@ -319,13 +421,10 @@ describe("buyListing", () => {
     listingStore.set("listing:test-1", makeListing());
     // buyer has 500 coins, cost = 5 * 10 * 1.02 = 51
     mockUserEnsure.mockImplementation(async () => OkResult(makeUser({ coins: 500 })));
+    const wallets = { "buyer-1": { coins: 500 }, "seller-1": { coins: 0 } };
+    const inventory: Record<string, Record<string, number>> = { "buyer-1": {} };
 
-    const result = await buyListing(
-      makeCtx({ "buyer-1": { coins: 500 } }),
-      "buyer-1",
-      "listing:test-1",
-      5,
-    );
+    const result = await buyListing(makeCtx(wallets, inventory), "buyer-1", "listing:test-1", 5);
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -338,6 +437,8 @@ describe("buyListing", () => {
     expect(data.listingRemaining).toBe(45);
     // buyer: 500 - 51 = 449
     expect(data.buyerNewBalance).toBe(449);
+    expect(wallets["seller-1"]?.coins).toBe(50);
+    expect(inventory["buyer-1"]?.wood).toBe(5);
   });
 
   test("marks listing sold_out when buying all", async () => {
@@ -355,6 +456,68 @@ describe("buyListing", () => {
     expect(result.unwrap().listingRemaining).toBe(0);
     const stored = listingStore.get("listing:test-1");
     expect(stored?.status).toBe("sold_out");
+  });
+
+  test("fails stale listing CAS and refunds buyer", async () => {
+    listingStore.set("listing:test-1", makeListing());
+    const wallets = { "buyer-1": { coins: 500 }, "seller-1": { coins: 0 } };
+    mockMarketReplaceIfMatch.mockImplementation(async () =>
+      OkResult<MarketListingDoc | null>(null),
+    );
+
+    const result = await buyListing(makeCtx(wallets), "buyer-1", "listing:test-1", 5);
+
+    expect(result.isErr()).toBe(true);
+    const err = result.error as InstanceType<typeof MarketError>;
+    expect(err.code).toBe("TRANSACTION_FAILED");
+    expect(wallets["buyer-1"]?.coins).toBe(500);
+    expect(wallets["seller-1"]?.coins).toBe(0);
+  });
+
+  test("rolls back buyer debit and listing update if seller credit fails", async () => {
+    listingStore.set("listing:test-1", makeListing());
+    const wallets = { "buyer-1": { coins: 500 }, "seller-1": { coins: 0 } };
+
+    const result = await buyListing(
+      makeCtx(wallets, {}, { failCurrencyPatchForUser: ["seller-1"] }),
+      "buyer-1",
+      "listing:test-1",
+      5,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(wallets["buyer-1"]?.coins).toBe(500);
+    expect(wallets["seller-1"]?.coins).toBe(0);
+    expect(listingStore.get("listing:test-1")).toMatchObject({
+      quantity: 50,
+      status: "active",
+      version: 0,
+    });
+  });
+
+  test("only one simultaneous buyer can consume the final quantity", async () => {
+    listingStore.set("listing:test-1", makeListing({ quantity: 5 }));
+    const wallets = {
+      "buyer-1": { coins: 500 },
+      "buyer-2": { coins: 500 },
+      "seller-1": { coins: 0 },
+    };
+    const inventory: Record<string, Record<string, number>> = { "buyer-1": {}, "buyer-2": {} };
+    const ctx = makeCtx(wallets, inventory);
+
+    const results = await Promise.all([
+      buyListing(ctx, "buyer-1", "listing:test-1", 5),
+      buyListing(ctx, "buyer-2", "listing:test-1", 5),
+    ]);
+
+    expect(results.filter((result) => result.isOk())).toHaveLength(1);
+    expect(listingStore.get("listing:test-1")).toMatchObject({
+      quantity: 0,
+      status: "sold_out",
+      version: 1,
+    });
+    expect((inventory["buyer-1"]?.wood ?? 0) + (inventory["buyer-2"]?.wood ?? 0)).toBe(5);
+    expect(wallets["seller-1"]?.coins).toBe(50);
   });
 
   test("rejects self-buy", async () => {
@@ -428,8 +591,9 @@ describe("cancelListing", () => {
 
   test("seller can cancel own active listing", async () => {
     listingStore.set("listing:test-1", makeListing());
+    const inventory: Record<string, Record<string, number>> = { "seller-1": {} };
 
-    const result = await cancelListing(makeCtx(), "seller-1", "listing:test-1");
+    const result = await cancelListing(makeCtx({}, inventory), "seller-1", "listing:test-1");
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
@@ -438,6 +602,21 @@ describe("cancelListing", () => {
     expect(data.returnedQuantity).toBe(50);
     const stored = listingStore.get("listing:test-1");
     expect(stored?.status).toBe("cancelled");
+    expect(inventory["seller-1"]?.wood).toBe(50);
+  });
+
+  test("fails stale cancel CAS", async () => {
+    listingStore.set("listing:test-1", makeListing());
+    mockMarketReplaceIfMatch.mockImplementation(async () =>
+      OkResult<MarketListingDoc | null>(null),
+    );
+
+    const result = await cancelListing(makeCtx(), "seller-1", "listing:test-1");
+
+    expect(result.isErr()).toBe(true);
+    const err = result.error as InstanceType<typeof MarketError>;
+    expect(err.code).toBe("TRANSACTION_FAILED");
+    expect(listingStore.get("listing:test-1")?.status).toBe("active");
   });
 
   test("moderator can cancel with allowModeratorOverride", async () => {

@@ -37,7 +37,7 @@ export function missingPermission(
 /**
  * Middleware factory: checks that the invoking member has all given permissions.
  *
- * Usage in a FeatureCommand:
+ * Usage in a command middleware list:
  *   middleware: [requirePermissions(PermissionFlagsBits.BanMembers)]
  *
  * This is a runtime check. For UI-level hiding, also set setDefaultMemberPermissions()

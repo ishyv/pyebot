@@ -18,3 +18,8 @@ export const UserTickets = component({
 });
 
 export type UserTicketsValue = z.infer<typeof UserTickets.schema>;
+
+/** Stable id for one user's ticket state within one guild. */
+export function userTicketsId(guildId: string, userId: string): string {
+  return `${guildId}:${userId}`;
+}

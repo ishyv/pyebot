@@ -15,12 +15,13 @@ import type { CraftingError as CraftingErrorType, CraftingResult } from "./craft
 
 const mockGetUser = mock(async (_id: string) => OkResult<User | null>(null));
 const mockUpdateUserPaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
-  OkResult(undefined as void),
+  OkResult(undefined as undefined),
 );
 
 mock.module("@/db/repositories/users", () => ({
   getUser: mockGetUser,
   updateUserPaths: mockUpdateUserPaths,
+  userStore: {},
 }));
 
 // ---------------------------------------------------------------------------
@@ -48,7 +49,7 @@ function resetMocks() {
   mockGetUser.mockReset();
   mockUpdateUserPaths.mockReset();
   mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUser()));
-  mockUpdateUserPaths.mockImplementation(async () => OkResult(undefined as void));
+  mockUpdateUserPaths.mockImplementation(async () => OkResult(undefined as undefined));
 }
 
 // ---------------------------------------------------------------------------

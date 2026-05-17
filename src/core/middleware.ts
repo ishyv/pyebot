@@ -6,7 +6,7 @@
  * If all pass, returns true and the caller proceeds to execute().
  *
  * Pipeline order (enforced by the dispatcher):
- *   [guildOnly] → [featureGate] → [...command.middleware] → execute()
+ *   [guildOnly] → [...command.middleware] → execute()
  *
  * Returning a boolean lets the dispatcher decide whether to call execute()
  * without needing to inspect a Result — cleaner call site.

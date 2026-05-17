@@ -39,7 +39,7 @@ export function formatCooldown(remainingMs: number): string {
 /**
  * Middleware factory: checks cooldown before execute, sets it after.
  *
- * Usage in a FeatureCommand:
+ * Usage in a command middleware list:
  *   middleware: [cooldownMiddleware(hoursToMs(1))]
  *
  * The cooldown key is derived from `ctx.commandName` — one key per command per user.

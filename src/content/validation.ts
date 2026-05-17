@@ -1,6 +1,21 @@
-import type { LoadedContentPacks } from "@/content/loader";
+import type { DropTableDef, ItemDef, LocationDef, RecipeDef } from "./schemas";
 
 const DEFAULT_CURRENCY_IDS = new Set(["coins", "rep"]);
+
+export interface SourceMeta {
+  readonly file: string;
+  readonly jsonPath: string;
+}
+
+export type Sourced<T> = T & { readonly __source: SourceMeta };
+
+export interface LoadedContent {
+  readonly packDir: string;
+  readonly items: readonly Sourced<ItemDef>[];
+  readonly recipes: readonly Sourced<RecipeDef>[];
+  readonly dropTables: readonly Sourced<DropTableDef>[];
+  readonly locations: readonly Sourced<LocationDef>[];
+}
 
 export interface ValidationContext {
   /** Known item IDs from outside content packs (e.g. hardcoded inventory items). Defaults to empty set. */
@@ -46,7 +61,7 @@ function checkDuplicateIds<T extends { id: string; __source: { file: string; jso
 }
 
 function buildKnownItemIds(
-  content: LoadedContentPacks,
+  content: LoadedContent,
   extraItemIds?: ReadonlySet<string>,
 ): Set<string> {
   const ids = new Set<string>(extraItemIds ?? []);
@@ -56,10 +71,7 @@ function buildKnownItemIds(
   return ids;
 }
 
-export function validateLoadedContent(
-  content: LoadedContentPacks,
-  ctx: ValidationContext = {},
-): void {
+export function validateLoadedContent(content: LoadedContent, ctx: ValidationContext = {}): void {
   const issues: string[] = [];
 
   issues.push(...checkDuplicateIds(content.items, "item"));

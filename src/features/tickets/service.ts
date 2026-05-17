@@ -5,16 +5,14 @@
  * close (delete channel, remove tracking). One open ticket per user per guild.
  *
  * State: sessions store keys `ticket:{guildId}:{userId}` → channelId string.
- * Guild DB: `pendingTickets` array updated with $addToSet / $pull.
+ * Durable state: `Ticket` by channel id and `UserTickets` by guild/user id.
  */
 
 import { ChannelType, type Guild as DjsGuild } from "discord.js";
-import { getDb } from "@/core/db";
-import { createLogger } from "@/core/logger";
+import { Ticket } from "@/components/ticket";
+import { UserTickets, userTicketsId } from "@/components/user-tickets";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { sessions } from "@/core/state";
-
-const log = createLogger("tickets");
+import type { Ctx } from "@/framework/types";
 
 export class TicketError extends Error {
   constructor(
@@ -97,20 +95,23 @@ export function makeTicketChannelName(username: string): string {
  * Returns TicketError with code LIMIT_REACHED if the user already has a ticket.
  */
 export async function openTicket(
+  ctx: Ctx,
   guild: DjsGuild,
   userId: string,
   opts: OpenTicketOptions,
 ): Promise<Result<OpenTicketResult>> {
   const maxPerUser = opts.maxPerUser ?? 1;
+  const ticketStateId = userTicketsId(guild.id, userId);
+  const userTickets = await ctx.ensure(ticketStateId, UserTickets);
 
   if (maxPerUser > 0) {
-    const existing = sessions.get(sessionKey(guild.id, userId));
-    if (existing) {
+    const existingSession = ctx.sessions.get(sessionKey(guild.id, userId));
+    if (existingSession || userTickets.openChannelIds.length >= maxPerUser) {
       return ErrResult(new TicketError("You already have an open ticket.", "LIMIT_REACHED"));
     }
   }
 
-  let channel: { id: string } | null = null;
+  let channel: { id: string; delete(reason?: string): Promise<unknown> } | null = null;
   try {
     channel = await guild.channels.create({
       name: opts.channelName,
@@ -118,27 +119,28 @@ export async function openTicket(
       parent: opts.categoryId,
     });
   } catch (err) {
-    log.error("Failed to create ticket channel", err);
+    ctx.logger.error("Failed to create ticket channel", err);
     return ErrResult(new TicketError("Failed to create ticket channel.", "DISCORD_ERROR"));
   }
 
   const channelId = channel.id;
 
-  // Track owner so we can enforce one-per-user and clean up on close
-  sessions.set(sessionKey(guild.id, userId), channelId);
-
   try {
-    const db = await getDb();
-    await db
-      .collection<{ _id: string; pendingTickets?: string[] }>("guilds")
-      .updateOne(
-        { _id: guild.id } as never,
-        { $addToSet: { pendingTickets: channelId } } as never,
-        { upsert: true },
-      );
+    await ctx.set(channelId, Ticket, {
+      guildId: guild.id,
+      ownerId: userId,
+      category: "general",
+      createdAt: new Date(),
+    });
+    await ctx.patch(ticketStateId, UserTickets, (current) => ({
+      openChannelIds: [...new Set([...current.openChannelIds, channelId])],
+    }));
+    ctx.sessions.set(sessionKey(guild.id, userId), channelId);
   } catch (err) {
-    log.error("Failed to record ticket in DB", err);
-    // Non-fatal — channel exists, just DB tracking failed
+    ctx.logger.error("Failed to record ticket in DB", err);
+    await ctx.delete(channelId, Ticket).catch(() => {});
+    await channel.delete("Ticket persistence failed").catch(() => {});
+    return ErrResult(new TicketError("Failed to record ticket in DB.", "DB_ERROR"));
   }
 
   return OkResult({ channelId });
@@ -149,10 +151,14 @@ export async function openTicket(
  * `ownerId` is optional — if provided, the session key is cleaned up.
  */
 export async function closeTicket(
+  ctx: Ctx,
   guild: DjsGuild,
   channelId: string,
   ownerId?: string,
 ): Promise<Result<void>> {
+  const ticket = await ctx.get(channelId, Ticket);
+  const resolvedOwnerId = ownerId ?? ticket?.ownerId;
+
   // Delete the Discord channel
   try {
     const ch =
@@ -160,31 +166,21 @@ export async function closeTicket(
       (await guild.channels.fetch(channelId).catch(() => null));
     if (ch) await ch.delete("Ticket closed").catch(() => null);
   } catch (err) {
-    log.error("Failed to delete ticket channel", err);
+    ctx.logger.error("Failed to delete ticket channel", err);
     // Continue — still clean up DB state
   }
 
-  // Remove session
-  if (ownerId) {
-    sessions.delete(sessionKey(guild.id, ownerId));
-  } else {
-    // Scan session keys for this channelId (best-effort)
-    const prefix = `ticket:${guild.id}:`;
-    for (const [key, val] of (sessions as unknown as { map: Map<string, unknown> }).map) {
-      if (key.startsWith(prefix) && val === channelId) {
-        sessions.delete(key);
-        break;
-      }
-    }
-  }
-
   try {
-    const db = await getDb();
-    await db
-      .collection<{ _id: string; pendingTickets?: string[] }>("guilds")
-      .updateOne({ _id: guild.id } as never, { $pull: { pendingTickets: channelId } } as never);
+    await ctx.delete(channelId, Ticket);
+    if (resolvedOwnerId) {
+      const ticketStateId = userTicketsId(guild.id, resolvedOwnerId);
+      await ctx.patch(ticketStateId, UserTickets, (current) => ({
+        openChannelIds: current.openChannelIds.filter((id) => id !== channelId),
+      }));
+      ctx.sessions.delete(sessionKey(guild.id, resolvedOwnerId));
+    }
   } catch (err) {
-    log.error("Failed to remove ticket from DB", err);
+    ctx.logger.error("Failed to remove ticket from DB", err);
     return ErrResult(new TicketError("Failed to remove ticket from DB.", "DB_ERROR"));
   }
 

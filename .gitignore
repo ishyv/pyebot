@@ -19,6 +19,9 @@ coverage/
 docs/superpowers/
 docs/ai
 
+# Local refactor planning scratchpad
+plans/
+
 
 .claude
 .superpowers

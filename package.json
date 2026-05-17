@@ -14,8 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "fmt": "biome format --write .",
-    "lint": "biome lint --write .",
-    "check": "biome check --write ."
+    "lint": "biome lint .",
+    "check": "biome check ."
   },
   "dependencies": {
     "@google/genai": "^1.47.0",

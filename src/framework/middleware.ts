@@ -15,7 +15,7 @@ import {
   type Interaction,
   PermissionFlagsBits,
 } from "discord.js";
-import { GuildFeatures } from "@/components/guild-features";
+import { GuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
 import type { Ctx, FeatureDescriptor } from "./types";
 
 /**
@@ -33,9 +33,7 @@ export async function isFeatureEnabled(
     return feature.defaultEnabled !== false;
   }
   const cfg = await ctx.get(guildId, GuildFeatures);
-  const override = cfg?.overrides[feature.id];
-  if (override !== undefined) return override;
-  return feature.defaultEnabled !== false;
+  return resolveFeatureEnabled(feature, cfg?.overrides);
 }
 
 /**

@@ -10,6 +10,11 @@
 
 import { EventEmitter } from "node:events";
 import { ChannelType, type Client, type GuildBasedChannel } from "discord.js";
+import {
+  getGuildFeatures,
+  resolveFeatureEnabled,
+  setGuildFeatureOverride,
+} from "@/components/guild-features";
 import { listFeatureCatalog } from "@/core/featureCatalog";
 import { ErrResult, OkResult } from "@/core/result";
 import { ensureGuild, updateGuildPaths } from "@/db/repositories/guilds";
@@ -91,14 +96,14 @@ export function createBridgeFromClient(client: Client): BotBridge {
     },
 
     async getGuildStatus(guildId) {
-      const guild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
+      const guild =
+        client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) return ErrResult(new Error("Guild not in bot cache."));
-      const ensured = await ensureGuild(guildId);
-      if (ensured.isErr()) return ErrResult(ensured.error);
-      const config = ensured.unwrap();
-      const enabledFeatures = Object.entries(config.features ?? {})
-        .filter(([, on]) => on === true)
-        .map(([id]) => id);
+      const featureState = await getGuildFeatures(guildId);
+      if (featureState.isErr()) return ErrResult(featureState.error);
+      const enabledFeatures = listFeatureCatalog()
+        .filter((feature) => resolveFeatureEnabled(feature, featureState.unwrap().overrides))
+        .map((feature) => feature.id);
       return OkResult({
         id: guild.id,
         name: guild.name,
@@ -109,15 +114,13 @@ export function createBridgeFromClient(client: Client): BotBridge {
     },
 
     async listFeatures(guildId) {
-      const ensured = await ensureGuild(guildId);
-      if (ensured.isErr()) return ErrResult(ensured.error);
-      const config = ensured.unwrap();
+      const featureState = await getGuildFeatures(guildId);
+      if (featureState.isErr()) return ErrResult(featureState.error);
       const features = listFeatureCatalog();
       const summaries: FeatureSummary[] = features.map((feature) => ({
         id: feature.id,
-        gate: feature.featureGate ?? null,
         hasConfig: feature.config !== undefined,
-        enabled: feature.featureGate ? (config.features?.[feature.featureGate] ?? true) : true,
+        enabled: resolveFeatureEnabled(feature, featureState.unwrap().overrides),
       }));
       return OkResult(summaries);
     },
@@ -135,11 +138,9 @@ export function createBridgeFromClient(client: Client): BotBridge {
     },
 
     async toggleFeature(guildId, featureId, enabled) {
-      const result = await updateGuildPaths(
-        guildId,
-        { [`features.${featureId}`]: enabled },
-        { upsert: true },
-      );
+      const feature = listFeatureCatalog().find((entry) => entry.id === featureId);
+      if (!feature) return ErrResult(new Error(`Unknown feature: ${featureId}`));
+      const result = await setGuildFeatureOverride(guildId, featureId, enabled);
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "config_changed",
@@ -157,7 +158,7 @@ export function createBridgeFromClient(client: Client): BotBridge {
         switch (action.type) {
           case "send_message": {
             const channel = await guild.channels.fetch(action.channelId);
-            if (!channel || !channel.isTextBased()) {
+            if (!channel?.isTextBased()) {
               return ErrResult(new Error("Channel is not text-based."));
             }
             await channel.send(action.content);

@@ -2,7 +2,7 @@
 
 tx-v2 is a Bun-first TypeScript framework and starter codebase for building Discord bots through code.
 
-The goal is not visual scripting, mystery globals, or "hope Discord likes this payload" nonsense. Bot authors write normal TypeScript: classes, decorators, functions, typed config, explicit storage, and tests.
+The goal is not visual scripting, mystery globals, or "hope Discord likes this payload" nonsense. Bot authors write normal TypeScript: feature folders, command modules, typed config, explicit persistence, and tests.
 
 ## Quick Start
 
@@ -35,36 +35,52 @@ Use `GUILD_ID` while developing commands so Discord updates them quickly. Leave 
 
 ## First Bot Code
 
-New framework code should use `createBot` and decorated feature classes:
+New bundled features live under `src/features/<id>/`. The framework scans
+those folders at startup, so adding a feature is adding a folder with an
+`index.ts` descriptor and optional `commands/` or `handlers.ts` files.
 
 ```ts
-import { Feature, SlashCommand, createBot, MemoryStorageAdapter } from "@/framework";
+// src/features/hello/index.ts
+import { defineFeature } from "@/framework";
 
-@Feature({ id: "hello", intents: ["Guilds"] })
-class HelloFeature {
-  @SlashCommand({ name: "hello", description: "Say hello" })
-  async hello(interaction: import("discord.js").ChatInputCommandInteraction) {
-    await interaction.reply("Hello.");
-  }
-}
-
-const bot = createBot({
-  name: "my-bot",
-  features: [HelloFeature],
-  storage: new MemoryStorageAdapter(),
+export default defineFeature({
+  id: "hello",
+  name: "Hello",
+  description: "Small example command.",
+  defaultEnabled: true,
 });
-
-await bot.start();
 ```
 
-The bundled tx-v2 bot also lives on the same decorated feature-class runtime. tx is latest-only: old feature module objects, old env aliases, old JSON content packs, and old persisted data shapes are not supported.
+`defineFeature` accepts exactly `id`, `name`, `description`, and optional
+`defaultEnabled`. Put commands in `commands/*.ts`, component/event handlers in
+`handlers.ts`, and dashboard config in feature-owned config modules; unsupported
+descriptor metadata is a type error.
+
+```ts
+// src/features/hello/commands/hello.ts
+import { SlashCommandBuilder } from "discord.js";
+import { defineCommand } from "@/framework";
+
+export default defineCommand({
+  data: new SlashCommandBuilder()
+    .setName("hello")
+    .setDescription("Say hello"),
+  help: { hints: ["Replies with a small greeting."] },
+  async execute(interaction) {
+    await interaction.reply("Hello.");
+  },
+});
+```
+
+tx is latest-only: old feature module objects, old env aliases, old JSON content packs, and old persisted data shapes are not supported.
 
 ## Project Map
 
-- `src/framework/**` — public framework runtime: decorators, `createBot`, storage adapters, doctor checks.
-- `src/core/**` — internal runtime services used by the framework compiler, dispatcher, repositories, and bundled features.
+- `src/framework/**` — active feature runtime: loader, decorators, dispatch, command/component routing, and `Ctx`.
+- `src/core/**` — shared infrastructure used by the bot and bundled features: DB, logging, result/state helpers, feature config metadata, and legacy middleware context.
 - `src/features/**` — bundled moderation, economy, RPG, AI, tickets, offers, automod, autoroles, admin panels, and counting features.
-- `src/content/**` — typed RPG content pack runtime and authoring helpers.
+- `src/features/rpg/content/**` — active RPG runtime content for gathering, processing, crafting, tools, and expeditions.
+- `src/content/**` — item-manager/catalog authoring helpers and the extended default content pack.
 - `templates/starter/**` — starter project shape for new bots.
 - `docs/**` — feature authoring, content authoring, storage, and latest-only policy notes.
 
@@ -76,17 +92,17 @@ bun run dev          # Start with watch mode
 bun run start        # Start once
 bun test             # Run tests
 bun run typecheck    # TypeScript compile check
-bun run check        # Biome format+lint check
+bun run check        # Biome lint + format check (read-only)
 ```
 
 This repository currently uses Bun as the supported runtime. Node support is not a promise yet, because pretending two runtimes are supported before one path is boringly reliable is how frameworks get cursed.
 
 ## Framework Philosophy
 
-- Explicit metadata: decorators collect metadata; startup compiles that into a registry and validates duplicates.
+- Explicit metadata: feature descriptors and handler decorators produce one loader result that bootstrap validates.
 - Typed failures: expected domain failures use `Result` or typed errors; unexpected exceptions are caught at framework boundaries.
-- Storage adapters: starter bots can use memory/file storage; production bots can use MongoDB.
-- No hidden registration soup: features declare commands, components, events, config, intents, and jobs in one place.
+- Storage boundary: the active bundled bot uses Mongo-backed `World` components and repositories.
+- No hidden registration soup: features are discovered by folder, commands by `commands/*.ts`, and component/event routes by `handlers.ts`.
 - Source comments explain policy and boundaries, not every obvious line of code.
 
 ## Latest-Only Policy
@@ -95,7 +111,11 @@ tx does not preserve compatibility with previous framework versions. When the fr
 
 Current public authoring surface:
 
-- `createBot({ name, token, clientId, storage, features })`
-- decorated feature classes with `@Feature`, `@SlashCommand`, `@Button`, `@Select`, `@Modal`, `@Event`, and `@Job`
-- typed content in `src/content/packs/default.ts`
+- `defineFeature({ id, name, description, defaultEnabled })`; no gates, config, commands, handlers, or arbitrary metadata in the descriptor
+- `defineCommand({ data, help, execute, autocomplete })`
+- `handlers.ts` classes using `@Handle`, `@Listen`, and `@On`
+- framework `Ctx` plus `component(...)` for typed component persistence
+- feature toggles stored in `guild_features.overrides` by feature id
+- active RPG runtime content in `src/features/rpg/content/**`
+- extended catalog content in `src/content/packs/default.ts`
 - `DISCORD_TOKEN` as the single Discord token environment key

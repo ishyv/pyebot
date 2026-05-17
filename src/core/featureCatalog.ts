@@ -1,15 +1,32 @@
-import type { RuntimeFeature } from "@/core/feature";
+import type { FeatureConfigDefinition } from "@/core/featureConfig";
+import type { FeatureDescriptor, LoadedFeature } from "@/framework/types";
 
-let loadedFeatures: readonly RuntimeFeature[] = [];
-
-export function setFeatureCatalog(features: readonly RuntimeFeature[]): void {
-  loadedFeatures = [...features];
+/**
+ * Dashboard-facing summary of a loaded framework feature.
+ * Config is optional because the active framework descriptor does not require
+ * dashboard-editable settings for every feature.
+ */
+export interface FeatureCatalogEntry extends FeatureDescriptor {
+  readonly config?: FeatureConfigDefinition;
 }
 
-export function listFeatureCatalog(): readonly RuntimeFeature[] {
+let loadedFeatures: readonly FeatureCatalogEntry[] = [];
+
+/**
+ * Snapshots the active framework features for web/admin surfaces.
+ * Runtime dispatch still uses the loader result directly; this exists only so
+ * read-only UI code does not import framework bootstrap internals.
+ */
+export function setFeatureCatalog(features: readonly LoadedFeature[]): void {
+  loadedFeatures = features.map((feature) => feature.descriptor);
+}
+
+/** Returns loaded feature metadata in framework loader order. */
+export function listFeatureCatalog(): readonly FeatureCatalogEntry[] {
   return loadedFeatures;
 }
 
-export function listConfigurableFeatures(): readonly RuntimeFeature[] {
+/** Returns only features that declare dashboard-editable config metadata. */
+export function listConfigurableFeatures(): readonly FeatureCatalogEntry[] {
   return loadedFeatures.filter((feature) => feature.config !== undefined);
 }

@@ -12,7 +12,6 @@ describe("guild schema admin panel defaults", () => {
     expect(guild.forumAutoReply.enabled).toBe(false);
     expect(guild.tops.intervalHours).toBe(24);
     expect(guild.economy.features.store).toBe(true);
-    expect(guild.features.counting).toBe(true);
     expect(guild.counting.channelId).toBeNull();
   });
 

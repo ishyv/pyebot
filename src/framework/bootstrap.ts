@@ -32,6 +32,7 @@ import type {
   StringSelectMenuInteraction,
   UserSelectMenuInteraction,
 } from "discord.js";
+import { setFeatureCatalog } from "@/core/featureCatalog";
 import { createLogger } from "@/core/logger";
 import { buildCommandCatalog, installCommandCatalog } from "@/utils/command-registry";
 import { getListenMetadata, getOnMetadata } from "./decorators";
@@ -56,6 +57,7 @@ type CommandOwner = Map<string, FeatureDescriptor | null>;
 
 export async function bootstrapFramework(client: Client): Promise<BootstrapResult> {
   const features = await loadFeatures();
+  setFeatureCatalog(features);
   const world = await World.create(client);
   const router = new ComponentRouter();
 

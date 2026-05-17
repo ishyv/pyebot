@@ -43,32 +43,6 @@ export const WorkConfigSchema = z.object({
   workFailureChance: z.number().min(0).max(1).catch(0.1),
 });
 
-export enum Features {
-  Tickets = "tickets",
-  Automod = "automod",
-  Autoroles = "autoroles",
-  Warns = "warns",
-  Roles = "roles",
-  Reputation = "reputation",
-  ReputationDetection = "reputationDetection",
-  Tops = "tops",
-  Suggest = "suggest",
-  Economy = "economy",
-  Game = "game",
-  Counting = "counting",
-}
-
-export const DEFAULT_GUILD_FEATURES: Readonly<Record<Features, boolean>> = Object.freeze(
-  Object.values(Features).reduce(
-    (acc, key) => ({ ...acc, [key]: true }),
-    {} as Record<Features, boolean>,
-  ),
-);
-
-export const GuildFeaturesSchema = z
-  .record(z.string(), z.boolean())
-  .catch(() => DEFAULT_GUILD_FEATURES);
-
 export type RoleCapabilityKey = string;
 export type RoleCommandOverride = "inherit" | "allow" | "deny";
 export type LimitWindow = `${number}${"m" | "h" | "d"}`;
@@ -583,7 +557,6 @@ export const GuildSchema = z.object({
     ticketCategoryId: null,
   })),
   pendingTickets: z.array(z.string()).catch(() => []),
-  features: GuildFeaturesSchema,
   forumAutoReply: ForumAutoReplySchema.catch(() => ({ enabled: false, forumIds: [] })),
   ai: AiConfigSchema.catch(() => ({
     provider: DEFAULT_PROVIDER_ID,
@@ -768,7 +741,6 @@ export const GuildSchema = z.object({
 
 export type Guild = z.infer<typeof GuildSchema>;
 export type GuildChannelsRecord = z.infer<typeof GuildChannelsSchema>;
-export type GuildFeaturesRecord = z.infer<typeof GuildFeaturesSchema>;
 export type AiConfigRecord = z.infer<typeof AiConfigSchema>;
 export type ModerationConfig = z.infer<typeof ModerationConfigSchema>;
 export type AutomodConfig = z.infer<typeof AutomodSchema>;

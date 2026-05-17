@@ -13,6 +13,7 @@ import {
 } from "discord.js";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
+import { TICKET_CLOSE_BUTTON_PREFIX } from "@/features/tickets/customIds";
 import {
   closeTicket,
   makeTicketChannelName,
@@ -21,9 +22,8 @@ import {
   type TicketError,
 } from "@/features/tickets/service";
 import { renderTicketWelcome } from "@/features/tickets/views";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
-
-export const TICKET_CLOSE_BUTTON_PREFIX = "tickets:close:";
 
 const data = new SlashCommandBuilder()
   .setName("ticket")
@@ -59,13 +59,13 @@ const data = new SlashCommandBuilder()
     sub.setName("panel").setDescription("Open the tickets configuration panel"),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
   if (sub === "open") {
-    await handleOpen(interaction);
+    await handleOpen(interaction, ctx);
   } else if (sub === "close") {
-    await handleClose(interaction);
+    await handleClose(interaction, ctx);
   } else if (sub === "setup") {
     await handleSetup(interaction);
   } else if (sub === "panel") {
@@ -74,7 +74,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   }
 }
 
-async function handleOpen(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guild = interaction.guild;
@@ -107,7 +107,7 @@ async function handleOpen(interaction: ChatInputCommandInteraction): Promise<voi
 
   const channelName = makeTicketChannelName(interaction.user.username);
 
-  const result = await openTicket(guild, interaction.user.id, {
+  const result = await openTicket(ctx, guild, interaction.user.id, {
     categoryId,
     channelName,
   });
@@ -147,7 +147,7 @@ async function handleOpen(interaction: ChatInputCommandInteraction): Promise<voi
   await interaction.editReply({ content: `✅ Ticket opened! <#${channelId}>` });
 }
 
-async function handleClose(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleClose(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guild = interaction.guild;
@@ -193,7 +193,7 @@ async function handleClose(interaction: ChatInputCommandInteraction): Promise<vo
     ),
   );
 
-  await closeTicket(guild, channel.id);
+  await closeTicket(ctx, guild, channel.id);
 }
 
 async function handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {

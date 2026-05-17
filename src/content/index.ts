@@ -1,24 +1,11 @@
 export {
-  ContentLoadError,
-  type LoadedContentPacks,
-  loadContentPacks,
-  type Sourced,
-  type SourcedDropTableDef,
-  type SourcedItemDef,
-  type SourcedLocationDef,
-  type SourcedRecipeDef,
-  type SourceMeta,
-} from "@/content/loader";
-export {
-  buildRegistryFromPacks,
-  type ContentDropEntry,
-  type ContentRegistry,
-  type DropQueryOptions,
-  getContentRegistry,
-  loadContentRegistry,
-  loadContentRegistryOrThrow,
-  resetContentRegistryForTests,
-} from "@/content/registry";
+  type DefinedContentPack,
+  defineContentPack,
+  defineDropTables,
+  defineItems,
+  defineLocations,
+  defineRecipes,
+} from "@/content/authoring";
 export {
   CONTENT_ID_REGEX,
   CONTENT_SCHEMA_VERSION,
@@ -42,6 +29,9 @@ export {
 } from "@/content/schemas";
 export {
   ContentValidationError,
+  type LoadedContent,
+  type Sourced,
+  type SourceMeta,
   type ValidationContext,
   validateLoadedContent,
 } from "@/content/validation";

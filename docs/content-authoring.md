@@ -1,15 +1,22 @@
 # RPG Content Authoring
 
-RPG content is defined in `src/content/packs/default.ts`. That file is the
-canonical source for built-in items, deterministic crafting recipes, gathering
-locations, and drop tables.
+The extended RPG catalog is defined in `src/content/packs/default.ts`. That
+file is currently used by the item-manager and catalog validation tools.
 
-Do not add new RPG content by editing `src/features/rpg/**` internals. Those
-feature files read from the content registry.
+The item-manager edits that TypeScript file through a small AST-based content
+I/O boundary. It reads the literal `items`, `locations`, `dropTables`, and
+`recipes` sections, validates the full pack, and writes only the `items`
+initializer back to disk. Recipes, locations, and drop tables are read-only in
+the item-manager for now.
+
+The active bot runtime does not load a content registry. Commands for
+gathering, processing, crafting, tools, and expeditions read the small typed
+maps in `src/features/rpg/content/**`. Keep gameplay changes there until the
+catalog and runtime content are reconciled.
 
 ## Quick Start
 
-Each content pack uses typed helpers from `src/content/authoring.ts`:
+The extended catalog uses typed helpers from `src/content/authoring.ts`:
 
 ```ts
 import { defineContentPack } from "@/content/authoring";
@@ -157,10 +164,10 @@ Runtime validation catches:
 - duplicate processing recipe inputs
 - location/drop-table action mismatches
 
-Run this before starting the bot:
+Run this before editing catalog data:
 
 ```bash
-bun test src/content/content.test.ts
+bun run typecheck
 ```
 
 For a broader check:
@@ -176,7 +183,7 @@ bun run typecheck
 - Using display text as an ID, like `Iron Ore`.
 - Setting `maxQty` lower than `minQty`.
 - Adding a mining location with a forest drop table.
-- Defining a tool without `tool.toolKind`, which makes gathering fall back to
-  weak ID-name guessing.
+- Assuming `src/content/packs/default.ts` changes active RPG bot behavior. For
+  now, update `src/features/rpg/content/**` for runtime gameplay.
 - Trying to load external JSON/JSON5 content packs. tx supports the current
   typed content pack only.

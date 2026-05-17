@@ -27,7 +27,7 @@ describe("GuildSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data._id).toBe("guild123");
-      expect(result.data.features).toBeDefined();
+      expect(result.data.channels.core).toBeDefined();
     }
   });
 

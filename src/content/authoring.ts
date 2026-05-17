@@ -3,17 +3,11 @@
  *
  * These helpers intentionally duplicate some runtime schema concepts so the
  * default pack can fail during TypeScript checking when object keys, nested
- * IDs, or intra-pack references drift. Runtime validation still runs at startup
- * for cross-record invariants that are clearer outside the type system.
+ * IDs, or intra-pack references drift. The active RPG runtime uses
+ * `src/features/rpg/content/**`; this module remains for catalog authoring and
+ * item-manager checks.
  */
 
-import type {
-  LoadedContentPacks,
-  SourcedDropTableDef,
-  SourcedItemDef,
-  SourcedLocationDef,
-  SourcedRecipeDef,
-} from "@/content/loader";
 import type { DropTableDef, ItemDef, LocationDef, RecipeDef } from "@/content/schemas";
 
 type StringKeyOf<T> = Extract<keyof T, string>;
@@ -124,52 +118,4 @@ export function defineContentPack<
   readonly recipes: Recipes & RecipeMap<StringKeyOf<Items>, Recipes>;
 }): DefinedContentPack<Items, Recipes, Locations, DropTables> {
   return pack;
-}
-
-function sourceFor(packId: string, kind: string, key: string) {
-  return {
-    file: `typed:${packId}`,
-    jsonPath: `$.${kind}.${key}`,
-  };
-}
-
-export function materializeContentPack(
-  pack: DefinedContentPack<
-    Record<string, ItemDef>,
-    Record<string, AuthorRecipe<string>>,
-    Record<string, AuthorLocation<string>>,
-    Record<string, AuthorDropTable<string, string>>
-  >,
-): LoadedContentPacks {
-  const items = Object.entries(pack.items).map(([key, item]) => ({
-    ...item,
-    __source: sourceFor(pack.id, "items", key),
-  })) satisfies SourcedItemDef[];
-
-  const recipes = Object.entries(pack.recipes).map(([key, recipe]) => ({
-    ...recipe,
-    itemInputs: recipe.itemInputs.map((input) => ({ ...input })),
-    itemOutputs: recipe.itemOutputs.map((output) => ({ ...output })),
-    __source: sourceFor(pack.id, "recipes", key),
-  })) satisfies SourcedRecipeDef[];
-
-  const locations = Object.entries(pack.locations).map(([key, location]) => ({
-    ...location,
-    materials: [...(location.materials ?? [])],
-    __source: sourceFor(pack.id, "locations", key),
-  })) satisfies SourcedLocationDef[];
-
-  const dropTables = Object.entries(pack.dropTables).map(([key, dropTable]) => ({
-    ...dropTable,
-    entries: dropTable.entries.map((entry) => ({ ...entry })),
-    __source: sourceFor(pack.id, "dropTables", key),
-  })) satisfies SourcedDropTableDef[];
-
-  return {
-    packDir: `typed:${pack.id}`,
-    items,
-    recipes,
-    locations,
-    dropTables,
-  };
 }

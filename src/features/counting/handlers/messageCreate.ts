@@ -1,10 +1,11 @@
 import type { Client, Message } from "discord.js";
+import { getGuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
 import { resolveConfiguredChannel } from "@/core/featureConfig";
 import { createLogger } from "@/core/logger";
 import { mongoCountingStateRepository } from "@/db/repositories/counting";
 import { getGuild } from "@/db/repositories/guilds";
-import { Features } from "@/db/schemas/guild";
 import { countingFeatureConfig } from "@/features/counting/config";
+import countingFeature from "@/features/counting/index";
 import { processCountingMessage } from "../service";
 
 const log = createLogger("counting:message");
@@ -15,10 +16,13 @@ export function register(client: Client): void {
       if (message.author.bot || !message.guildId) return;
 
       const guildResult = await getGuild(message.guildId);
-      if (guildResult.isErr() || !guildResult.unwrap()) return;
+      if (guildResult.isErr()) return;
 
-      const guildConfig = guildResult.unwrap()!;
-      if ((guildConfig.features as Record<string, boolean>)[Features.Counting] === false) return;
+      const guildConfig = guildResult.unwrap();
+      if (!guildConfig) return;
+      const featureState = await getGuildFeatures(message.guildId);
+      if (featureState.isErr()) return;
+      if (!resolveFeatureEnabled(countingFeature, featureState.unwrap().overrides)) return;
 
       const configuredChannel = await resolveConfiguredChannel(
         client,

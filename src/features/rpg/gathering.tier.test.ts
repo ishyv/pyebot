@@ -16,13 +16,15 @@ const mockGetUser = mock(async (_id: string) => OkResult<User | null>(null));
 
 mock.module("@/db/repositories/users", () => ({
   getUser: mockGetUser,
-  updateUserPaths: mock(async () => OkResult(undefined as void)),
+  updateUserPaths: mock(async () => OkResult(undefined as undefined)),
+  userStore: {},
 }));
 
 // Also mock the rpg repository (transitively imported by gathering.ts)
 mock.module("@/db/repositories/rpg", () => ({
   ensureRpgProfile: mock(async () => ErrResult(new Error("not used"))),
   patchRpgProfile: mock(async () => ErrResult(new Error("not used"))),
+  rpgStore: {},
 }));
 
 // ---------------------------------------------------------------------------

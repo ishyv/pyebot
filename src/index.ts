@@ -9,17 +9,15 @@
  * Order:
  *   1. Load env.
  *   2. Connect MongoDB (via World.create).
- *   3. Optionally load content packs.
- *   4. Bootstrap the framework — scans features, builds command map,
+ *   3. Bootstrap the framework — scans features, builds command map,
  *      builds router, generates /features, wires the event bus.
- *   5. Register `interactionCreate` → framework dispatch.
- *   6. Forward Discord events that features want via the bus.
- *   7. Log in. On clientReady, push slash command definitions via REST.
+ *   4. Register `interactionCreate` → framework dispatch.
+ *   5. Forward Discord events that features want via the bus.
+ *   6. Log in. On clientReady, push slash command definitions via REST.
  */
 
 import "dotenv/config";
 import { Events, REST, Routes } from "discord.js";
-import { loadContentRegistry } from "@/content/registry";
 import { createClient } from "@/core/client";
 import { disconnectDb } from "@/core/db";
 import { registerMessageDeleteListener } from "@/core/importantMessages";
@@ -32,15 +30,6 @@ const log = createLogger("bootstrap");
 
 async function bootstrap(): Promise<void> {
   log.info("Starting tx-v2...");
-
-  // Content packs are optional — gracefully skip if no pack dir.
-  const contentDir = process.env.CONTENT_PACKS_DIR;
-  if (contentDir) {
-    const reg = await loadContentRegistry(contentDir);
-    if (reg) log.info(`Content registry loaded from ${reg.loadedFrom}`);
-  } else {
-    log.info("CONTENT_PACKS_DIR not set — running without content packs.");
-  }
 
   const client = createClient();
   registerMessageDeleteListener(client);

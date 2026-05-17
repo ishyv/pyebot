@@ -75,10 +75,42 @@ export const MarketMetadataSchema = z
     }
   });
 
+export const ItemCategorySchema = z.enum([
+  "mineral",
+  "timber",
+  "herb",
+  "animal",
+  "reagent",
+  "medical",
+  "component",
+  "tool",
+  "weapon",
+  "armor",
+  "artifact",
+  "misc",
+]);
+
+export const ItemRaritySchema = z.enum(["common", "uncommon", "rare", "legendary"]);
+export const ItemTraitSchema = z.enum([
+  "Density",
+  "Sharpness",
+  "Organic",
+  "Toxicity",
+  "Magic",
+  "Liquid",
+  "None",
+]);
+export const ItemSourceSchema = z.enum(["gather", "expedition", "craft", "drop", "quest", "shop"]);
+
 export const ItemDefSchema = z
   .object({
     id: ContentIdSchema,
     name: z.string().min(1),
+    category: ItemCategorySchema,
+    rarity: ItemRaritySchema,
+    trait1: ItemTraitSchema,
+    trait2: ItemTraitSchema,
+    sources: z.array(ItemSourceSchema).min(1),
     description: z.string().min(1),
     emoji: z.string().optional(),
     maxStack: z.number().int().min(1).optional(),
@@ -93,6 +125,10 @@ export const ItemDefSchema = z
   .strict();
 
 export type ItemDef = z.infer<typeof ItemDefSchema>;
+export type ItemCategory = z.infer<typeof ItemCategorySchema>;
+export type ItemRarity = z.infer<typeof ItemRaritySchema>;
+export type ItemTrait = z.infer<typeof ItemTraitSchema>;
+export type ItemSource = z.infer<typeof ItemSourceSchema>;
 export type MarketCategory = z.infer<typeof MarketCategorySchema>;
 export type MarketMetadata = z.infer<typeof MarketMetadataSchema>;
 
@@ -124,6 +160,7 @@ export const RecipeDefSchema = z
     name: z.string().min(1),
     description: z.string().min(1),
     type: z.enum(["crafting", "processing"]).default("crafting"),
+    craftingMethod: z.enum(["transform", "mixture"]).optional(),
     itemInputs: z.array(RecipeItemDefSchema).min(1),
     currencyInput: RecipeCurrencyInputDefSchema.optional(),
     itemOutputs: z.array(RecipeItemDefSchema).min(1),
