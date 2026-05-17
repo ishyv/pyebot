@@ -1,5 +1,23 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { CooldownManager, LockSet, SessionManager } from "./state";
+
+// Drive Date.now() from a single mutable clock so expiry tests don't depend on
+// real wall time — flaky on slow CI runners with the previous 20ms sleeps.
+let now = 0;
+let nowSpy: ReturnType<typeof spyOn> | undefined;
+
+beforeEach(() => {
+  now = 1_700_000_000_000;
+  nowSpy = spyOn(Date, "now").mockImplementation(() => now);
+});
+
+afterEach(() => {
+  nowSpy?.mockRestore();
+});
+
+function advance(ms: number): void {
+  now += ms;
+}
 
 describe("CooldownManager", () => {
   test("isOnCooldown returns false for unknown user+command", () => {
@@ -13,10 +31,10 @@ describe("CooldownManager", () => {
     expect(mgr.isOnCooldown("user1", "work")).toBe(true);
   });
 
-  test("isOnCooldown returns false after expiry", async () => {
+  test("isOnCooldown returns false after expiry", () => {
     const mgr = new CooldownManager();
     mgr.set("user1", "work", 10);
-    await new Promise((r) => setTimeout(r, 20));
+    advance(20);
     expect(mgr.isOnCooldown("user1", "work")).toBe(false);
   });
 
@@ -26,10 +44,10 @@ describe("CooldownManager", () => {
     expect(mgr.getRemainingMs("user1", "work")).toBeGreaterThan(0);
   });
 
-  test("getRemainingMs returns 0 after expiry", async () => {
+  test("getRemainingMs returns 0 after expiry", () => {
     const mgr = new CooldownManager();
     mgr.set("user1", "work", 10);
-    await new Promise((r) => setTimeout(r, 20));
+    advance(20);
     expect(mgr.getRemainingMs("user1", "work")).toBe(0);
   });
 
@@ -108,10 +126,10 @@ describe("LockSet", () => {
     expect(locks.tryAcquire("op1")).toBe(true);
   });
 
-  test("stale lock can be re-acquired after timeout", async () => {
+  test("stale lock can be re-acquired after timeout", () => {
     const locks = new LockSet(10); // 10ms stale timeout
     locks.tryAcquire("op1");
-    await new Promise((r) => setTimeout(r, 20));
+    advance(20);
     expect(locks.tryAcquire("op1")).toBe(true);
   });
 });

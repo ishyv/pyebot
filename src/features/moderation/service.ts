@@ -879,6 +879,13 @@ export async function release(
   }
 
   const userResult = await userStore.get(target.id);
+  // If we can't read the user record, releasing with [] would strip every role
+  // from the target instead of restoring them — abort with an error instead.
+  if (userResult.isErr()) {
+    return ErrResult(
+      new ModerationError("DB_FAILED", "Could not load saved roles to restore"),
+    );
+  }
   const savedRoles = (userResult.unwrap()?.quarantine_roles?.[guild.id] ?? []) as string[];
 
   try {
