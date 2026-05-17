@@ -53,10 +53,27 @@ async function bootstrap(): Promise<void> {
     }
   });
 
+  const SHUTDOWN_TIMEOUT_MS = 5_000;
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) {
+      log.warn("Shutdown already in progress, forcing exit.");
+      process.exit(1);
+    }
+    shuttingDown = true;
     log.info("Shutting down...");
-    await client.destroy();
-    await disconnectDb();
+    const cleanup = (async () => {
+      await client.destroy();
+      await disconnectDb();
+    })();
+    const timeout = new Promise<"timeout">((resolve) =>
+      setTimeout(() => resolve("timeout"), SHUTDOWN_TIMEOUT_MS),
+    );
+    const result = await Promise.race([cleanup.then(() => "ok" as const), timeout]);
+    if (result === "timeout") {
+      log.warn(`Shutdown exceeded ${SHUTDOWN_TIMEOUT_MS}ms, forcing exit.`);
+      process.exit(1);
+    }
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
