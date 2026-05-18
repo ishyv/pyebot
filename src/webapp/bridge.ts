@@ -8,15 +8,22 @@
  */
 
 export type {
+  AppealSummary,
+  AutomodSettingsPatch,
   BotAction,
   BotBridge,
   BotEvent,
   BotEventType,
+  CaseSummary,
   DiscordChannel,
   DiscordRole,
+  EconomyPatch,
   FeatureSummary,
   GuildStatus,
+  ModerationBridgeAction,
+  ModerationSettingsPatch,
   Result,
+  RolePolicyPatch,
 } from "./bridge-types";
 
 import type { BotBridge } from "./bridge-types";

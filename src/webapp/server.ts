@@ -11,12 +11,17 @@
 import { createServer } from "node:http";
 import type { Client } from "discord.js";
 import { createLogger } from "@/core/logger";
+import { reloadRpgContent } from "@/features/rpg/content/runtime";
 import { createBridgeFromClient } from "./bot-bridge";
 import { registerBridge } from "./bridge";
 
 const log = createLogger("webapp");
 
 export async function startWebApp(client: Client): Promise<void> {
+  const rpgReload = await reloadRpgContent();
+  if (rpgReload.isErr()) {
+    log.warn(`Dashboard RPG content reload skipped: ${rpgReload.error.message}`);
+  }
   registerBridge(createBridgeFromClient(client));
 
   const handlerUrl = new URL("../../webapp/build/handler.js", import.meta.url);

@@ -1,36 +1,20 @@
 /**
- * Static tool catalog.
+ * Live tool catalog.
  *
- * Replaces the old triple of (registry items + TOOL_TIER_MAP + substring
- * "pickaxe"/"axe" matching). Both gathering tier-gating and tool-kind
- * validation read from this single source.
- *
- * Equipped weapons in user loadouts may contain an itemId outside this set
+ * Equipped weapons in user loadouts may contain an itemId outside this map
  * (stale DB rows, future content). Use `parseToolId` at boundaries and
  * `toolTier` / `toolKind` for forgiving lookups that fall back safely.
  */
 
+import { type RuntimeToolDef, runtimeTools } from "./runtime";
+
 export type ToolKind = "pickaxe" | "axe";
 
-export interface ToolDef {
-  readonly name: string;
-  readonly kind: ToolKind;
-  readonly tier: 1 | 2 | 3 | 4;
-  readonly startingDurability: number;
-}
+export type ToolDef = RuntimeToolDef;
 
-export const TOOLS = {
-  starter_pickaxe: { name: "Starter Pickaxe", kind: "pickaxe", tier: 1, startingDurability: 50 },
-  starter_axe: { name: "Starter Axe", kind: "axe", tier: 1, startingDurability: 50 },
-  stone_pickaxe: { name: "Stone Pickaxe", kind: "pickaxe", tier: 2, startingDurability: 100 },
-  stone_axe: { name: "Stone Axe", kind: "axe", tier: 2, startingDurability: 100 },
-  copper_pickaxe: { name: "Copper Pickaxe", kind: "pickaxe", tier: 3, startingDurability: 100 },
-  copper_axe: { name: "Copper Axe", kind: "axe", tier: 3, startingDurability: 100 },
-  iron_pickaxe: { name: "Iron Pickaxe", kind: "pickaxe", tier: 4, startingDurability: 100 },
-  iron_axe: { name: "Iron Axe", kind: "axe", tier: 4, startingDurability: 100 },
-} as const satisfies Record<string, ToolDef>;
+export const TOOLS = runtimeTools as Record<string, ToolDef>;
 
-export type ToolId = keyof typeof TOOLS;
+export type ToolId = string;
 
 /**
  * Tier returned when the equipped item is not a known tool.

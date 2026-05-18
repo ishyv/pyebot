@@ -1,38 +1,26 @@
 /**
- * Static gathering locations.
+ * Live gathering locations.
  *
- * Source of truth for /expedition gathering locations.
- * `LocationId = keyof typeof LOCATIONS` is the trusted ID type that domain
- * functions like `gatherAtLocation` accept.
+ * The dashboard can replace the runtime map after validation. Command code
+ * narrows raw Discord strings with the helpers below before entering domain
+ * logic.
  */
 
 import type { GatherAction } from "./actions";
 import type { MaterialId } from "./materials";
+import { type RuntimeLocationDef, runtimeLocations } from "./runtime";
 
-export interface LocationDef {
+export interface LocationDef extends RuntimeLocationDef {
+  readonly id: string;
   readonly name: string;
   readonly action: GatherAction;
   readonly requiredTier: 1 | 2 | 3 | 4;
   readonly materials: readonly MaterialId[];
 }
 
-export const LOCATIONS = {
-  stone_mine: { name: "Stone Mine", action: "mine", requiredTier: 1, materials: ["stone"] },
-  copper_mine: { name: "Copper Mine", action: "mine", requiredTier: 2, materials: ["copper_ore"] },
-  iron_mine: { name: "Iron Mine", action: "mine", requiredTier: 3, materials: ["iron_ore"] },
-  silver_mine: { name: "Silver Mine", action: "mine", requiredTier: 4, materials: ["silver_ore"] },
-  oak_forest: { name: "Oak Forest", action: "forest", requiredTier: 1, materials: ["oak_wood"] },
-  spruce_forest: {
-    name: "Spruce Forest",
-    action: "forest",
-    requiredTier: 2,
-    materials: ["spruce_wood"],
-  },
-  palm_forest: { name: "Palm Forest", action: "forest", requiredTier: 3, materials: ["palm_wood"] },
-  pine_forest: { name: "Pine Forest", action: "forest", requiredTier: 4, materials: ["pine_wood"] },
-} as const satisfies Record<string, LocationDef>;
+export const LOCATIONS = runtimeLocations as Record<string, LocationDef>;
 
-export type LocationId = keyof typeof LOCATIONS;
+export type LocationId = string;
 
 /** Convenience shape for command-side rendering: location with its ID attached. */
 export type LocationView = LocationDef & { readonly id: LocationId };
@@ -63,9 +51,9 @@ export function parseLocationForAction(
  */
 export function locationsForAction(action: GatherAction): readonly LocationView[] {
   const entries: LocationView[] = [];
-  for (const [id, def] of Object.entries(LOCATIONS) as [LocationId, LocationDef][]) {
+  for (const [id, def] of Object.entries(LOCATIONS)) {
     if (def.action === action) {
-      entries.push({ id, ...def });
+      entries.push({ ...def, id });
     }
   }
   return entries.sort((a, b) => a.requiredTier - b.requiredTier);

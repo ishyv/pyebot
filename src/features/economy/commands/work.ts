@@ -1,5 +1,6 @@
 import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
-import { WorkError, work } from "@/features/economy/work";
+import { GuildEconomy } from "@/components/guild-economy";
+import { WorkError, work, workConfigFromGuildEconomy } from "@/features/economy/work";
 import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
@@ -16,9 +17,11 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 
   try {
+    const guildEconomy = await ctx.get(interaction.guild.id, GuildEconomy);
     const { payout, currencyId, newBalance, cooldownEndsAt, worksToday, dailyCap } = await work(
       ctx,
       interaction.user.id,
+      workConfigFromGuildEconomy(guildEconomy),
     );
 
     await interaction.editReply(

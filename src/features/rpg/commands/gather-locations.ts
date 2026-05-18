@@ -44,7 +44,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   const userTier = await getEquippedToolTier(userId);
   const locations = Object.entries(LOCATIONS)
     .filter(([, loc]) => loc.action === locationType)
-    .map(([id, loc]) => ({ id, ...loc }));
+    .map(([id, loc]) => ({ ...loc, id }));
 
   const typeLabel = locationType === "mine" ? "Mine" : "Forest";
   const tierLabel = `Tier ${userTier} tool`;
