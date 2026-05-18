@@ -21,6 +21,14 @@ mock.module("@/core/db", () => ({
         collectionUpdates.push({ collection: name, filter, update, options });
         return { matchedCount: 1, modifiedCount: 1 };
       },
+      findOneAndUpdate: async (
+        filter: unknown,
+        update: Record<string, unknown>,
+        options: unknown,
+      ) => {
+        collectionUpdates.push({ collection: name, filter, update, options });
+        return { _id: "guild-1", daily: {}, work: {}, sectors: {} };
+      },
       find: () => ({
         sort: () => ({
           limit: () => ({
@@ -64,6 +72,7 @@ mock.module("@/components/guild-features", () => ({
   getGuildFeatures: async () => OkResult({ overrides: {} }),
   resolveFeatureEnabled: () => true,
   setGuildFeatureOverride: async () => OkResult({ overrides: {} }),
+  setGuildFeatureOverrides: async () => OkResult({ overrides: {} }),
 }));
 
 mock.module("@/core/featureCatalog", () => ({
@@ -173,13 +182,14 @@ describe("webapp bot bridge", () => {
       collection: "guild_economy",
       filter: { _id: "guild-1" },
       update: {
+        $setOnInsert: { _id: "guild-1" },
         $set: {
           "daily.dailyReward": 777,
           "work.workDailyCap": 3,
           updatedAt: expect.any(Date),
         },
       },
-      options: { upsert: true },
+      options: { upsert: true, returnDocument: "after" },
     });
   });
 
@@ -207,6 +217,54 @@ describe("webapp bot bridge", () => {
         options: { upsert: true },
       },
     ]);
+  });
+
+  it("includes the dashboard actor on config-change events", async () => {
+    const { createBridgeFromClient } = await import("./bot-bridge");
+    const bridge = createBridgeFromClient(fakeClient() as never) as never as {
+      events: { on(event: "event", listener: (event: unknown) => void): void };
+      saveChannels: (
+        guildId: string,
+        slots: Record<string, string | null>,
+        actorId: string,
+      ) => Promise<{ isOk(): boolean }>;
+    };
+    const seen: unknown[] = [];
+    bridge.events.on("event", (event) => seen.push(event));
+
+    const result = await bridge.saveChannels("guild-1", { logs: "channel-1" }, "mod-1");
+
+    expect(result.isOk()).toBe(true);
+    expect(seen).toContainEqual({
+      type: "config_changed",
+      guildId: "guild-1",
+      actorId: "mod-1",
+      detail: "Updated channels: logs",
+      timestamp: expect.any(Number),
+    });
+  });
+
+  it("does not fetch uncached guild status from Discord during dashboard reads", async () => {
+    let fetches = 0;
+    const client = fakeClient() as never as {
+      guilds: {
+        cache: Map<string, unknown>;
+        fetch: (guildId: string) => Promise<unknown>;
+      };
+      on: () => void;
+    };
+    client.guilds.cache = new Map();
+    client.guilds.fetch = async () => {
+      fetches += 1;
+      return { id: "guild-1", name: "Guild", memberCount: 10, iconURL: () => null };
+    };
+    const { createBridgeFromClient } = await import("./bot-bridge");
+    const bridge = createBridgeFromClient(client as never);
+
+    const result = await bridge.getGuildStatus("guild-1");
+
+    expect(result.isErr()).toBe(true);
+    expect(fetches).toBe(0);
   });
 
   it("rejects destructive actions when the actor lacks the required Discord permission", async () => {

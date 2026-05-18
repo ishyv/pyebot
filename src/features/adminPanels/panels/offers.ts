@@ -1,6 +1,6 @@
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import { channelMention, coreChannelValue, renderChannelPairPanel } from "../panelHelpers";
 import type { PanelPayload, PanelState } from "../panelRuntime";
 
@@ -44,7 +44,7 @@ export async function action(
   }
   if (interaction.isChannelSelectMenu() && actionStr === "set-channel") {
     if (!session.selectedOfferField) throw new Error("Choose an offer channel field first.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [session.selectedOfferField]: { channelId: interaction.values[0] } },
       { upsert: true },

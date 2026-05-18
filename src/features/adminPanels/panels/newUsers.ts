@@ -10,12 +10,12 @@ import {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type {
   Guild as GuildConfig,
   TempRoleAccessRule,
   TempRoleMessageRule,
 } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import {
   accessOverwritePreview,
   formatTempRoleAccessRule,
@@ -347,7 +347,7 @@ export async function action(
     return true;
   }
   if (interaction.isRoleSelectMenu() && actionStr === "role") {
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`${base}.roleId`]: interaction.values[0] },
       { upsert: true },
@@ -355,7 +355,7 @@ export async function action(
     return true;
   }
   if (interaction.isRoleSelectMenu() && actionStr === "skip-roles") {
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`${base}.skipRoleIds`]: [...interaction.values] },
       { upsert: true },
@@ -363,7 +363,7 @@ export async function action(
     return true;
   }
   if (interaction.isChannelSelectMenu() && actionStr === "report-channel") {
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`${base}.reportChannelId`]: interaction.values[0] },
       { upsert: true },
@@ -371,7 +371,7 @@ export async function action(
     return true;
   }
   if (actionStr === "toggle") {
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`${base}.enabled`]: !policy.enabled },
       { upsert: true },
@@ -400,7 +400,7 @@ export async function action(
     const maxAge = Number(interaction.fields.getTextInputValue("age"));
     if (!Number.isInteger(maxAge) || maxAge < 0 || maxAge > 365)
       throw new Error("Max account age must be a whole number from 0 to 365.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`${base}.durationSeconds`]: duration.seconds, [`${base}.maxAccountAgeDays`]: maxAge },
       { upsert: true },
@@ -469,7 +469,7 @@ export async function action(
       timeoutSeconds,
       pattern: interaction.fields.getTextInputValue("pattern").trim() || null,
     };
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`${base}.messageRules`]: [...policy.messageRules, rule] },
       { upsert: true },
@@ -477,7 +477,11 @@ export async function action(
     return true;
   }
   if (actionStr === "clear-message-rules") {
-    await updateGuildPaths(session.guildId, { [`${base}.messageRules`]: [] }, { upsert: true });
+    await applyGuildConfigPaths(
+      session.guildId,
+      { [`${base}.messageRules`]: [] },
+      { upsert: true },
+    );
     return true;
   }
   if (actionStr === "add-access-rule") {
@@ -503,7 +507,7 @@ export async function action(
         mode: session.selectedNewUsersAccessMode,
       })),
     ];
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`${base}.accessRules`]: [...policy.accessRules, ...rules] },
       { upsert: true },
@@ -511,7 +515,7 @@ export async function action(
     return true;
   }
   if (actionStr === "clear-access-rules") {
-    await updateGuildPaths(session.guildId, { [`${base}.accessRules`]: [] }, { upsert: true });
+    await applyGuildConfigPaths(session.guildId, { [`${base}.accessRules`]: [] }, { upsert: true });
     return true;
   }
   if (actionStr === "apply-access") {

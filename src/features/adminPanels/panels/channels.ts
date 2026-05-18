@@ -8,8 +8,8 @@ import {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import {
   CORE_CHANNEL_DEFINITIONS,
   channelMention,
@@ -116,7 +116,7 @@ export async function action(
     const channelId = interaction.values[0];
     const patch: Record<string, unknown> = { [`channels.core.${slot}`]: { channelId } };
     if (slot === "ticketCategory") patch["channels.ticketCategoryId"] = channelId;
-    await updateGuildPaths(session.guildId, patch, { upsert: true });
+    await applyGuildConfigPaths(session.guildId, patch, { upsert: true });
     return true;
   }
   if (interaction.isChannelSelectMenu() && actionStr === "managed-channel") {
@@ -141,7 +141,7 @@ export async function action(
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 40) || Date.now().toString(36);
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`channels.managed.${id}`]: { id, label, channelId: session.pendingManagedChannelId } },
       { upsert: true },
@@ -151,7 +151,7 @@ export async function action(
   if (interaction.isStringSelectMenu() && actionStr === "managed-remove") {
     const id = interaction.values[0];
     if (id && id !== "none")
-      await updateGuildPaths(session.guildId, {}, { unset: [`channels.managed.${id}`] });
+      await applyGuildConfigPaths(session.guildId, {}, { unset: [`channels.managed.${id}`] });
   }
   return true;
 }

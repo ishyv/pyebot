@@ -18,17 +18,22 @@ import {
   type PartialGuildMember,
   PermissionFlagsBits,
 } from "discord.js";
-import {
-  getGuildFeatures,
-  resolveFeatureEnabled,
-  setGuildFeatureOverride,
-} from "@/components/guild-features";
+import { getGuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
 import { bus } from "@/core/bus";
 import { getDb } from "@/core/db";
 import { listFeatureCatalog } from "@/core/featureCatalog";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { getAppeal, updateAppeal } from "@/db/repositories/appeals";
-import { ensureGuild, getGuild, updateGuildPaths } from "@/db/repositories/guilds";
+import { ensureGuild } from "@/db/repositories/guilds";
+import {
+  applyGuildConfigPaths,
+  saveAutomodSettings,
+  saveChannelSettings,
+  saveEconomySettings,
+  saveModerationSettings,
+  saveRolePolicySettings,
+  toggleFeatureSetting,
+} from "@/features/adminPanels/configMutations";
 import {
   ban,
   deleteCase as deleteModerationCase,
@@ -78,33 +83,6 @@ function channelTypeName(type: ChannelType): DiscordChannel["type"] {
     default:
       return "other";
   }
-}
-
-function flattenPatch(prefix: string, value: Readonly<Record<string, unknown>> | undefined) {
-  const paths: Record<string, unknown> = {};
-  if (!value) return paths;
-  for (const [key, entry] of Object.entries(value)) {
-    if (entry !== undefined) paths[`${prefix}.${key}`] = entry;
-  }
-  return paths;
-}
-
-async function updateComponentPaths(
-  collection: string,
-  guildId: string,
-  paths: Record<string, unknown>,
-): Promise<void> {
-  const db = await getDb();
-  await db.collection<{ _id: string }>(collection).updateOne(
-    { _id: guildId },
-    {
-      $set: {
-        ...paths,
-        updatedAt: new Date(),
-      },
-    },
-    { upsert: true },
-  );
 }
 
 function moderationPermission(type: ModerationBridgeAction["type"]): bigint {
@@ -320,8 +298,7 @@ export function createBridgeFromClient(client: Client): BotBridge {
     },
 
     async getGuildStatus(guildId) {
-      const guild =
-        client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
+      const guild = client.guilds.cache.get(guildId);
       if (!guild) return ErrResult(new Error("Guild not in bot cache."));
       const featureState = await getGuildFeatures(guildId);
       if (featureState.isErr()) return ErrResult(featureState.error);
@@ -349,74 +326,55 @@ export function createBridgeFromClient(client: Client): BotBridge {
       return OkResult(summaries);
     },
 
-    async saveChannels(guildId, slots) {
-      const paths: Record<string, unknown> = {};
-      for (const [slot, channelId] of Object.entries(slots)) {
-        paths[`channels.core.${slot}`] = channelId ? { channelId } : null;
-      }
-      const result = await updateGuildPaths(guildId, paths, { upsert: true });
+    async saveChannels(guildId, slots, actorId) {
+      const result = await saveChannelSettings(guildId, slots);
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "config_changed",
         guildId,
+        actorId: actorId ?? undefined,
         detail: `Updated channels: ${Object.keys(slots).join(", ")}`,
         timestamp: Date.now(),
       });
       return OkResult(undefined);
     },
 
-    async saveModeration(guildId, patch) {
-      const paths: Record<string, unknown> = {};
-      if (patch.modLogChannelId !== undefined) {
-        paths["channels.core.modlog"] = patch.modLogChannelId
-          ? { channelId: patch.modLogChannelId }
-          : null;
-      }
-      if (patch.appealsChannelId !== undefined) {
-        paths["moderation.appealsChannelId"] = patch.appealsChannelId;
-      }
-      if (patch.quarantineRoleId !== undefined) {
-        paths["moderation.quarantine.roleId"] = patch.quarantineRoleId;
-        paths["moderation.quarantine.enabled"] = patch.quarantineRoleId !== null;
-      }
-      if (patch.verifiedRoleId !== undefined) {
-        paths["moderation.verification.roleId"] = patch.verifiedRoleId;
-        paths["moderation.verification.enabled"] = patch.verifiedRoleId !== null;
-      }
-      const result = await updateGuildPaths(guildId, paths, { upsert: true });
+    async saveModeration(guildId, patch, actorId) {
+      const result = await saveModerationSettings(guildId, patch);
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "config_changed",
         guildId,
+        actorId: actorId ?? undefined,
         detail: "Updated moderation",
         timestamp: Date.now(),
       });
       return OkResult(undefined);
     },
 
-    async saveAutomod(guildId, patch) {
-      const paths = {
-        ...flattenPatch("automod.linkSpam", patch.linkSpam),
-        ...flattenPatch("automod.mentionSpam", patch.mentionSpam),
-      };
-      const result = await updateGuildPaths(guildId, paths, { upsert: true });
+    async saveAutomod(guildId, patch, actorId) {
+      const result = await saveAutomodSettings(guildId, patch);
       if (result.isErr()) return ErrResult(result.error);
-      emit({ type: "config_changed", guildId, detail: "Updated automod", timestamp: Date.now() });
+      emit({
+        type: "config_changed",
+        guildId,
+        actorId: actorId ?? undefined,
+        detail: "Updated automod",
+        timestamp: Date.now(),
+      });
       return OkResult(undefined);
     },
 
-    async saveEconomy(guildId, patch) {
-      const paths = {
-        ...flattenPatch("daily", patch.daily),
-        ...flattenPatch("work", patch.work),
-        ...flattenPatch("sectors", patch.sectors),
-      };
-      try {
-        await updateComponentPaths("guild_economy", guildId, paths);
-      } catch (error) {
-        return ErrResult(error instanceof Error ? error : new Error(String(error)));
-      }
-      emit({ type: "config_changed", guildId, detail: "Updated economy", timestamp: Date.now() });
+    async saveEconomy(guildId, patch, actorId) {
+      const result = await saveEconomySettings(guildId, patch);
+      if (result.isErr()) return ErrResult(result.error);
+      emit({
+        type: "config_changed",
+        guildId,
+        actorId: actorId ?? undefined,
+        detail: "Updated economy",
+        timestamp: Date.now(),
+      });
       return OkResult(undefined);
     },
 
@@ -428,27 +386,12 @@ export function createBridgeFromClient(client: Client): BotBridge {
         PermissionFlagsBits.ManageRoles,
       );
       if (permission.isErr()) return ErrResult(permission.error);
-      const guildResult = await getGuild(guildId);
-      if (guildResult.isErr()) return ErrResult(guildResult.error);
-      const current = guildResult.unwrap()?.roles?.[patch.roleId] ?? {};
-      const next = {
-        ...current,
-        ...(patch.label !== undefined ? { label: patch.label } : {}),
-        ...(patch.discordRoleId !== undefined ? { discordRoleId: patch.discordRoleId } : {}),
-        ...(patch.reach !== undefined ? { reach: patch.reach } : {}),
-        ...(patch.limits !== undefined ? { limits: patch.limits } : {}),
-        updatedBy: patch.updatedBy ?? null,
-        updatedAt: new Date().toISOString(),
-      };
-      const result = await updateGuildPaths(
-        guildId,
-        { [`roles.${patch.roleId}`]: next },
-        { upsert: true },
-      );
+      const result = await saveRolePolicySettings(guildId, patch);
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "config_changed",
         guildId,
+        actorId: patch.updatedBy ?? undefined,
         detail: `Updated role policy ${patch.roleId}`,
         timestamp: Date.now(),
       });
@@ -640,26 +583,28 @@ export function createBridgeFromClient(client: Client): BotBridge {
       return OkResult(result.unwrap() as unknown as Record<string, unknown>);
     },
 
-    async applyConfig(guildId, paths) {
-      const result = await updateGuildPaths(guildId, paths, { upsert: true });
+    async applyConfig(guildId, paths, actorId) {
+      const result = await applyGuildConfigPaths(guildId, paths, { upsert: true });
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "config_changed",
         guildId,
+        actorId: actorId ?? undefined,
         detail: `Updated: ${Object.keys(paths).join(", ")}`,
         timestamp: Date.now(),
       });
       return OkResult(undefined);
     },
 
-    async toggleFeature(guildId, featureId, enabled) {
+    async toggleFeature(guildId, featureId, enabled, actorId) {
       const feature = listFeatureCatalog().find((entry) => entry.id === featureId);
       if (!feature) return ErrResult(new Error(`Unknown feature: ${featureId}`));
-      const result = await setGuildFeatureOverride(guildId, featureId, enabled);
+      const result = await toggleFeatureSetting(guildId, featureId, enabled);
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "config_changed",
         guildId,
+        actorId: actorId ?? undefined,
         detail: `Feature ${featureId} ${enabled ? "enabled" : "disabled"}`,
         timestamp: Date.now(),
       });

@@ -9,8 +9,8 @@ import {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import {
   channelMention,
   loadGuildConfig,
@@ -145,7 +145,7 @@ export async function action(
   if (interaction.isChannelSelectMenu() && actionStr === "set-channel") {
     if (!session.selectedModerationField)
       throw new Error("Choose a moderation channel field first.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [session.selectedModerationField]: interaction.values[0] },
       { upsert: true },
@@ -156,35 +156,39 @@ export async function action(
     const field = session.selectedModerationField?.includes("verification")
       ? "moderation.verification.roleId"
       : "moderation.quarantine.roleId";
-    await updateGuildPaths(session.guildId, { [field]: interaction.values[0] }, { upsert: true });
+    await applyGuildConfigPaths(
+      session.guildId,
+      { [field]: interaction.values[0] },
+      { upsert: true },
+    );
     return true;
   }
   if (actionStr === "toggle-alt")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "moderation.altDetectionEnabled": !cfg.moderation.altDetectionEnabled },
       { upsert: true },
     );
   if (actionStr === "toggle-escalation")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "moderation.escalation.enabled": !cfg.moderation.escalation.enabled },
       { upsert: true },
     );
   if (actionStr === "toggle-quarantine")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "moderation.quarantine.enabled": !cfg.moderation.quarantine.enabled },
       { upsert: true },
     );
   if (actionStr === "toggle-verification")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "moderation.verification.enabled": !cfg.moderation.verification.enabled },
       { upsert: true },
     );
   if (actionStr === "clear-escalation")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "moderation.escalation.thresholds": [] },
       { upsert: true },
@@ -206,7 +210,7 @@ export async function action(
     const days = Number(interaction.fields.getTextInputValue("days"));
     if (!Number.isInteger(days) || days < 0 || days > 365)
       throw new Error("Age must be a whole number from 0 to 365.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "moderation.verification.minAccountAgeDays": days },
       { upsert: true },
@@ -232,7 +236,7 @@ export async function action(
       throw new Error("Warn count must be a positive whole number.");
     if (!["timeout", "kick", "ban"].includes(thresholdAction))
       throw new Error("Action must be timeout, kick, or ban.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       {
         "moderation.escalation.thresholds": [

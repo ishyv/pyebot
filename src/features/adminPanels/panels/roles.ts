@@ -9,13 +9,13 @@ import {
 } from "discord.js";
 import { getDb } from "@/core/db";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type {
   Guild as GuildConfig,
   GuildRoleRecord,
   RoleCommandOverride,
   RoleLimitRecord,
 } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import { limitText, loadGuildConfig, modalInput, roleMention } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -84,7 +84,7 @@ async function patchSelected(
     patch[`roles.${roleId}`] = next;
   }
   if (Object.keys(patch).length === 0) throw new Error("Select at least one role first.");
-  await updateGuildPaths(session.guildId, patch, { upsert: true });
+  await applyGuildConfigPaths(session.guildId, patch, { upsert: true });
 }
 
 /** Renders managed roles, selected-role policy summary, and performance metrics. */
@@ -216,7 +216,7 @@ export async function action(
       );
     }
     if (Object.keys(patch).length === 0) throw new Error("Select at least one role first.");
-    await updateGuildPaths(session.guildId, patch, { upsert: true });
+    await applyGuildConfigPaths(session.guildId, patch, { upsert: true });
     return true;
   }
   if (actionStr.startsWith("override:")) {

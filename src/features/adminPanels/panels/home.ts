@@ -2,12 +2,15 @@ import { resolveFeatureEnabled } from "@/components/guild-features";
 import type { ComponentInteraction } from "@/core/feature";
 import { listFeatureCatalog } from "@/core/featureCatalog";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { loadEconomySettings } from "../configMutations";
 import { CORE_CHANNEL_DEFINITIONS, loadGuildFeatures, roleMention, yesNo } from "../panelHelpers";
 import { type PanelPayload, type PanelState, panelContainer } from "../panelRuntime";
 
 /** Renders the server-wide status overview. */
 export async function render(session: PanelState, cfg: GuildConfig): Promise<PanelPayload> {
   const featureState = await loadGuildFeatures(session.guildId);
+  const economyResult = await loadEconomySettings(session.guildId);
+  const economy = economyResult.isOk() ? economyResult.unwrap() : cfg.economy;
   const features = listFeatureCatalog();
   const enabled = features.filter((feature) =>
     resolveFeatureEnabled(feature, featureState.overrides),
@@ -45,7 +48,7 @@ export async function render(session: PanelState, cfg: GuildConfig): Promise<Pan
         },
         {
           name: "Economy",
-          value: `Daily ${cfg.economy.daily.dailyReward} ${cfg.economy.daily.dailyCurrencyId}\nWork cap ${cfg.economy.work.workDailyCap}/day`,
+          value: `Daily ${economy.daily.dailyReward} ${economy.daily.dailyCurrencyId}\nWork cap ${economy.work.workDailyCap}/day`,
           inline: true,
         },
       ],

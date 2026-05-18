@@ -198,10 +198,26 @@ export interface BotBridge {
   getGuildConfig(guildId: string): Promise<Result<Record<string, unknown>, Error>>;
   getAdminState(guildId: string): Promise<Result<Record<string, unknown>, Error>>;
   listFeatures(guildId: string): Promise<Result<readonly FeatureSummary[], Error>>;
-  saveChannels(guildId: string, slots: Record<string, string | null>): Promise<Result<void, Error>>;
-  saveModeration(guildId: string, patch: ModerationSettingsPatch): Promise<Result<void, Error>>;
-  saveAutomod(guildId: string, patch: AutomodSettingsPatch): Promise<Result<void, Error>>;
-  saveEconomy(guildId: string, patch: EconomyPatch): Promise<Result<void, Error>>;
+  saveChannels(
+    guildId: string,
+    slots: Record<string, string | null>,
+    actorId?: string | null,
+  ): Promise<Result<void, Error>>;
+  saveModeration(
+    guildId: string,
+    patch: ModerationSettingsPatch,
+    actorId?: string | null,
+  ): Promise<Result<void, Error>>;
+  saveAutomod(
+    guildId: string,
+    patch: AutomodSettingsPatch,
+    actorId?: string | null,
+  ): Promise<Result<void, Error>>;
+  saveEconomy(
+    guildId: string,
+    patch: EconomyPatch,
+    actorId?: string | null,
+  ): Promise<Result<void, Error>>;
   saveRolePolicy(guildId: string, patch: RolePolicyPatch): Promise<Result<void, Error>>;
   listCases(guildId: string): Promise<Result<readonly CaseSummary[], Error>>;
   editCase(
@@ -234,8 +250,17 @@ export interface BotBridge {
     snapshot: Record<string, unknown>,
   ): Promise<Result<Record<string, unknown>, Error>>;
   reloadRpgContent(): Promise<Result<Record<string, unknown>, Error>>;
-  applyConfig(guildId: string, paths: Record<string, unknown>): Promise<Result<void, Error>>;
-  toggleFeature(guildId: string, featureId: string, enabled: boolean): Promise<Result<void, Error>>;
+  applyConfig(
+    guildId: string,
+    paths: Record<string, unknown>,
+    actorId?: string | null,
+  ): Promise<Result<void, Error>>;
+  toggleFeature(
+    guildId: string,
+    featureId: string,
+    enabled: boolean,
+    actorId?: string | null,
+  ): Promise<Result<void, Error>>;
   triggerAction(guildId: string, action: BotAction): Promise<Result<void, Error>>;
   readonly events: EventEmitter;
 }

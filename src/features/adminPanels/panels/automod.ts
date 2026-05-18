@@ -11,9 +11,9 @@ import {
   TextInputStyle,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
 import { invalidatePatternCache } from "@/features/automod/service";
+import { applyGuildConfigPaths } from "../configMutations";
 import { channelMention, limitText, loadGuildConfig, modalInput } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -344,7 +344,7 @@ async function saveConfig(
       .split(",")
       .map((x) => x.trim().toLowerCase())
       .filter(Boolean);
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "automod.domainWhitelist.domains": domains, "automod.domainWhitelist.enabled": true },
       { upsert: true },
@@ -382,7 +382,8 @@ async function saveConfig(
   } else if (section === "shorteners") {
     patch["automod.shorteners.resolveFinalUrl"] = c === "true" || c === "yes" || c === "1";
   }
-  if (Object.keys(patch).length) await updateGuildPaths(session.guildId, patch, { upsert: true });
+  if (Object.keys(patch).length)
+    await applyGuildConfigPaths(session.guildId, patch, { upsert: true });
 }
 
 /** Handles section selection, toggles, report channel, and config/pattern modals. */
@@ -399,7 +400,7 @@ export async function action(
     return true;
   }
   if (actionStr === "toggle") {
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`automod.${section}.enabled`]: !automod[section]?.enabled },
       { upsert: true },
@@ -409,7 +410,7 @@ export async function action(
   if (interaction.isChannelSelectMenu() && actionStr === "report-channel") {
     if (!["linkSpam", "mentionSpam", "crossChannelSpam", "raidDetection"].includes(section))
       throw new Error("Selected automod section has no report channel.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`automod.${section}.reportChannelId`]: interaction.values[0] },
       { upsert: true },
@@ -443,7 +444,7 @@ export async function action(
     const flags = interaction.fields.getTextInputValue("flags").trim() || "i";
     const response = interaction.fields.getTextInputValue("response").trim() || "delete";
     new RegExp(pattern, flags);
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       {
         "automod.customPatterns": [
@@ -463,7 +464,11 @@ export async function action(
     return true;
   }
   if (actionStr === "clear-patterns") {
-    await updateGuildPaths(session.guildId, { "automod.customPatterns": [] }, { upsert: true });
+    await applyGuildConfigPaths(
+      session.guildId,
+      { "automod.customPatterns": [] },
+      { upsert: true },
+    );
     invalidatePatternCache(session.guildId);
   }
   return true;

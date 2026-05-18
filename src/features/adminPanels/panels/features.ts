@@ -5,14 +5,11 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
-import {
-  resolveFeatureEnabled,
-  setGuildFeatureOverride,
-  setGuildFeatureOverrides,
-} from "@/components/guild-features";
+import { resolveFeatureEnabled } from "@/components/guild-features";
 import type { ComponentInteraction } from "@/core/feature";
 import { listFeatureCatalog } from "@/core/featureCatalog";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { setFeatureSettings, toggleFeatureSetting } from "../configMutations";
 import { loadGuildFeatures, yesNo } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -79,13 +76,13 @@ export async function action(
     if (!feature) throw new Error(`Unknown feature: ${featureId}`);
     const featureState = await loadGuildFeatures(session.guildId);
     const current = resolveFeatureEnabled(feature, featureState.overrides);
-    const result = await setGuildFeatureOverride(session.guildId, feature.id, !current);
+    const result = await toggleFeatureSetting(session.guildId, feature.id, !current);
     if (result.isErr()) throw result.error;
     return true;
   }
   if (actionStr === "enable-all" || actionStr === "disable-all") {
     const enabled = actionStr === "enable-all";
-    const result = await setGuildFeatureOverrides(
+    const result = await setFeatureSettings(
       session.guildId,
       Object.fromEntries(features.map((feature) => [feature.id, enabled])),
     );

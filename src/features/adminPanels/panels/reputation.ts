@@ -8,8 +8,8 @@ import {
   TextInputStyle,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import { channelMention, coreChannelValue, loadGuildConfig } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -103,13 +103,13 @@ export async function action(
 ): Promise<boolean> {
   const cfg = await loadGuildConfig(session.guildId);
   if (actionStr === "toggle")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "reputation.detectionEnabled": !cfg.reputation.detectionEnabled },
       { upsert: true },
     );
   if (interaction.isChannelSelectMenu() && actionStr === "channel")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       {
         "reputation.requestChannelId": interaction.values[0],
@@ -136,7 +136,7 @@ export async function action(
   }
   if (actionStr === "keywords-submit" && interaction.isModalSubmit()) {
     const keywords = parseReputationKeywords(interaction.fields.getTextInputValue("keywords"));
-    const result = await updateGuildPaths(
+    const result = await applyGuildConfigPaths(
       session.guildId,
       { "reputation.keywords": keywords },
       { upsert: true },

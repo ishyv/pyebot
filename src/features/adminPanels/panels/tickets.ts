@@ -1,6 +1,6 @@
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import { channelMention, coreChannelValue, renderChannelPairPanel } from "../panelHelpers";
 import type { PanelPayload, PanelState } from "../panelRuntime";
 
@@ -50,13 +50,13 @@ export async function action(
     if (!session.selectedTicketField) throw new Error("Choose a ticket field first.");
     const channelId = interaction.values[0];
     if (session.selectedTicketField === "channels.ticketCategoryId") {
-      await updateGuildPaths(
+      await applyGuildConfigPaths(
         session.guildId,
         { "channels.ticketCategoryId": channelId, "channels.core.ticketCategory": { channelId } },
         { upsert: true },
       );
     } else {
-      await updateGuildPaths(
+      await applyGuildConfigPaths(
         session.guildId,
         { [session.selectedTicketField]: { channelId } },
         { upsert: true },

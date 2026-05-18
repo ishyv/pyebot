@@ -6,8 +6,8 @@ import {
   ModalBuilder,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import { channelMention, loadGuildConfig, modalInput } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -61,13 +61,13 @@ export async function action(
 ): Promise<boolean> {
   const cfg = await loadGuildConfig(session.guildId);
   if (actionStr === "toggle")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "tops.enabled": !cfg.tops.enabled },
       { upsert: true },
     );
   if (interaction.isChannelSelectMenu() && actionStr === "channel")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "tops.channelId": interaction.values[0] },
       { upsert: true },
@@ -88,7 +88,7 @@ export async function action(
     const size = Number(interaction.fields.getTextInputValue("size"));
     if (!Number.isInteger(hours) || hours < 1 || !Number.isInteger(size) || size < 1 || size > 25)
       throw new Error("Use interval >= 1 and top size 1-25.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "tops.intervalHours": hours, "tops.topSize": size },
       { upsert: true },

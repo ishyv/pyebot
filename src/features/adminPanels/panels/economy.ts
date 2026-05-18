@@ -7,8 +7,12 @@ import {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import {
+  applyGuildConfigPaths,
+  loadEconomySettings,
+  saveEconomySettings,
+} from "../configMutations";
 import { loadGuildConfig, modalInput, yesNo } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -18,7 +22,9 @@ import {
 } from "../panelRuntime";
 
 /** Renders daily, work, tax, sectors, and feature-flag summary. */
-export function render(session: PanelState, cfg: GuildConfig): PanelPayload {
+export async function render(session: PanelState, cfg: GuildConfig): Promise<PanelPayload> {
+  const economyResult = await loadEconomySettings(session.guildId);
+  const economy = economyResult.isOk() ? economyResult.unwrap() : cfg.economy;
   const features = cfg.economy.features;
   return {
     container: panelContainer({
@@ -26,12 +32,12 @@ export function render(session: PanelState, cfg: GuildConfig): PanelPayload {
       fields: [
         {
           name: "Daily",
-          value: `${cfg.economy.daily.dailyReward} ${cfg.economy.daily.dailyCurrencyId}\nCooldown ${cfg.economy.daily.dailyCooldownHours}h\nFee ${(cfg.economy.daily.dailyFeeRate * 100).toFixed(2)}%`,
+          value: `${economy.daily.dailyReward} ${economy.daily.dailyCurrencyId}\nCooldown ${economy.daily.dailyCooldownHours}h\nFee ${(economy.daily.dailyFeeRate * 100).toFixed(2)}%`,
           inline: true,
         },
         {
           name: "Work",
-          value: `Base ${cfg.economy.work.workBaseMintReward}\nBonus max ${cfg.economy.work.workBonusFromWorksMax}\nCooldown ${cfg.economy.work.workCooldownMinutes}m\nCap ${cfg.economy.work.workDailyCap}`,
+          value: `Base ${economy.work.workBaseMintReward}\nBonus max ${economy.work.workBonusFromWorksMax}\nCooldown ${economy.work.workCooldownMinutes}m\nCap ${economy.work.workDailyCap}`,
           inline: true,
         },
         {
@@ -42,7 +48,7 @@ export function render(session: PanelState, cfg: GuildConfig): PanelPayload {
         {
           name: "Sectors",
           value:
-            Object.entries(cfg.economy.sectors ?? {})
+            Object.entries(economy.sectors ?? {})
               .map(([name, value]) => `${name}: ${value}`)
               .join("\n") || "None",
           inline: true,
@@ -95,10 +101,12 @@ export async function action(
   actionStr: string,
 ): Promise<boolean> {
   const cfg = await loadGuildConfig(session.guildId);
+  const economyResult = await loadEconomySettings(session.guildId);
+  const economy = economyResult.isOk() ? economyResult.unwrap() : cfg.economy;
   if (interaction.isStringSelectMenu() && actionStr === "feature-toggle") {
     const feature = interaction.values[0];
     const current = Boolean((cfg.economy.features as Record<string, boolean>)[feature]);
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { [`economy.features.${feature}`]: !current },
       { upsert: true },
@@ -126,27 +134,23 @@ export async function action(
     if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c))
       throw new Error("Economy values must be numeric.");
     if (actionStr === "daily-submit")
-      await updateGuildPaths(
-        session.guildId,
-        {
-          "economy.daily.dailyReward": Math.trunc(a),
-          "economy.daily.dailyCooldownHours": Math.trunc(b || cfg.economy.daily.dailyCooldownHours),
-          "economy.daily.dailyFeeRate": c || cfg.economy.daily.dailyFeeRate,
+      await saveEconomySettings(session.guildId, {
+        daily: {
+          dailyReward: Math.trunc(a),
+          dailyCooldownHours: Math.trunc(b || economy.daily.dailyCooldownHours),
+          dailyFeeRate: c || economy.daily.dailyFeeRate,
         },
-        { upsert: true },
-      );
+      });
     if (actionStr === "work-submit")
-      await updateGuildPaths(
-        session.guildId,
-        {
-          "economy.work.workBaseMintReward": Math.trunc(a),
-          "economy.work.workBonusFromWorksMax": Math.trunc(b),
-          "economy.work.workDailyCap": Math.trunc(c || cfg.economy.work.workDailyCap),
+      await saveEconomySettings(session.guildId, {
+        work: {
+          workBaseMintReward: Math.trunc(a),
+          workBonusFromWorksMax: Math.trunc(b),
+          workDailyCap: Math.trunc(c || economy.work.workDailyCap),
         },
-        { upsert: true },
-      );
+      });
     if (actionStr === "tax-submit")
-      await updateGuildPaths(
+      await applyGuildConfigPaths(
         session.guildId,
         {
           "economy.tax.rate": a,

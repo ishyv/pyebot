@@ -15,8 +15,8 @@ import {
   type FeatureConfigField,
   getConfigPathValue,
 } from "@/core/featureConfig";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import { channelMention, limitText, loadGuildConfig, modalInput } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -137,7 +137,7 @@ async function writeField(
   if (!feature.config) throw new Error("Feature has no config definition.");
   const patch = buildConfigFieldPatch(feature.config, field.key, value);
   if (patch.isErr()) throw new Error(patch.error.message);
-  await updateGuildPaths(guildId, patch.unwrap(), { upsert: true });
+  await applyGuildConfigPaths(guildId, patch.unwrap(), { upsert: true });
 }
 
 function coerceValue(field: FeatureConfigField, value: string): unknown {

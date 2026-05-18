@@ -7,9 +7,9 @@ import {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
 import { aiConfig } from "@/features/ai/config";
+import { applyGuildConfigPaths } from "../configMutations";
 import { modalInput } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -86,7 +86,7 @@ export async function action(
     const provider = interaction.values[0];
     const defaultModel =
       provider === "openai" ? aiConfig.providers.openai.low : aiConfig.providers.google.low;
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "ai.provider": provider, "ai.model": defaultModel },
       { upsert: true },
@@ -94,7 +94,7 @@ export async function action(
     return true;
   }
   if (interaction.isStringSelectMenu() && actionStr === "model") {
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "ai.model": interaction.values[0] },
       { upsert: true },
@@ -117,7 +117,7 @@ export async function action(
     const perGuild = Number(interaction.fields.getTextInputValue("guild"));
     if (!Number.isInteger(perUser) || perUser < 0 || !Number.isInteger(perGuild) || perGuild < 0)
       throw new Error("Rate limits must be whole numbers.");
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "ai.rateLimit.perUserPerMinute": perUser, "ai.rateLimit.perGuildPerMinute": perGuild },
       { upsert: true },

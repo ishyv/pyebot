@@ -6,8 +6,8 @@ import {
   ChannelType,
 } from "discord.js";
 import type { ComponentInteraction } from "@/core/feature";
-import { updateGuildPaths } from "@/db/repositories/guilds";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
+import { applyGuildConfigPaths } from "../configMutations";
 import { loadGuildConfig, yesNo } from "../panelHelpers";
 import {
   makePanelCustomId,
@@ -62,15 +62,19 @@ export async function action(
 ): Promise<boolean> {
   const cfg = await loadGuildConfig(session.guildId);
   if (actionStr === "toggle")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "forumAutoReply.enabled": !cfg.forumAutoReply.enabled },
       { upsert: true },
     );
   if (actionStr === "clear")
-    await updateGuildPaths(session.guildId, { "forumAutoReply.forumIds": [] }, { upsert: true });
+    await applyGuildConfigPaths(
+      session.guildId,
+      { "forumAutoReply.forumIds": [] },
+      { upsert: true },
+    );
   if (interaction.isChannelSelectMenu() && actionStr === "channels")
-    await updateGuildPaths(
+    await applyGuildConfigPaths(
       session.guildId,
       { "forumAutoReply.forumIds": interaction.values, "forumAutoReply.enabled": true },
       { upsert: true },
