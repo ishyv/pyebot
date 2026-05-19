@@ -1,22 +1,18 @@
 /**
- * Typed event bus for cross-feature communication.
+ * Legacy dashboard event bridge.
  *
- * Why a custom bus instead of Node's EventEmitter:
- * - EventEmitter is stringly-typed: listeners receive `any`, no narrowing.
- * - A discriminated union gives full TypeScript inference for both emitters and listeners.
- * - The implementation is ~30 lines — adding a dependency would be wasteful.
+ * The active feature runtime uses `framework/event-bus` through `ctx.emit(...)`
+ * and `@On(EventClass)` listeners. This string-keyed bus remains only for
+ * paths that still need to push live moderation/appeal activity into the
+ * embedded webapp/SSE bridge without pulling framework internals into webapp
+ * code.
  *
- * Dispatch is fire-and-forget: listener errors are logged but never propagate to the emitter.
- * This means a quest DB write failing will never break a gather command succeeding.
+ * Do not use this for new feature-to-feature runtime behavior. Add framework
+ * event classes under `src/events` instead, then listen with `@On`.
  *
- * Usage:
- *   // Emitting (in a feature service):
- *   bus.emit({ type: "item:gathered", userId, itemId: mat.id, qty: mat.quantity });
- *
- *   // Listening (in a feature's onLoad hook):
- *   bus.on("item:gathered", async (e) => {
- *     await progressAllQuests(e.userId, { kind: "gather_item", itemId: e.itemId, qty: e.qty });
- *   });
+ * Dispatch is fire-and-forget: listener errors are logged but never propagate
+ * to the emitter. That is intentional for dashboard notifications, where a
+ * broken SSE subscriber must not break the moderation action that emitted it.
  */
 
 import { createLogger } from "@/core/logger";
@@ -24,7 +20,8 @@ import { createLogger } from "@/core/logger";
 const log = createLogger("bus");
 
 // ---------------------------------------------------------------------------
-// Event union — extend this as features need new cross-feature signals.
+// Event union for the legacy dashboard bridge. Keep new runtime signals on the
+// framework event bus unless the webapp explicitly needs an SSE projection.
 // ---------------------------------------------------------------------------
 
 export type BusEvent =
@@ -60,6 +57,7 @@ type BusListener<T extends BusEvent["type"]> = (
 // EventBus
 // ---------------------------------------------------------------------------
 
+/** Minimal string-keyed bridge for dashboard projections of already-committed actions. */
 class EventBus {
   private readonly listeners = new Map<string, Set<BusListener<BusEvent["type"]>>>();
 
