@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ChannelType } from "discord.js";
-import { channelConfigField, defineFeatureConfig } from "./featureConfig";
 import { listConfigurableFeatures, listFeatureCatalog, setFeatureCatalog } from "./featureCatalog";
+import { channelConfigField, defineFeatureConfig } from "./featureConfig";
 
 const countingConfig = defineFeatureConfig({
   fields: {

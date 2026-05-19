@@ -4,7 +4,7 @@ import { resolveConfiguredChannel } from "@/core/featureConfig";
 import { createLogger } from "@/core/logger";
 import { mongoCountingStateRepository } from "@/db/repositories/counting";
 import { getGuild } from "@/db/repositories/guilds";
-import { Listen, type Ctx } from "@/framework";
+import { type Ctx, Listen } from "@/framework";
 import { countingFeatureConfig } from "./config";
 import countingFeature from "./index";
 import { processCountingMessage } from "./service";
