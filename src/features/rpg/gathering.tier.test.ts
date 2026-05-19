@@ -1,30 +1,26 @@
 /**
  * Tests for getEquippedToolTier and TOOL_TIER_FALLBACK in gathering.ts.
- * Mocks @/db/repositories/users — no real DB required.
+ * Uses a tiny Ctx stub so profile reads stay on the component path.
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { ErrResult, OkResult } from "@/core/result";
-import type { Loadout } from "@/db/schemas/rpg-profile";
-import type { User } from "@/db/schemas/user";
+import type { LoadoutValue, RpgProfileValue } from "@/components/rpg-profile";
+import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test
 // ---------------------------------------------------------------------------
 
-const mockGetUser = mock(async (_id: string) => OkResult<User | null>(null));
+const mockGetProfile = mock(async (_id: string) => null as RpgProfileValue | null);
 
 mock.module("@/db/repositories/users", () => ({
-  getUser: mockGetUser,
-  updateUserPaths: mock(async () => OkResult(undefined as undefined)),
+  getUser: mock(async () => {
+    throw new Error("not used");
+  }),
+  updateUserPaths: mock(async () => {
+    throw new Error("not used");
+  }),
   userStore: {},
-}));
-
-// Also mock the rpg repository (transitively imported by gathering.ts)
-mock.module("@/db/repositories/rpg", () => ({
-  ensureRpgProfile: mock(async () => ErrResult(new Error("not used"))),
-  patchRpgProfile: mock(async () => ErrResult(new Error("not used"))),
-  rpgStore: {},
 }));
 
 // ---------------------------------------------------------------------------
@@ -39,49 +35,51 @@ import { getEquippedToolTier, TOOL_TIER_FALLBACK } from "./gathering";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeUser(weapon: Loadout["weapon"]): User {
+function makeCtx(): Ctx {
   return {
-    _id: "user-1",
-    warns: [],
-    sanction_history: {},
-    openTickets: [],
-    currency: {},
-    inventory: {},
-    economyAccount: undefined as unknown as User["economyAccount"],
-    rpgProfile: {
-      loadout: {
-        weapon,
-        shield: null,
-        helmet: null,
-        chest: null,
-        pants: null,
-        boots: null,
-        ring: null,
-        necklace: null,
-      },
-      hpCurrent: 100,
-      wins: 0,
-      losses: 0,
-      isFighting: false,
-      activeFightId: null,
-      starterKitType: null,
-      starterKitClaimedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      version: 0,
-    },
-  } as unknown as User;
+    get: (async (id: string) => mockGetProfile(id)) as Ctx["get"],
+    ensure: mock(async () => {
+      throw new Error("not used");
+    }),
+    set: mock(async () => undefined),
+    patch: mock(async () => undefined),
+    delete: mock(async () => undefined),
+    query: mock(async () => []),
+    emit: mock(async () => undefined),
+    client: {} as Ctx["client"],
+    logger: { error: mock(() => undefined) } as unknown as Ctx["logger"],
+    cooldowns: {} as Ctx["cooldowns"],
+    locks: {} as Ctx["locks"],
+    sessions: {} as Ctx["sessions"],
+    interaction: null,
+  };
 }
 
-function makeUserNoRpg(): User {
+function makeProfile(weapon: LoadoutValue["weapon"]): RpgProfileValue {
   return {
-    _id: "user-1",
-    warns: [],
-    sanction_history: {},
-    openTickets: [],
-    currency: {},
-    inventory: {},
-  } as unknown as User;
+    loadout: {
+      weapon,
+      shield: null,
+      helmet: null,
+      chest: null,
+      pants: null,
+      boots: null,
+      ring: null,
+      necklace: null,
+    },
+    hpCurrent: 100,
+    wins: 0,
+    losses: 0,
+    isFighting: false,
+    activeFightId: null,
+    starterKitType: null,
+    starterKitClaimedAt: null,
+    stashSize: 20,
+    activeExpeditionId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    version: 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -156,54 +154,50 @@ describe("TOOL_TIER_FALLBACK", () => {
 
 describe("getEquippedToolTier", () => {
   beforeEach(() => {
-    mockGetUser.mockReset();
+    mockGetProfile.mockReset();
   });
 
-  test("getUser fails → returns TOOL_TIER_FALLBACK", async () => {
-    mockGetUser.mockImplementation(async () => ErrResult(new Error("db error")));
-    const tier = await getEquippedToolTier("user-1");
+  test("profile read fails → returns TOOL_TIER_FALLBACK", async () => {
+    mockGetProfile.mockImplementation(async () => {
+      throw new Error("db error");
+    });
+    const tier = await getEquippedToolTier(makeCtx(), "user-1");
     expect(tier).toBe(TOOL_TIER_FALLBACK);
   });
 
   test("user has no rpgProfile → returns TOOL_TIER_FALLBACK", async () => {
-    mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUserNoRpg()));
-    const tier = await getEquippedToolTier("user-1");
+    mockGetProfile.mockImplementation(async () => null);
+    const tier = await getEquippedToolTier(makeCtx(), "user-1");
     expect(tier).toBe(TOOL_TIER_FALLBACK);
   });
 
   test("loadout.weapon is null → returns TOOL_TIER_FALLBACK", async () => {
-    mockGetUser.mockImplementation(async () => OkResult<User | null>(makeUser(null)));
-    const tier = await getEquippedToolTier("user-1");
+    mockGetProfile.mockImplementation(async () => makeProfile(null));
+    const tier = await getEquippedToolTier(makeCtx(), "user-1");
     expect(tier).toBe(TOOL_TIER_FALLBACK);
   });
 
   test("loadout.weapon = stone_pickaxe → returns 2", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(
-        makeUser({ instanceId: "inst-1", itemId: "stone_pickaxe", durability: 50 }),
-      ),
+    mockGetProfile.mockImplementation(async () =>
+      makeProfile({ instanceId: "inst-1", itemId: "stone_pickaxe", durability: 50 }),
     );
-    const tier = await getEquippedToolTier("user-1");
+    const tier = await getEquippedToolTier(makeCtx(), "user-1");
     expect(tier).toBe(2);
   });
 
   test("loadout.weapon = copper_axe → returns 3", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(
-        makeUser({ instanceId: "inst-2", itemId: "copper_axe", durability: 30 }),
-      ),
+    mockGetProfile.mockImplementation(async () =>
+      makeProfile({ instanceId: "inst-2", itemId: "copper_axe", durability: 30 }),
     );
-    const tier = await getEquippedToolTier("user-1");
+    const tier = await getEquippedToolTier(makeCtx(), "user-1");
     expect(tier).toBe(3);
   });
 
   test("loadout.weapon = unknown_item → returns TOOL_TIER_FALLBACK", async () => {
-    mockGetUser.mockImplementation(async () =>
-      OkResult<User | null>(
-        makeUser({ instanceId: "inst-3", itemId: "unknown_item", durability: 10 }),
-      ),
+    mockGetProfile.mockImplementation(async () =>
+      makeProfile({ instanceId: "inst-3", itemId: "unknown_item", durability: 10 }),
     );
-    const tier = await getEquippedToolTier("user-1");
+    const tier = await getEquippedToolTier(makeCtx(), "user-1");
     expect(tier).toBe(TOOL_TIER_FALLBACK);
   });
 });

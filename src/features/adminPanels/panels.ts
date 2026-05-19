@@ -4,8 +4,8 @@
  * Owns the three functions consumed by commands and the interaction handler.
  * All rendering and action logic lives in `panels/` via `panelDispatcher.ts`.
  *
- * Re-exports preserve backward-compatibility for tests and commands that
- * import directly from this file.
+ * Re-exports preserve test/import stability while panel internals continue
+ * moving into focused files.
  */
 
 import type { ChatInputCommandInteraction } from "discord.js";

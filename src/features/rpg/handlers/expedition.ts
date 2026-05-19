@@ -29,6 +29,7 @@ import {
   MAX_DEPTH,
 } from "@/features/rpg/expedition/world";
 import { gatherAtLocation, getEquippedToolTier } from "@/features/rpg/gathering";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
 const PREFIX = "expedition:";
@@ -96,7 +97,10 @@ function renderExpedition(state: ExpeditionState, toolTier: number, gatherLine?:
 // Handler
 // ---------------------------------------------------------------------------
 
-export async function handleExpeditionButton(interaction: ButtonInteraction): Promise<void> {
+export async function handleExpeditionButton(
+  interaction: ButtonInteraction,
+  ctx: Ctx,
+): Promise<void> {
   const cid = interaction.customId;
 
   // ── Start ────────────────────────────────────────────────────────────────
@@ -108,7 +112,7 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
     await interaction.deferUpdate();
     const userId = interaction.user.id;
     const state = startSession(userId, biome);
-    const toolTier = await getEquippedToolTier(userId);
+    const toolTier = await getEquippedToolTier(ctx, userId);
     const { _rows, ...v2Payload } = renderExpedition(state, toolTier);
     await interaction.editReply({ ...v2Payload, components: [...v2Payload.components, ..._rows] });
     return;
@@ -140,8 +144,7 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
 
     const locationId = locationForBiomeDepth(state.biome, state.depth);
     const action = actionForBiome(state.biome);
-    // v2 signature: gatherAtLocation(userId, action, locationId)
-    const result = await gatherAtLocation(userId, action, locationId);
+    const result = await gatherAtLocation(ctx, userId, action, locationId);
 
     if (result.isErr()) {
       const err = result.error;
@@ -168,7 +171,7 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
     const gatherLine = `✅ **${node.display}** → ${materialsText}${durabilityNote}`;
 
     const newState = regenNodes(userId) ?? state;
-    const toolTier = await getEquippedToolTier(userId);
+    const toolTier = await getEquippedToolTier(ctx, userId);
     const { _rows, ...v2Payload } = renderExpedition(newState, toolTier, gatherLine);
     await interaction.editReply({ ...v2Payload, components: [...v2Payload.components, ..._rows] });
     return;
@@ -186,7 +189,7 @@ export async function handleExpeditionButton(interaction: ButtonInteraction): Pr
       });
       return;
     }
-    const toolTier = await getEquippedToolTier(userId);
+    const toolTier = await getEquippedToolTier(ctx, userId);
     const { _rows, ...v2Payload } = renderExpedition(newState, toolTier);
     await interaction.editReply({ ...v2Payload, components: [...v2Payload.components, ..._rows] });
     return;

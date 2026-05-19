@@ -5,16 +5,16 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { ErrResult, OkResult } from "@/core/result";
-import type { EquippedItem, RpgProfileData } from "@/db/schemas/rpg-profile";
+import type { EquippedItemValue, RpgProfileValue } from "@/components/rpg-profile";
+import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------
-// Mock @/db/repositories/rpg BEFORE importing the handler
+// Mock component-backed profile helpers BEFORE importing the handler
 // ---------------------------------------------------------------------------
 
-const profileStore = new Map<string, RpgProfileData>();
+const profileStore = new Map<string, RpgProfileValue>();
 
-function makeProfile(overrides: Partial<RpgProfileData> = {}): RpgProfileData {
+function makeProfile(overrides: Partial<RpgProfileValue> = {}): RpgProfileValue {
   return {
     loadout: {
       weapon: null,
@@ -34,28 +34,32 @@ function makeProfile(overrides: Partial<RpgProfileData> = {}): RpgProfileData {
     starterKitType: null,
     starterKitClaimedAt: null,
     stashSize: 20,
+    activeExpeditionId: null,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     version: 0,
     ...overrides,
-  } as RpgProfileData;
+  };
 }
 
-const mockPatchRpgProfile = mock(async (userId: string, patch: Partial<RpgProfileData>) => {
-  const existing = profileStore.get(userId) ?? makeProfile();
-  const updated = { ...existing, ...patch };
-  profileStore.set(userId, updated);
-  return OkResult(updated);
-});
+const mockPatchRpgProfile = mock(
+  async (_ctx: Ctx, userId: string, patch: Partial<RpgProfileValue>) => {
+    const existing = profileStore.get(userId) ?? makeProfile();
+    const updated = { ...existing, ...patch };
+    profileStore.set(userId, updated);
+    return updated;
+  },
+);
 
-mock.module("@/db/repositories/rpg", () => ({
+mock.module("@/features/rpg/profile", () => ({
   patchRpgProfile: mockPatchRpgProfile,
-  getRpgProfile: mock(async (userId: string) => OkResult(profileStore.get(userId) ?? null)),
-  ensureRpgProfile: mock(async (userId: string) => {
+  getRpgProfile: mock(async (_ctx: Ctx, userId: string) => profileStore.get(userId) ?? null),
+  ensureRpgProfile: mock(async (_ctx: Ctx, userId: string) => {
     if (!profileStore.has(userId)) profileStore.set(userId, makeProfile());
-    return OkResult(profileStore.get(userId)!);
+    const profile = profileStore.get(userId);
+    if (!profile) throw new Error("Failed to create profile fixture");
+    return profile;
   }),
-  rpgStore: {},
 }));
 
 // ---------------------------------------------------------------------------
@@ -78,15 +82,28 @@ function makeInteraction(profession: "miner" | "lumber", userId = "user1") {
   } as unknown as import("discord.js").ButtonInteraction;
 }
 
+function makeCtx(): Ctx {
+  return {} as Ctx;
+}
+
+function expectStoredProfile(userId: string): RpgProfileValue {
+  const profile = profileStore.get(userId);
+  expect(profile).toBeDefined();
+  if (!profile) throw new Error(`Expected profile fixture for ${userId}`);
+  return profile;
+}
+
 function resetAll() {
   profileStore.clear();
   mockPatchRpgProfile.mockReset();
-  mockPatchRpgProfile.mockImplementation(async (userId: string, patch: Partial<RpgProfileData>) => {
-    const existing = profileStore.get(userId) ?? makeProfile();
-    const updated = { ...existing, ...patch };
-    profileStore.set(userId, updated);
-    return OkResult(updated);
-  });
+  mockPatchRpgProfile.mockImplementation(
+    async (_ctx: Ctx, userId: string, patch: Partial<RpgProfileValue>) => {
+      const existing = profileStore.get(userId) ?? makeProfile();
+      const updated = { ...existing, ...patch };
+      profileStore.set(userId, updated);
+      return updated;
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -98,52 +115,50 @@ describe("handleOnboard", () => {
 
   test("miner: stores starter_pickaxe in loadout.weapon", async () => {
     const interaction = makeInteraction("miner", "user_miner");
-    await handleOnboard(interaction);
+    await handleOnboard(interaction, makeCtx());
 
-    const profile = profileStore.get("user_miner");
-    expect(profile).toBeDefined();
-    const weapon = profile!.loadout.weapon;
+    const profile = expectStoredProfile("user_miner");
+    const weapon = profile.loadout.weapon;
     expect(weapon).not.toBeNull();
     expect(typeof weapon).toBe("object");
-    expect((weapon as EquippedItem).itemId).toBe("starter_pickaxe");
+    expect((weapon as EquippedItemValue).itemId).toBe("starter_pickaxe");
 
     // starterKitType and starterKitClaimedAt must also be set
-    expect(profile!.starterKitType).toBe("miner");
-    expect(profile!.starterKitClaimedAt).toBeInstanceOf(Date);
+    expect(profile.starterKitType).toBe("miner");
+    expect(profile.starterKitClaimedAt).toBeInstanceOf(Date);
   });
 
   test("lumber: stores starter_axe in loadout.weapon", async () => {
     const interaction = makeInteraction("lumber", "user_lumber");
-    await handleOnboard(interaction);
+    await handleOnboard(interaction, makeCtx());
 
-    const profile = profileStore.get("user_lumber");
-    expect(profile).toBeDefined();
-    const weapon = profile!.loadout.weapon;
+    const profile = expectStoredProfile("user_lumber");
+    const weapon = profile.loadout.weapon;
     expect(weapon).not.toBeNull();
     expect(typeof weapon).toBe("object");
-    expect((weapon as EquippedItem).itemId).toBe("starter_axe");
+    expect((weapon as EquippedItemValue).itemId).toBe("starter_axe");
 
     // starterKitType and starterKitClaimedAt must also be set
-    expect(profile!.starterKitType).toBe("lumber");
-    expect(profile!.starterKitClaimedAt).toBeInstanceOf(Date);
+    expect(profile.starterKitType).toBe("lumber");
+    expect(profile.starterKitClaimedAt).toBeInstanceOf(Date);
   });
 
   test("miner: starter_pickaxe has instanceId 'starter' and durability 50", async () => {
     const interaction = makeInteraction("miner", "user_miner2");
-    await handleOnboard(interaction);
+    await handleOnboard(interaction, makeCtx());
 
-    const profile = profileStore.get("user_miner2");
-    const weapon = profile!.loadout.weapon as EquippedItem;
+    const profile = expectStoredProfile("user_miner2");
+    const weapon = profile.loadout.weapon as EquippedItemValue;
     expect(weapon.instanceId).toBe("starter");
     expect(weapon.durability).toBe(50);
   });
 
   test("lumber: starter_axe has instanceId 'starter' and durability 50", async () => {
     const interaction = makeInteraction("lumber", "user_lumber2");
-    await handleOnboard(interaction);
+    await handleOnboard(interaction, makeCtx());
 
-    const profile = profileStore.get("user_lumber2");
-    const weapon = profile!.loadout.weapon as EquippedItem;
+    const profile = expectStoredProfile("user_lumber2");
+    const weapon = profile.loadout.weapon as EquippedItemValue;
     expect(weapon.instanceId).toBe("starter");
     expect(weapon.durability).toBe(50);
   });
@@ -157,17 +172,19 @@ describe("handleOnboard", () => {
       reply: mock(async () => {}),
     } as unknown as import("discord.js").ButtonInteraction;
 
-    await handleOnboard(interaction);
+    await handleOnboard(interaction, makeCtx());
 
     expect(interaction.reply).toHaveBeenCalled();
     expect(profileStore.has("user_wizard")).toBe(false);
   });
 
   test("patchRpgProfile failure: replies with failure message", async () => {
-    mockPatchRpgProfile.mockImplementation(async () => ErrResult(new Error("DB down")));
+    mockPatchRpgProfile.mockImplementation(async () => {
+      throw new Error("DB down");
+    });
 
     const interaction = makeInteraction("miner", "user_fail");
-    await handleOnboard(interaction);
+    await handleOnboard(interaction, makeCtx());
 
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining("Failed") }),
@@ -180,22 +197,21 @@ describe("handleOnboard", () => {
   // also succeed and leave the profile in a valid state.
   test("re-onboard (double-click): second call overwrites without crashing", async () => {
     const interaction1 = makeInteraction("miner", "user_reoard");
-    await handleOnboard(interaction1);
+    await handleOnboard(interaction1, makeCtx());
 
     const profileAfterFirst = profileStore.get("user_reoard");
     expect(profileAfterFirst?.starterKitType).toBe("miner");
 
     // Second call — different profession simulating a button re-click
     const interaction2 = makeInteraction("lumber", "user_reoard");
-    await handleOnboard(interaction2);
+    await handleOnboard(interaction2, makeCtx());
 
     // No crash; second call should succeed and overwrite
     expect(interaction2.editReply).toHaveBeenCalled();
 
-    const profileAfterSecond = profileStore.get("user_reoard");
-    expect(profileAfterSecond).toBeDefined();
-    expect(profileAfterSecond!.starterKitType).toBe("lumber");
-    expect(profileAfterSecond!.starterKitClaimedAt).toBeInstanceOf(Date);
-    expect((profileAfterSecond!.loadout.weapon as EquippedItem).itemId).toBe("starter_axe");
+    const profileAfterSecond = expectStoredProfile("user_reoard");
+    expect(profileAfterSecond.starterKitType).toBe("lumber");
+    expect(profileAfterSecond.starterKitClaimedAt).toBeInstanceOf(Date);
+    expect((profileAfterSecond.loadout.weapon as EquippedItemValue).itemId).toBe("starter_axe");
   });
 });

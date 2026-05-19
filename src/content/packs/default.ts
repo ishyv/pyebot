@@ -1,10 +1,10 @@
 import { defineContentPack } from "@/content/authoring";
 
 /**
- * Canonical built-in RPG content.
+ * Built-in RPG content seed.
  *
- * Add new RPG items, deterministic crafting recipes, locations, and drop tables here.
- * The helpers preserve literal IDs so TypeScript can catch bad references before startup.
+ * The live bot can load dashboard-authored content from Mongo at runtime. This
+ * pack remains the typed source fallback and authoring seed for new installs.
  */
 export const DEFAULT_CONTENT_PACK = defineContentPack({
   id: "ashenmoor_default",

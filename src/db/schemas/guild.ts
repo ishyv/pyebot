@@ -222,239 +222,168 @@ export const TempRolePoliciesSchema = z
   })
   .catch(() => ({ recentlyJoined: defaultRecentlyJoinedPolicy() }));
 
-export const AutomodSchema = z
-  .object({
-    linkSpam: z
-      .object({
-        enabled: z.boolean().catch(false),
-        maxLinks: z.number().int().catch(4),
-        windowSeconds: z.number().int().catch(10),
-        timeoutSeconds: z.number().int().catch(300),
-        action: z.enum(["timeout", "mute", "delete", "report"]).catch("timeout"),
-        reportChannelId: z.string().nullable().catch(null),
-      })
-      .catch(() => ({
-        enabled: false,
-        maxLinks: 4,
-        windowSeconds: 10,
-        timeoutSeconds: 300,
-        action: "timeout" as const,
-        reportChannelId: null,
-      })),
-    domainWhitelist: z
-      .object({
-        enabled: z.boolean().catch(false),
-        domains: z.array(z.string()).catch(() => []),
-      })
-      .catch(() => ({ enabled: false, domains: [] })),
-    shorteners: z
-      .object({
-        enabled: z.boolean().catch(false),
-        resolveFinalUrl: z.boolean().catch(false),
-        allowedShorteners: z
-          .array(z.string())
-          .catch(() => [
-            "bit.ly",
-            "t.co",
-            "tinyurl.com",
-            "cutt.ly",
-            "is.gd",
-            "rebrand.ly",
-            "goo.gl",
-          ]),
-      })
-      .catch(() => ({
-        enabled: false,
-        resolveFinalUrl: false,
-        allowedShorteners: [
-          "bit.ly",
-          "t.co",
-          "tinyurl.com",
-          "cutt.ly",
-          "is.gd",
-          "rebrand.ly",
-          "goo.gl",
-        ],
-      })),
-    crossChannelSpam: z
-      .object({
-        enabled: z.boolean().catch(false),
-        minChannels: z.number().int().catch(3),
-        windowSeconds: z.number().int().catch(30),
-        reportChannelId: z.string().nullable().catch(null),
-        autoTimeout: z.boolean().catch(true),
-        timeoutSeconds: z.number().int().catch(3600),
-      })
-      .catch(() => ({
-        enabled: false,
-        minChannels: 3,
-        windowSeconds: 30,
-        reportChannelId: null,
-        autoTimeout: true,
-        timeoutSeconds: 3600,
-      })),
-    mentionSpam: z
-      .object({
-        enabled: z.boolean().catch(false),
-        maxMentions: z.number().int().catch(5),
-        windowSeconds: z.number().int().catch(10),
-        action: z.enum(["timeout", "delete", "report"]).catch("timeout"),
-        timeoutSeconds: z.number().int().catch(600),
-        reportChannelId: z.string().nullable().catch(null),
-      })
-      .catch(() => ({
-        enabled: false,
-        maxMentions: 5,
-        windowSeconds: 10,
-        action: "timeout" as const,
-        timeoutSeconds: 600,
-        reportChannelId: null,
-      })),
-    slowmode: z
-      .object({
-        enabled: z.boolean().catch(false),
-        messagesPerWindow: z.number().int().catch(20),
-        windowSeconds: z.number().int().catch(60),
-        slowmodeSeconds: z.number().int().catch(5),
-        releaseAfterSeconds: z.number().int().catch(60),
-      })
-      .catch(() => ({
-        enabled: false,
-        messagesPerWindow: 20,
-        windowSeconds: 60,
-        slowmodeSeconds: 5,
-        releaseAfterSeconds: 60,
-      })),
-    raidDetection: z
-      .object({
-        enabled: z.boolean().catch(false),
-        joinsPerMinute: z.number().int().catch(10),
-        minAccountAgeDays: z.number().int().catch(7),
-        action: z.enum(["alert", "lockdown", "quarantine"]).catch("alert"),
-        reportChannelId: z.string().nullable().catch(null),
-      })
-      .catch(() => ({
-        enabled: false,
-        joinsPerMinute: 10,
-        minAccountAgeDays: 7,
-        action: "alert" as const,
-        reportChannelId: null,
-      })),
-    customPatterns: z
-      .array(
-        z.object({
-          name: z.string(),
-          pattern: z.string(),
-          flags: z.string().catch("i"),
-          action: z.enum(["delete", "timeout", "report"]).catch("delete"),
-          timeoutSeconds: z.number().int().catch(300),
-        }),
-      )
-      .catch(() => []),
-    tempRolePolicies: TempRolePoliciesSchema.catch(() => ({
-      recentlyJoined: defaultRecentlyJoinedPolicy(),
-    })),
-    policy: z
-      .object({
-        preset: z.enum(["relaxed", "balanced", "strict"]).catch("balanced"),
-        profileRetentionDays: z.number().int().min(1).max(365).catch(30),
-        aiDetector: z
-          .object({
-            enabled: z.boolean().catch(false),
-            minConfidence: z.number().min(0).max(1).catch(0.75),
-          })
-          .catch(() => ({ enabled: false, minConfidence: 0.75 })),
-        bypass: z
-          .object({
-            staffBypass: z.boolean().catch(true),
-            ignoredChannelIds: z.array(z.string()).catch(() => []),
-            strictChannelIds: z.array(z.string()).catch(() => []),
-            trustedRoleIds: z.array(z.string()).catch(() => []),
-            protectedRoleIds: z.array(z.string()).catch(() => []),
-          })
-          .catch(() => ({
-            staffBypass: true,
-            ignoredChannelIds: [],
-            strictChannelIds: [],
-            trustedRoleIds: [],
-            protectedRoleIds: [],
-          })),
-        alertRateLimit: z
-          .object({
-            windowSeconds: z.number().int().min(1).catch(60),
-            maxAlerts: z.number().int().min(1).catch(4),
-          })
-          .catch(() => ({ windowSeconds: 60, maxAlerts: 4 })),
-        actionRateLimit: z
-          .object({
-            windowSeconds: z.number().int().min(1).catch(60),
-            maxActions: z.number().int().min(1).catch(3),
-          })
-          .catch(() => ({ windowSeconds: 60, maxActions: 3 })),
-      })
-      .catch(() => ({
-        preset: "balanced" as const,
-        profileRetentionDays: 30,
-        aiDetector: { enabled: false, minConfidence: 0.75 },
-        bypass: {
-          staffBypass: true,
-          ignoredChannelIds: [],
-          strictChannelIds: [],
-          trustedRoleIds: [],
-          protectedRoleIds: [],
-        },
-        alertRateLimit: { windowSeconds: 60, maxAlerts: 4 },
-        actionRateLimit: { windowSeconds: 60, maxActions: 3 },
-      })),
-  })
-  .catch(() => ({
-    linkSpam: {
+export const AutomodSchema = z.object({
+  linkSpam: z
+    .object({
+      enabled: z.boolean().catch(false),
+      maxLinks: z.number().int().catch(4),
+      windowSeconds: z.number().int().catch(10),
+      timeoutSeconds: z.number().int().catch(300),
+      action: z.enum(["timeout", "mute", "delete", "report"]).catch("timeout"),
+      reportChannelId: z.string().nullable().catch(null),
+    })
+    .catch(() => ({
       enabled: false,
       maxLinks: 4,
       windowSeconds: 10,
       timeoutSeconds: 300,
       action: "timeout" as const,
       reportChannelId: null,
-    },
-    domainWhitelist: { enabled: false, domains: [] },
-    shorteners: {
+    })),
+  domainWhitelist: z
+    .object({
+      enabled: z.boolean().catch(false),
+      domains: z.array(z.string()).catch(() => []),
+    })
+    .catch(() => ({ enabled: false, domains: [] })),
+  shorteners: z
+    .object({
+      enabled: z.boolean().catch(false),
+      resolveFinalUrl: z.boolean().catch(false),
+      allowedShorteners: z
+        .array(z.string())
+        .catch(() => ["bit.ly", "t.co", "tinyurl.com", "cutt.ly", "is.gd", "rebrand.ly", "goo.gl"]),
+    })
+    .catch(() => ({
       enabled: false,
       resolveFinalUrl: false,
-      allowedShorteners: ["bit.ly", "t.co", "tinyurl.com"],
-    },
-    crossChannelSpam: {
+      allowedShorteners: [
+        "bit.ly",
+        "t.co",
+        "tinyurl.com",
+        "cutt.ly",
+        "is.gd",
+        "rebrand.ly",
+        "goo.gl",
+      ],
+    })),
+  crossChannelSpam: z
+    .object({
+      enabled: z.boolean().catch(false),
+      minChannels: z.number().int().catch(3),
+      windowSeconds: z.number().int().catch(30),
+      reportChannelId: z.string().nullable().catch(null),
+      autoTimeout: z.boolean().catch(true),
+      timeoutSeconds: z.number().int().catch(3600),
+    })
+    .catch(() => ({
       enabled: false,
       minChannels: 3,
       windowSeconds: 30,
       reportChannelId: null,
       autoTimeout: true,
       timeoutSeconds: 3600,
-    },
-    mentionSpam: {
+    })),
+  mentionSpam: z
+    .object({
+      enabled: z.boolean().catch(false),
+      maxMentions: z.number().int().catch(5),
+      windowSeconds: z.number().int().catch(10),
+      action: z.enum(["timeout", "delete", "report"]).catch("timeout"),
+      timeoutSeconds: z.number().int().catch(600),
+      reportChannelId: z.string().nullable().catch(null),
+    })
+    .catch(() => ({
       enabled: false,
       maxMentions: 5,
       windowSeconds: 10,
       action: "timeout" as const,
       timeoutSeconds: 600,
       reportChannelId: null,
-    },
-    slowmode: {
+    })),
+  slowmode: z
+    .object({
+      enabled: z.boolean().catch(false),
+      messagesPerWindow: z.number().int().catch(20),
+      windowSeconds: z.number().int().catch(60),
+      slowmodeSeconds: z.number().int().catch(5),
+      releaseAfterSeconds: z.number().int().catch(60),
+    })
+    .catch(() => ({
       enabled: false,
       messagesPerWindow: 20,
       windowSeconds: 60,
       slowmodeSeconds: 5,
       releaseAfterSeconds: 60,
-    },
-    raidDetection: {
+    })),
+  raidDetection: z
+    .object({
+      enabled: z.boolean().catch(false),
+      joinsPerMinute: z.number().int().catch(10),
+      minAccountAgeDays: z.number().int().catch(7),
+      action: z.enum(["alert", "lockdown", "quarantine"]).catch("alert"),
+      reportChannelId: z.string().nullable().catch(null),
+    })
+    .catch(() => ({
       enabled: false,
       joinsPerMinute: 10,
       minAccountAgeDays: 7,
       action: "alert" as const,
       reportChannelId: null,
-    },
-    customPatterns: [],
-    tempRolePolicies: { recentlyJoined: defaultRecentlyJoinedPolicy() },
-    policy: {
+    })),
+  customPatterns: z
+    .array(
+      z.object({
+        name: z.string(),
+        pattern: z.string(),
+        flags: z.string().catch("i"),
+        action: z.enum(["delete", "timeout", "report"]).catch("delete"),
+        timeoutSeconds: z.number().int().catch(300),
+      }),
+    )
+    .catch(() => []),
+  tempRolePolicies: TempRolePoliciesSchema.catch(() => ({
+    recentlyJoined: defaultRecentlyJoinedPolicy(),
+  })),
+  policy: z
+    .object({
+      preset: z.enum(["relaxed", "balanced", "strict"]).catch("balanced"),
+      profileRetentionDays: z.number().int().min(1).max(365).catch(30),
+      aiDetector: z
+        .object({
+          enabled: z.boolean().catch(false),
+          minConfidence: z.number().min(0).max(1).catch(0.75),
+        })
+        .catch(() => ({ enabled: false, minConfidence: 0.75 })),
+      bypass: z
+        .object({
+          staffBypass: z.boolean().catch(true),
+          ignoredChannelIds: z.array(z.string()).catch(() => []),
+          strictChannelIds: z.array(z.string()).catch(() => []),
+          trustedRoleIds: z.array(z.string()).catch(() => []),
+          protectedRoleIds: z.array(z.string()).catch(() => []),
+        })
+        .catch(() => ({
+          staffBypass: true,
+          ignoredChannelIds: [],
+          strictChannelIds: [],
+          trustedRoleIds: [],
+          protectedRoleIds: [],
+        })),
+      alertRateLimit: z
+        .object({
+          windowSeconds: z.number().int().min(1).catch(60),
+          maxAlerts: z.number().int().min(1).catch(4),
+        })
+        .catch(() => ({ windowSeconds: 60, maxAlerts: 4 })),
+      actionRateLimit: z
+        .object({
+          windowSeconds: z.number().int().min(1).catch(60),
+          maxActions: z.number().int().min(1).catch(3),
+        })
+        .catch(() => ({ windowSeconds: 60, maxActions: 3 })),
+    })
+    .catch(() => ({
       preset: "balanced" as const,
       profileRetentionDays: 30,
       aiDetector: { enabled: false, minConfidence: 0.75 },
@@ -467,8 +396,8 @@ export const AutomodSchema = z
       },
       alertRateLimit: { windowSeconds: 60, maxAlerts: 4 },
       actionRateLimit: { windowSeconds: 60, maxActions: 3 },
-    },
-  }));
+    })),
+});
 
 // ─── Moderation config ────────────────────────────────────────────────────────
 
@@ -567,7 +496,7 @@ export const GuildSchema = z.object({
   tops: TopsConfigSchema,
   offersConfig: OffersConfigSchema,
   counting: CountingConfigSchema,
-  automod: AutomodSchema,
+  automod: AutomodSchema.default(() => AutomodSchema.parse({})),
   moderation: ModerationConfigSchema,
   nextCaseId: z.number().int().catch(1),
   economy: z

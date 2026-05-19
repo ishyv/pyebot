@@ -17,13 +17,17 @@ export type {
   CaseSummary,
   DiscordChannel,
   DiscordRole,
+  EconomyDailyPatch,
   EconomyPatch,
+  EconomyTaxPatch,
+  EconomyWorkPatch,
   FeatureSummary,
   GuildStatus,
   ModerationBridgeAction,
   ModerationSettingsPatch,
   Result,
   RolePolicyPatch,
+  RpgContentSnapshot,
 } from "./bridge-types";
 
 import type { BotBridge } from "./bridge-types";

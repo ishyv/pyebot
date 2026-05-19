@@ -1,6 +1,7 @@
 # Storage
 
-tx-v2 uses a framework storage adapter contract for new starter bots and framework-owned state.
+tx-v2 keeps a small storage adapter contract for starter bots and framework-owned utilities.
+The bundled full bot runtime uses Mongo-backed `World` components and feature repositories.
 
 ```ts
 import { FileStorageAdapter, MemoryStorageAdapter } from "@/framework";
@@ -31,4 +32,4 @@ This contract is intentionally smaller than MongoDB. Framework code should not d
 
 The full bundled bot still requires MongoDB because moderation, economy, RPG, tickets, offers, AI memory, autoroles, and admin panels have repository code built around Mongo collections.
 
-Rule: new framework-facing repository work should depend on adapter interfaces first. Reach for raw Mongo only when the feature needs a Mongo-specific capability and document that decision at the module boundary.
+Rule: do not assume these adapters back the bundled full bot. If starter-bot runtime storage becomes a real product surface, wire it deliberately through `World` instead of adding a second hidden persistence path.

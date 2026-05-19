@@ -46,6 +46,7 @@ mock.module("@/core/db", () => ({
 }));
 
 mock.module("@/db/repositories/guilds", () => ({
+  guildStore: {},
   ensureGuild: async (guildId: string) =>
     OkResult({
       _id: guildId,
@@ -62,6 +63,8 @@ mock.module("@/db/repositories/guilds", () => ({
       automod: { linkSpam: {}, mentionSpam: {} },
       roles: {},
     }),
+  patchGuild: async (guildId: string, patch: Record<string, unknown>) =>
+    OkResult({ _id: guildId, ...patch }),
   updateGuildPaths: async (guildId: string, paths: Record<string, unknown>, options: unknown) => {
     guildWrites.push({ guildId, paths, options });
     return OkResult(undefined);
@@ -69,6 +72,15 @@ mock.module("@/db/repositories/guilds", () => ({
 }));
 
 mock.module("@/components/guild-features", () => ({
+  GuildFeatures: {
+    collection: "guild_features",
+    schema: { safeParse: () => ({ success: true, data: { overrides: {} } }) },
+  },
+  applyFeatureOverride: (
+    current: { overrides?: Record<string, boolean> },
+    featureId: string,
+    enabled: boolean,
+  ) => ({ overrides: { ...(current.overrides ?? {}), [featureId]: enabled } }),
   getGuildFeatures: async () => OkResult({ overrides: {} }),
   resolveFeatureEnabled: () => true,
   setGuildFeatureOverride: async () => OkResult({ overrides: {} }),
@@ -76,10 +88,29 @@ mock.module("@/components/guild-features", () => ({
 }));
 
 mock.module("@/core/featureCatalog", () => ({
+  setFeatureCatalog: () => undefined,
   listFeatureCatalog: () => [{ id: "economy", defaultEnabled: true }],
+  listConfigurableFeatures: () => [{ id: "economy", defaultEnabled: true }],
 }));
 
 mock.module("@/features/moderation/service", () => ({
+  DURATION_MAP: {
+    "1h": 60 * 60 * 1000,
+    "1d": 24 * 60 * 60 * 1000,
+  },
+  TEMP_BAN_DURATION_CHOICES: [],
+  recordAutomodSystemCase: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "recordAutomodSystemCase", args });
+    return OkResult({ caseId: 1 });
+  },
+  getCases: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "getCases", args });
+    return OkResult([]);
+  },
+  getCaseById: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "getCaseById", args });
+    return OkResult(null);
+  },
   ban: async (...args: unknown[]) => {
     moderationCalls.push({ type: "ban", args });
     return OkResult({ caseId: 1 });
@@ -115,6 +146,34 @@ mock.module("@/features/moderation/service", () => ({
   deleteCase: async (...args: unknown[]) => {
     moderationCalls.push({ type: "deleteCase", args });
     return OkResult(undefined);
+  },
+  clearWarns: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "clearWarns", args });
+    return OkResult(undefined);
+  },
+  removeWarn: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "removeWarn", args });
+    return OkResult(undefined);
+  },
+  addNote: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "addNote", args });
+    return OkResult(undefined);
+  },
+  deleteNote: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "deleteNote", args });
+    return OkResult(undefined);
+  },
+  getNotes: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "getNotes", args });
+    return OkResult([]);
+  },
+  quarantine: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "quarantine", args });
+    return OkResult({ caseId: 1 });
+  },
+  release: async (...args: unknown[]) => {
+    moderationCalls.push({ type: "release", args });
+    return OkResult({ caseId: 1 });
   },
 }));
 

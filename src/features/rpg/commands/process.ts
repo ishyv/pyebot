@@ -1,6 +1,7 @@
 import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { process } from "@/features/rpg/processing";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
@@ -18,7 +19,7 @@ const data = new SlashCommandBuilder()
       .setMinValue(1),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -30,7 +31,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const quantity = interaction.options.getInteger("quantity", true);
   const userId = interaction.user.id;
 
-  const result = await process(userId, material, quantity);
+  const result = await process(ctx, userId, material, quantity);
 
   if (result.isErr()) {
     const err = result.error;

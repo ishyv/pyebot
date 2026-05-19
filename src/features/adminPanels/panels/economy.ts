@@ -12,6 +12,7 @@ import {
   applyGuildConfigPaths,
   loadEconomySettings,
   saveEconomySettings,
+  saveEconomyTaxSettings,
 } from "../configMutations";
 import { loadGuildConfig, modalInput, yesNo } from "../panelHelpers";
 import {
@@ -114,15 +115,20 @@ export async function action(
     return true;
   }
   if (actionStr.endsWith("-modal") && interaction.isButton()) {
+    const kind = actionStr.replace("-modal", "");
+    const labels =
+      kind === "daily"
+        ? ["Daily reward", "Cooldown hours", "Fee rate"]
+        : kind === "work"
+          ? ["Base reward", "Works bonus max", "Daily cap"]
+          : ["Tax rate", "Minimum taxable amount", "Enabled (1 or 0)"];
     const modal = new ModalBuilder()
-      .setCustomId(
-        makePanelCustomId(session, "economy", `${actionStr.replace("-modal", "")}-submit`),
-      )
+      .setCustomId(makePanelCustomId(session, "economy", `${kind}-submit`))
       .setTitle("Economy config")
       .addComponents(
-        modalInput("a", "Value A", "0", true),
-        modalInput("b", "Value B", "0", false),
-        modalInput("c", "Value C", "0", false),
+        modalInput("a", labels[0], "0", true),
+        modalInput("b", labels[1], "0", false),
+        modalInput("c", labels[2], "0", false),
       );
     await interaction.showModal(modal);
     return false;
@@ -150,15 +156,11 @@ export async function action(
         },
       });
     if (actionStr === "tax-submit")
-      await applyGuildConfigPaths(
-        session.guildId,
-        {
-          "economy.tax.rate": a,
-          "economy.tax.minimumTaxableAmount": Math.trunc(b),
-          "economy.tax.enabled": c > 0,
-        },
-        { upsert: true },
-      );
+      await saveEconomyTaxSettings(session.guildId, {
+        rate: a,
+        minimumTaxableAmount: Math.trunc(b),
+        enabled: c > 0,
+      });
   }
   return true;
 }

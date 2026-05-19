@@ -27,24 +27,24 @@ export default class RpgHandlers {
   @Handle("equip:")
   async onEquipSelect(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
-    _ctx: Ctx,
+    ctx: Ctx,
   ): Promise<void> {
-    await handleEquipSelect(interaction as StringSelectMenuInteraction);
+    await handleEquipSelect(interaction as StringSelectMenuInteraction, ctx);
   }
 
   @Handle("rpg:onboard:")
   async onOnboard(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
-    _ctx: Ctx,
+    ctx: Ctx,
   ): Promise<void> {
-    await handleOnboard(interaction as ButtonInteraction);
+    await handleOnboard(interaction as ButtonInteraction, ctx);
   }
 
   @Handle("expedition:")
   async onExpedition(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
-    _ctx: Ctx,
+    ctx: Ctx,
   ): Promise<void> {
-    await handleExpeditionButton(interaction as ButtonInteraction);
+    await handleExpeditionButton(interaction as ButtonInteraction, ctx);
   }
 }

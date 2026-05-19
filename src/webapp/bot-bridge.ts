@@ -30,6 +30,7 @@ import {
   saveAutomodSettings,
   saveChannelSettings,
   saveEconomySettings,
+  saveEconomyTaxSettings,
   saveModerationSettings,
   saveRolePolicySettings,
   toggleFeatureSetting,
@@ -378,6 +379,19 @@ export function createBridgeFromClient(client: Client): BotBridge {
       return OkResult(undefined);
     },
 
+    async saveEconomyTax(guildId, patch, actorId) {
+      const result = await saveEconomyTaxSettings(guildId, patch);
+      if (result.isErr()) return ErrResult(result.error);
+      emit({
+        type: "config_changed",
+        guildId,
+        actorId: actorId ?? undefined,
+        detail: "Updated economy tax",
+        timestamp: Date.now(),
+      });
+      return OkResult(undefined);
+    },
+
     async saveRolePolicy(guildId, patch) {
       const permission = await requireGuildPermission(
         client,
@@ -556,7 +570,7 @@ export function createBridgeFromClient(client: Client): BotBridge {
     },
 
     async getRpgContent() {
-      return OkResult(getRpgContentSnapshot() as unknown as Record<string, unknown>);
+      return OkResult(getRpgContentSnapshot());
     },
 
     async saveRpgContent(snapshot) {
@@ -568,7 +582,7 @@ export function createBridgeFromClient(client: Client): BotBridge {
         detail: "RPG content reloaded",
         timestamp: Date.now(),
       });
-      return OkResult(result.unwrap() as unknown as Record<string, unknown>);
+      return OkResult(result.unwrap());
     },
 
     async reloadRpgContent() {
@@ -580,7 +594,7 @@ export function createBridgeFromClient(client: Client): BotBridge {
         detail: "RPG content reloaded",
         timestamp: Date.now(),
       });
-      return OkResult(result.unwrap() as unknown as Record<string, unknown>);
+      return OkResult(result.unwrap());
     },
 
     async applyConfig(guildId, paths, actorId) {

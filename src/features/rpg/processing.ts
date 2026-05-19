@@ -10,7 +10,6 @@
  */
 
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { ensureRpgProfile } from "@/db/repositories/rpg";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
 import type { MaterialId } from "@/features/rpg/content/materials";
 import {
@@ -18,6 +17,8 @@ import {
   type ProcessingInputId,
   parseProcessingInputId,
 } from "@/features/rpg/content/recipes";
+import { ensureRpgProfile } from "@/features/rpg/profile";
+import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -84,13 +85,15 @@ function calculateFee(tier: number, batches: number): number {
 // ---------------------------------------------------------------------------
 
 export async function process(
+  ctx: Ctx,
   userId: string,
   rawMaterialId: string,
   quantity: number,
   options: { luckLevel?: number } = {},
 ): Promise<Result<ProcessingResult, ProcessingError>> {
-  const profileRes = await ensureRpgProfile(userId);
-  if (profileRes.isErr()) {
+  try {
+    await ensureRpgProfile(ctx, userId);
+  } catch {
     return ErrResult(new ProcessingError("PROFILE_NOT_FOUND", "RPG profile not found"));
   }
 
@@ -115,10 +118,13 @@ export async function process(
   const requiredMaterials = recipe.materialsPerBatch * batches;
 
   const userRes = await getUser(userId);
-  if (userRes.isErr() || !userRes.unwrap()) {
+  if (userRes.isErr()) {
     return ErrResult(new ProcessingError("PROFILE_NOT_FOUND", "User not found"));
   }
-  const user = userRes.unwrap()!;
+  const user = userRes.unwrap();
+  if (!user) {
+    return ErrResult(new ProcessingError("PROFILE_NOT_FOUND", "User not found"));
+  }
   const inventory = user.inventory ?? {};
   const available = (inventory[recipeId] as number | undefined) ?? 0;
 
@@ -132,7 +138,7 @@ export async function process(
   }
 
   const totalFee = calculateFee(recipe.tier, batches);
-  const oldBalance = (user.currency?.["coins"] as number | undefined) ?? 0;
+  const oldBalance = (user.currency?.coins as number | undefined) ?? 0;
   if (totalFee > oldBalance) {
     return ErrResult(
       new ProcessingError(
@@ -175,9 +181,17 @@ export async function process(
     const latestInventory =
       (latestUserRes.isOk() ? latestUserRes.unwrap()?.inventory : undefined) ?? {};
     const currentOutput = (latestInventory[recipe.output] as number | undefined) ?? 0;
-    await updateUserPaths(userId, {
+    const grantRes = await updateUserPaths(userId, {
       [`inventory.${recipe.output}`]: currentOutput + outputGained,
     });
+    if (grantRes.isErr()) {
+      const rollbackPaths: Record<string, unknown> = {
+        [`inventory.${recipeId}`]: available,
+      };
+      if (totalFee > 0) rollbackPaths["currency.coins"] = oldBalance;
+      await updateUserPaths(userId, rollbackPaths);
+      return ErrResult(new ProcessingError("UPDATE_FAILED", "Failed to grant processed output"));
+    }
   }
 
   return OkResult({

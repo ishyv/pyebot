@@ -1,7 +1,8 @@
 import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
-import { getRpgProfile, patchRpgProfile } from "@/db/repositories/rpg";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
+import { getRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
@@ -69,7 +70,7 @@ function hpBarStr(current: number, max: number, length = 10): string {
   return "█".repeat(filled) + "░".repeat(empty);
 }
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply();
 
   const sub = interaction.options.getSubcommand();
@@ -80,8 +81,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     return;
   }
 
-  const profileRes = await getRpgProfile(userId);
-  const profile = profileRes.isOk() ? profileRes.unwrap() : null;
+  const profile = await getRpgProfile(ctx, userId).catch(() => null);
   if (!profile) {
     await interaction.editReply(
       v2Message(
@@ -178,8 +178,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const totalCost = toHeal * HEAL_COST_PER_HP;
     const newHp = profile.hpCurrent + toHeal;
 
-    await patchRpgProfile(userId, { hpCurrent: newHp });
-    await updateUserPaths(userId, { "currency.coins": balance - totalCost });
+    try {
+      await patchRpgProfile(ctx, userId, { hpCurrent: newHp });
+      const currencyRes = await updateUserPaths(userId, { "currency.coins": balance - totalCost });
+      if (currencyRes.isErr()) throw currencyRes.error;
+    } catch {
+      await interaction.editReply({ content: "Failed to save healing. Please try again." });
+      return;
+    }
 
     const hpBar = hpBarStr(newHp, 100);
     const quote =
@@ -228,8 +234,16 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       return;
     }
 
-    await patchRpgProfile(userId, { stashSize: upgrade.nextMax });
-    await updateUserPaths(userId, { "currency.coins": balance - upgrade.cost });
+    try {
+      await patchRpgProfile(ctx, userId, { stashSize: upgrade.nextMax });
+      const currencyRes = await updateUserPaths(userId, {
+        "currency.coins": balance - upgrade.cost,
+      });
+      if (currencyRes.isErr()) throw currencyRes.error;
+    } catch {
+      await interaction.editReply({ content: "Failed to save stash upgrade. Please try again." });
+      return;
+    }
 
     const quote =
       STASH_QUOTES[Math.floor(Math.random() * STASH_QUOTES.length)] ?? STASH_QUOTES[0] ?? "";

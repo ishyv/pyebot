@@ -84,23 +84,19 @@ export class World {
     return this.db.collection<Document & { _id: Entity }>(component.collection);
   }
 
-  /** Parse a raw document with the component's schema; default if invalid. */
+  /** Parse a raw document with the component's schema; malformed stored docs fail loudly. */
   private parse<T>(component: Component<T>, raw: unknown, id: Entity): T {
     const parsed = component.schema.safeParse(raw);
     if (parsed.success) return parsed.data;
-    this.logger.error(
-      `Invalid document in ${component.collection} (${id}); using defaults.`,
-      parsed.error,
-    );
-    return this.defaults(component, id);
+    this.logger.error(`Invalid document in ${component.collection} (${id}).`, parsed.error);
+    throw new Error(`Invalid ${component.collection} document ${id}`);
   }
 
   /** Build a defaults instance from the schema (Zod fills `default()`s). */
   private defaults<T>(component: Component<T>, _id: Entity): T {
     const parsed = component.schema.safeParse({});
     if (parsed.success) return parsed.data;
-    // Schema has no defaults; return an empty object cast. Callers should ensure() before reading.
-    return {} as T;
+    throw new Error(`Component ${component.collection} cannot build defaults for ${_id}`);
   }
 
   // ─── Direct (no-cache) operations ──────────────────────────────────────

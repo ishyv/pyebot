@@ -1,120 +1,56 @@
 /**
  * Economy marketplace: create, buy, cancel, browse listings.
  *
- * Architecture: Plain exported async functions — no classes (except MarketError).
- * Dependencies: ctx for cooldowns + mutations, ensureAccount/isAccountActive from account,
- *   marketStore/query helpers from economy repo.
+ * This module is the orchestration boundary for command-facing market actions.
+ * Pure listing validation/pricing lives in `market-transitions`; legacy listing
+ * persistence is hidden behind `market-listing-store`.
+ *
+ * Invariants:
+ * - Seller inventory is escrowed before a listing is saved.
+ * - Purchases mutate listings with version CAS before seller credit.
+ * - Any post-CAS failure attempts to reverse money and listing state.
+ *
+ * It does not change command UX or support instance-item listings yet.
  */
 
 import { UserInventory } from "@/components/user-inventory";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { countActiveListings, findActiveListings, marketStore } from "@/db/repositories/economy";
 import type { MarketListingDoc } from "@/db/schemas/market";
 import { ensureAccount, isAccountActive } from "@/features/economy/account";
 import { adjustBalance, getBalance } from "@/features/economy/mutations";
 import type { Ctx } from "@/framework/types";
 import { buildListingId } from "@/utils/ids";
+import { marketListingStore } from "./market-listing-store";
+import {
+  asMarketError,
+  calculatePurchase,
+  cancelListingPatch,
+  marketConflict,
+  purchaseListingPatch,
+  resolveMarketConfig,
+  validateBuyableListing,
+  validateCancellableListing,
+  validateCreateListingInput,
+  validatePurchaseQuantity,
+} from "./market-transitions";
+import {
+  type BrowseListingsResult,
+  type BuyListingResult,
+  type CancelListingResult,
+  type CreateListingResult,
+  type MarketConfig,
+  MarketError,
+  STACKABLE_ITEM_KIND,
+} from "./market-types";
 
-// ---------------------------------------------------------------------------
-// Error
-// ---------------------------------------------------------------------------
-
-export class MarketError extends Error {
-  constructor(
-    public readonly code:
-      | "INVALID_INPUT"
-      | "INVALID_PRICE"
-      | "INVALID_QUANTITY"
-      | "LISTING_NOT_FOUND"
-      | "LISTING_NOT_ACTIVE"
-      | "LISTING_LIMIT_REACHED"
-      | "INSUFFICIENT_FUNDS"
-      | "INSUFFICIENT_INVENTORY"
-      | "INSUFFICIENT_LISTING_QUANTITY"
-      | "SELF_BUY_FORBIDDEN"
-      | "COOLDOWN_ACTIVE"
-      | "ACCOUNT_INACTIVE"
-      | "PERMISSION_DENIED"
-      | "TRANSACTION_FAILED",
-    message: string,
-  ) {
-    super(message);
-    this.name = "MarketError";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-
-export interface MarketConfig {
-  readonly maxActiveListings: number;
-  readonly createCooldownMs: number;
-  readonly buyCooldownMs: number;
-  readonly feeRate: number;
-  readonly minPrice: number;
-  readonly maxPrice: number;
-  readonly pageSize: number;
-  readonly currencyId: string;
-}
-
-export const DEFAULT_MARKET_CONFIG: MarketConfig = {
-  maxActiveListings: 20,
-  createCooldownMs: 3_000,
-  buyCooldownMs: 2_000,
-  feeRate: 0.02,
-  minPrice: 1,
-  maxPrice: 1_000_000,
-  pageSize: 10,
-  currencyId: "coins",
-};
-
-const STACKABLE_ITEM_KIND = "stackable" as const;
-
-// ---------------------------------------------------------------------------
-// Result types
-// ---------------------------------------------------------------------------
-
-export interface CreateListingResult {
-  readonly listingId: string;
-  readonly itemId: string;
-  readonly quantity: number;
-  readonly pricePerUnit: number;
-}
-
-export interface BuyListingResult {
-  readonly listingId: string;
-  readonly itemId: string;
-  readonly quantity: number;
-  readonly subtotal: number;
-  readonly fee: number;
-  readonly total: number;
-  readonly sellerPayout: number;
-  readonly buyerNewBalance: number;
-  readonly listingRemaining: number;
-}
-
-export interface CancelListingResult {
-  readonly listingId: string;
-  readonly itemId: string;
-  readonly returnedQuantity: number;
-}
-
-export interface BrowseListingsResult {
-  readonly listings: MarketListingDoc[];
-  readonly page: number;
-  readonly pageSize: number;
-}
-
-function marketConflict(message = "Listing changed before the transaction completed"): MarketError {
-  return new MarketError("TRANSACTION_FAILED", message);
-}
-
-function asMarketError(error: unknown, fallback: string): MarketError {
-  return error instanceof MarketError
-    ? error
-    : new MarketError("TRANSACTION_FAILED", error instanceof Error ? error.message : fallback);
-}
+export type {
+  BrowseListingsResult,
+  BuyListingResult,
+  CancelListingResult,
+  CreateListingResult,
+  MarketConfig,
+} from "./market-types";
+export { DEFAULT_MARKET_CONFIG, MarketError, STACKABLE_ITEM_KIND } from "./market-types";
 
 function stackQuantity(slot: unknown): number {
   if (!slot || typeof slot !== "object") return 0;
@@ -187,24 +123,18 @@ async function rollbackBalance(
 }
 
 async function rollbackListing(listing: MarketListingDoc, expectedVersion: number): Promise<void> {
-  await marketStore
-    .replaceIfMatch(
-      listing._id,
-      { version: expectedVersion },
-      {
-        quantity: listing.quantity,
-        status: listing.status,
-        version: listing.version,
-        updatedAt: listing.updatedAt,
-      },
-    )
-    .catch(() => {});
+  await marketListingStore.restoreSnapshot(listing, expectedVersion).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
 // createListing
 // ---------------------------------------------------------------------------
 
+/**
+ * Creates a stackable-item listing after reserving seller inventory.
+ * Side effects: reads account state, mutates `UserInventory`, writes the legacy listing store,
+ * and sets the create cooldown only after the listing is saved.
+ */
 export async function createListing(
   ctx: Ctx,
   sellerId: string,
@@ -214,23 +144,9 @@ export async function createListing(
   pricePerUnit: number,
   config?: Partial<MarketConfig>,
 ): Promise<Result<CreateListingResult, MarketError>> {
-  const cfg: MarketConfig = { ...DEFAULT_MARKET_CONFIG, ...config };
-
-  if (!itemId || typeof itemId !== "string") {
-    return ErrResult(new MarketError("INVALID_INPUT", "Item ID is required"));
-  }
-
-  if (!Number.isInteger(quantity) || quantity < 1) {
-    return ErrResult(new MarketError("INVALID_QUANTITY", "Quantity must be a positive integer"));
-  }
-
-  if (!Number.isInteger(pricePerUnit) || pricePerUnit < cfg.minPrice) {
-    return ErrResult(new MarketError("INVALID_PRICE", `Price must be at least ${cfg.minPrice}`));
-  }
-
-  if (pricePerUnit > cfg.maxPrice) {
-    return ErrResult(new MarketError("INVALID_PRICE", `Price cannot exceed ${cfg.maxPrice}`));
-  }
+  const cfg = resolveMarketConfig(config);
+  const inputError = validateCreateListingInput(itemId, quantity, pricePerUnit, cfg);
+  if (inputError) return ErrResult(inputError);
 
   if (ctx.cooldowns.isOnCooldown(sellerId, "market:create")) {
     const remaining = ctx.cooldowns.getRemainingMs(sellerId, "market:create");
@@ -244,7 +160,7 @@ export async function createListing(
     return ErrResult(new MarketError("ACCOUNT_INACTIVE", "Your economy account is not active"));
   }
 
-  const countRes = await countActiveListings(guildId, sellerId);
+  const countRes = await marketListingStore.countActive(guildId, sellerId);
   if (countRes.isErr())
     return ErrResult(new MarketError("TRANSACTION_FAILED", countRes.error.message));
 
@@ -279,7 +195,7 @@ export async function createListing(
     expiresAt: null,
   };
 
-  const saveRes = await marketStore.set(listing._id, listing);
+  const saveRes = await marketListingStore.save(listing);
   if (saveRes.isErr()) {
     await addStackItems(ctx, sellerId, itemId, quantity).catch((error) => {
       ctx.logger.error("Failed to restore inventory after listing save failure", error);
@@ -296,6 +212,11 @@ export async function createListing(
 // buyListing
 // ---------------------------------------------------------------------------
 
+/**
+ * Buys quantity from an active listing with per-listing locking and CAS.
+ * Side effects: debits buyer, updates listing quantity/status, credits seller,
+ * grants buyer inventory, and rolls back best-effort if a later step fails.
+ */
 export async function buyListing(
   ctx: Ctx,
   buyerId: string,
@@ -303,11 +224,9 @@ export async function buyListing(
   quantity: number,
   config?: Partial<MarketConfig>,
 ): Promise<Result<BuyListingResult, MarketError>> {
-  const cfg: MarketConfig = { ...DEFAULT_MARKET_CONFIG, ...config };
-
-  if (!Number.isInteger(quantity) || quantity < 1) {
-    return ErrResult(new MarketError("INVALID_QUANTITY", "Quantity must be a positive integer"));
-  }
+  const cfg = resolveMarketConfig(config);
+  const inputError = validatePurchaseQuantity(quantity);
+  if (inputError) return ErrResult(inputError);
 
   if (ctx.cooldowns.isOnCooldown(buyerId, "market:buy")) {
     const remaining = ctx.cooldowns.getRemainingMs(buyerId, "market:buy");
@@ -320,7 +239,7 @@ export async function buyListing(
   }
 
   return withListingLock(ctx, listingId, async () => {
-    const listingRes = await marketStore.get(listingId);
+    const listingRes = await marketListingStore.get(listingId);
     if (listingRes.isErr())
       return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
     const listing = listingRes.unwrap();
@@ -329,32 +248,10 @@ export async function buyListing(
       return ErrResult(new MarketError("LISTING_NOT_FOUND", "Listing not found"));
     }
 
-    if (listing.status !== "active") {
-      return ErrResult(
-        new MarketError("LISTING_NOT_ACTIVE", "This listing is no longer available"),
-      );
-    }
+    const listingError = validateBuyableListing(listing, buyerId, quantity);
+    if (listingError) return ErrResult(listingError);
 
-    if (listing.sellerId === buyerId) {
-      return ErrResult(new MarketError("SELF_BUY_FORBIDDEN", "You cannot buy your own listing"));
-    }
-
-    if (quantity > listing.quantity) {
-      return ErrResult(
-        new MarketError("INSUFFICIENT_LISTING_QUANTITY", `Only ${listing.quantity} available`),
-      );
-    }
-
-    if (listing.itemKind !== STACKABLE_ITEM_KIND) {
-      return ErrResult(
-        new MarketError("INVALID_INPUT", "Only stackable item listings are supported"),
-      );
-    }
-
-    const subtotal = quantity * listing.pricePerUnit;
-    const fee = Math.floor(subtotal * cfg.feeRate);
-    const total = subtotal + fee;
-    const sellerPayout = subtotal;
+    const { subtotal, fee, total, sellerPayout } = calculatePurchase(listing, quantity, cfg);
 
     const balance = await getBalance(ctx, buyerId, cfg.currencyId);
     if (balance < total) {
@@ -370,17 +267,11 @@ export async function buyListing(
       return ErrResult(new MarketError("TRANSACTION_FAILED", "Failed to debit buyer"));
     }
 
-    const remaining = listing.quantity - quantity;
-    const nextStatus = remaining <= 0 ? "sold_out" : "active";
-    const updateRes = await marketStore.replaceIfMatch(
+    const listingPatch = purchaseListingPatch(listing, quantity);
+    const updateRes = await marketListingStore.replaceIfVersion(
       listingId,
-      { version: listing.version },
-      {
-        quantity: remaining,
-        status: nextStatus,
-        version: listing.version + 1,
-        updatedAt: new Date(),
-      },
+      listing.version,
+      listingPatch,
     );
     if (updateRes.isErr()) {
       await rollbackBalance(ctx, buyerId, cfg.currencyId, total);
@@ -421,7 +312,7 @@ export async function buyListing(
       total,
       sellerPayout,
       buyerNewBalance,
-      listingRemaining: remaining,
+      listingRemaining: listingPatch.quantity,
     });
   });
 }
@@ -430,6 +321,10 @@ export async function buyListing(
 // cancelListing
 // ---------------------------------------------------------------------------
 
+/**
+ * Cancels an active listing and returns escrowed inventory to the seller.
+ * Moderator override only bypasses ownership; listing status and CAS still apply.
+ */
 export async function cancelListing(
   ctx: Ctx,
   actorId: string,
@@ -437,7 +332,7 @@ export async function cancelListing(
   options: { allowModeratorOverride?: boolean } = {},
 ): Promise<Result<CancelListingResult, MarketError>> {
   return withListingLock(ctx, listingId, async () => {
-    const listingRes = await marketStore.get(listingId);
+    const listingRes = await marketListingStore.get(listingId);
     if (listingRes.isErr())
       return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
     const listing = listingRes.unwrap();
@@ -446,22 +341,17 @@ export async function cancelListing(
       return ErrResult(new MarketError("LISTING_NOT_FOUND", "Listing not found"));
     }
 
-    if (listing.status !== "active") {
-      return ErrResult(new MarketError("LISTING_NOT_ACTIVE", "This listing is no longer active"));
-    }
+    const listingError = validateCancellableListing(
+      listing,
+      actorId,
+      options.allowModeratorOverride,
+    );
+    if (listingError) return ErrResult(listingError);
 
-    if (listing.sellerId !== actorId && !options.allowModeratorOverride) {
-      return ErrResult(new MarketError("PERMISSION_DENIED", "You do not own this listing"));
-    }
-
-    const updateRes = await marketStore.replaceIfMatch(
+    const updateRes = await marketListingStore.replaceIfVersion(
       listingId,
-      { version: listing.version },
-      {
-        status: "cancelled",
-        version: listing.version + 1,
-        updatedAt: new Date(),
-      },
+      listing.version,
+      cancelListingPatch(listing),
     );
     if (updateRes.isErr()) {
       return ErrResult(new MarketError("TRANSACTION_FAILED", updateRes.error.message));
@@ -489,6 +379,10 @@ export async function cancelListing(
 // browseListings
 // ---------------------------------------------------------------------------
 
+/**
+ * Returns active listings for a guild through the listing-store adapter.
+ * This is read-only; `ctx` is accepted to preserve the public market service signature.
+ */
 export async function browseListings(
   ctx: Ctx,
   guildId: string,
@@ -496,12 +390,12 @@ export async function browseListings(
   config?: Partial<MarketConfig>,
 ): Promise<Result<BrowseListingsResult, MarketError>> {
   void ctx;
-  const cfg: MarketConfig = { ...DEFAULT_MARKET_CONFIG, ...config };
+  const cfg = resolveMarketConfig(config);
   const page = Math.max(0, options.page ?? 0);
   const pageSize = options.pageSize ?? cfg.pageSize;
   const skip = page * pageSize;
 
-  const res = await findActiveListings(guildId, {
+  const res = await marketListingStore.findActive(guildId, {
     itemId: options.itemId,
     sellerId: options.sellerId,
     skip,

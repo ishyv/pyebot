@@ -31,14 +31,19 @@ describe("GuildSchema", () => {
     }
   });
 
-  test("applies catch defaults for invalid automod", () => {
-    const result = GuildSchema.safeParse({ _id: "g1", automod: "bad" });
+  test("defaults missing automod for new documents", () => {
+    const result = GuildSchema.safeParse({ _id: "g1" });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.automod.linkSpam.enabled).toBe(false);
       expect(result.data.automod.policy.preset).toBe("balanced");
       expect(result.data.automod.policy.profileRetentionDays).toBe(30);
     }
+  });
+
+  test("rejects malformed top-level automod config", () => {
+    const result = GuildSchema.safeParse({ _id: "g1", automod: "bad" });
+    expect(result.success).toBe(false);
   });
 });
 

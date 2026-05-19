@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { readItems, readRecipeSummaries, writeItems } from "./registry-io";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(MODULE_DIR, "../../../..");
+const REPO_ROOT = path.resolve(MODULE_DIR, "../../../../..");
 const DEFAULT_PACK_PATH = path.join(REPO_ROOT, "src/content/packs/default.ts");
 const tempDirs: string[] = [];
 

@@ -8,9 +8,10 @@
  */
 
 import { z } from "zod";
+import { SanctionTypeSchema } from "@/features/moderation/sanctions";
 import { component } from "@/framework/component";
 
-export const SanctionType = z.enum(["BAN", "KICK", "TIMEOUT", "WARN", "RESTRICT"]);
+export const SanctionType = SanctionTypeSchema;
 export type SanctionTypeValue = z.infer<typeof SanctionType>;
 
 export const SanctionEntry = z.object({

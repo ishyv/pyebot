@@ -23,6 +23,7 @@ import type { SanctionHistoryEntry } from "@/db/schemas/user";
 import { missingPermission } from "@/middleware/permissions";
 import { msToHuman } from "@/utils/time";
 import { sendModLog } from "./modlog";
+import type { SanctionType } from "./sanctions";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -48,8 +49,6 @@ export class ModerationError extends Error {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export type SanctionType = "BAN" | "KICK" | "TIMEOUT" | "WARN" | "RESTRICT" | "PARDON";
 
 export interface SanctionEntry {
   readonly type: SanctionType;
@@ -882,9 +881,7 @@ export async function release(
   // If we can't read the user record, releasing with [] would strip every role
   // from the target instead of restoring them — abort with an error instead.
   if (userResult.isErr()) {
-    return ErrResult(
-      new ModerationError("DB_FAILED", "Could not load saved roles to restore"),
-    );
+    return ErrResult(new ModerationError("DB_FAILED", "Could not load saved roles to restore"));
   }
   const savedRoles = (userResult.unwrap()?.quarantine_roles?.[guild.id] ?? []) as string[];
 

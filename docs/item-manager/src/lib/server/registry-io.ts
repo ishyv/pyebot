@@ -18,11 +18,14 @@ import {
   LocationDefSchema,
   type RecipeDef,
   RecipeDefSchema,
-} from "../../../../src/content/schemas";
-import { ContentValidationError, validateLoadedContent } from "../../../../src/content/validation";
+} from "../../../../../src/content/schemas";
+import {
+  ContentValidationError,
+  validateLoadedContent,
+} from "../../../../../src/content/validation";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PACK_PATH = path.resolve(MODULE_DIR, "../../../../src/content/packs/default.ts");
+const PACK_PATH = path.resolve(MODULE_DIR, "../../../../../src/content/packs/default.ts");
 
 type ContentMaps = {
   items: Record<string, ItemDef>;

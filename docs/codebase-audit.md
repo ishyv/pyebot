@@ -4,14 +4,14 @@ This audit tracks current refactor pressure after the latest-only cleanup.
 
 ## Current Hot Spots
 
-- `src/features/adminPanels/panels.ts` still mixes rendering, action dispatch,
-  modal parsing, and persistence patch construction. Split by responsibility
-  before adding more panels.
+- Admin panel pressure now lives mostly in large per-panel files such as
+  automod, economy, roles, and new-users. Keep `panelDispatcher.ts` simple;
+  split repeated parser/mutation decisions inside the affected panel instead
+  of building a generic panel framework.
 - Economy and RPG flows still have large service surfaces. Keep content data in
   `src/content/packs/default.ts` and keep feature code focused on behavior.
-- Framework-facing storage should use storage adapter contracts. Raw Mongo is
-  still acceptable inside bundled feature repositories that need Mongo-specific
-  operations.
+- Storage adapters are starter utilities for now. The bundled full bot uses
+  Mongo-backed `World` components and feature repositories.
 - Guild schema defaults are product behavior. Missing current fields can be
   defaulted for new documents; malformed old top-level config slices should
   fail instead of being normalized.

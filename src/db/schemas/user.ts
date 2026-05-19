@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SanctionTypeSchema } from "@/features/moderation/sanctions";
 import { CurrencyInventorySchema } from "./currency";
 import { type EconomyAccountData, EconomyAccountSchema } from "./economy-account";
 import { type RpgProfileData, RpgProfileSchema } from "./rpg-profile";
@@ -11,7 +12,7 @@ export const WarnSchema = z.object({
 });
 export type Warn = z.infer<typeof WarnSchema>;
 
-export const SanctionType = z.enum(["BAN", "KICK", "TIMEOUT", "WARN", "RESTRICT", "PARDON"]);
+export const SanctionType = SanctionTypeSchema;
 export type SanctionType = z.infer<typeof SanctionType>;
 
 export const SanctionHistoryEntrySchema = z.object({

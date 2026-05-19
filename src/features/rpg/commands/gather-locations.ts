@@ -41,7 +41,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     rawTypeArg === "mine" || rawTypeArg === "forest" ? rawTypeArg : null;
   const locationType: GatherAction = typeArg ?? (profession === "miner" ? "mine" : "forest");
 
-  const userTier = await getEquippedToolTier(userId);
+  const userTier = await getEquippedToolTier(ctx, userId);
   const locations = Object.entries(LOCATIONS)
     .filter(([, loc]) => loc.action === locationType)
     .map(([id, loc]) => ({ ...loc, id }));

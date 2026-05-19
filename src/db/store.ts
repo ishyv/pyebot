@@ -1,6 +1,8 @@
 /**
  * Generic MongoDB data layer with Zod schema validation.
- * Every document read is validated against the schema — invalid documents fall back to schema defaults.
+ * Every document read is validated against the schema. Missing documents can be
+ * created from defaults; malformed existing documents are returned as errors so
+ * bad persisted state is not silently normalized.
  * All methods return Result<T> rather than throwing.
  *
  * Used by all feature repositories. Construct one instance per collection:
@@ -53,11 +55,11 @@ export class MongoStore<T extends Document & { _id: string }> {
     const parsed = this.schema.safeParse(doc);
     if (parsed.success) return parsed.data;
     const id = (doc as any)?._id ?? "unknown";
-    console.error(`[MongoStore:${this.collectionName}] invalid document; using defaults`, {
+    console.error(`[MongoStore:${this.collectionName}] invalid document`, {
       id,
       error: parsed.error,
     });
-    return this.getDefault(id);
+    throw new Error(`Invalid ${this.collectionName} document ${id}`);
   }
 
   async get(id: string): Promise<Result<T | null>> {

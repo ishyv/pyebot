@@ -1,8 +1,8 @@
 /**
  * Mutable RPG content snapshot used by the embedded dashboard.
  *
- * Static TypeScript content remains the boot fallback, but dashboard saves
- * can atomically replace these maps at runtime after validation. Consumers
+ * Static TypeScript content is the boot seed/fallback. Dashboard saves persist
+ * a Mongo snapshot and replace these maps at runtime after validation. Consumers
  * import the live maps through the existing content modules, so command code
  * does not need to know whether content came from source or Mongo.
  */

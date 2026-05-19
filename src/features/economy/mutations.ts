@@ -128,9 +128,9 @@ export async function withdraw(
 
 /**
  * Transfer currency from sender to recipient. Returns new balances on success.
- * Throws MutationError on any domain failure. Not fully atomic — if the credit
- * patch fails after the debit succeeds, the debit is not rolled back. Full
- * atomicity requires a MongoDB replica set transaction (future improvement).
+ * Throws MutationError on any domain failure. If recipient credit fails after
+ * sender debit, the debit is rolled back on a best-effort basis. Full
+ * cross-document atomicity still requires MongoDB transactions.
  */
 export async function transfer(
   ctx: Ctx,
@@ -166,6 +166,16 @@ export async function transfer(
   }
 
   const senderBalance = await adjustBalance(ctx, senderId, currencyId, -amount);
-  const recipientBalance = await adjustBalance(ctx, recipientId, currencyId, +amount);
+  let recipientBalance: number;
+  try {
+    recipientBalance = await adjustBalance(ctx, recipientId, currencyId, +amount);
+  } catch (error) {
+    await adjustBalance(ctx, senderId, currencyId, amount, { allowDebt: true }).catch(
+      (rollback) => {
+        ctx.logger.error("Failed to roll back economy transfer debit", rollback);
+      },
+    );
+    throw error;
+  }
   return { senderBalance, recipientBalance };
 }

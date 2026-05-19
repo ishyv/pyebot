@@ -72,9 +72,31 @@ export interface FeatureSummary {
   readonly hasConfig: boolean;
 }
 
+export interface EconomyDailyPatch {
+  readonly dailyReward?: number;
+  readonly dailyCooldownHours?: number;
+  readonly dailyStreakBonus?: number;
+  readonly dailyFeeRate?: number;
+}
+
+export interface EconomyWorkPatch {
+  readonly workRewardBase?: number;
+  readonly workCooldownMinutes?: number;
+  readonly workDailyCap?: number;
+  readonly workFailureChance?: number;
+  readonly workBaseMintReward?: number;
+  readonly workBonusFromWorksMax?: number;
+}
+
+export interface EconomyTaxPatch {
+  readonly enabled?: boolean;
+  readonly rate?: number;
+  readonly minimumTaxableAmount?: number;
+}
+
 export interface EconomyPatch {
-  readonly daily?: Readonly<Record<string, unknown>>;
-  readonly work?: Readonly<Record<string, unknown>>;
+  readonly daily?: EconomyDailyPatch;
+  readonly work?: EconomyWorkPatch;
   readonly sectors?: Readonly<Record<string, unknown>>;
 }
 
@@ -86,8 +108,17 @@ export interface ModerationSettingsPatch {
 }
 
 export interface AutomodSettingsPatch {
-  readonly linkSpam?: Readonly<Record<string, unknown>>;
-  readonly mentionSpam?: Readonly<Record<string, unknown>>;
+  readonly linkSpam?: {
+    readonly enabled?: boolean;
+    readonly maxLinks?: number;
+    readonly windowSeconds?: number;
+    readonly reportChannelId?: string | null;
+  };
+  readonly mentionSpam?: {
+    readonly enabled?: boolean;
+    readonly maxMentions?: number;
+    readonly windowSeconds?: number;
+  };
 }
 
 export interface RolePolicyPatch {
@@ -97,6 +128,15 @@ export interface RolePolicyPatch {
   readonly reach?: Readonly<Record<string, "inherit" | "allow" | "deny">>;
   readonly limits?: Readonly<Record<string, unknown>>;
   readonly updatedBy?: string | null;
+}
+
+export interface RpgContentSnapshot {
+  readonly items: Readonly<Record<string, unknown>>;
+  readonly materials: Readonly<Record<string, unknown>>;
+  readonly locations: Readonly<Record<string, unknown>>;
+  readonly tools: Readonly<Record<string, unknown>>;
+  readonly craftingRecipes: Readonly<Record<string, unknown>>;
+  readonly processingRecipes: Readonly<Record<string, unknown>>;
 }
 
 export interface CaseSummary {
@@ -218,6 +258,11 @@ export interface BotBridge {
     patch: EconomyPatch,
     actorId?: string | null,
   ): Promise<Result<void, Error>>;
+  saveEconomyTax(
+    guildId: string,
+    patch: EconomyTaxPatch,
+    actorId?: string | null,
+  ): Promise<Result<void, Error>>;
   saveRolePolicy(guildId: string, patch: RolePolicyPatch): Promise<Result<void, Error>>;
   listCases(guildId: string): Promise<Result<readonly CaseSummary[], Error>>;
   editCase(
@@ -245,11 +290,9 @@ export interface BotBridge {
     guildId: string,
     action: ModerationBridgeAction,
   ): Promise<Result<void, Error>>;
-  getRpgContent(): Promise<Result<Record<string, unknown>, Error>>;
-  saveRpgContent(
-    snapshot: Record<string, unknown>,
-  ): Promise<Result<Record<string, unknown>, Error>>;
-  reloadRpgContent(): Promise<Result<Record<string, unknown>, Error>>;
+  getRpgContent(): Promise<Result<RpgContentSnapshot, Error>>;
+  saveRpgContent(snapshot: RpgContentSnapshot): Promise<Result<RpgContentSnapshot, Error>>;
+  reloadRpgContent(): Promise<Result<RpgContentSnapshot, Error>>;
   applyConfig(
     guildId: string,
     paths: Record<string, unknown>,

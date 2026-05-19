@@ -7,7 +7,9 @@ import {
 } from "discord.js";
 import { getUser } from "@/db/repositories/users";
 import { EQUIPABLE_TOOLS } from "@/features/rpg/handlers/equip";
+import { getRpgProfile } from "@/features/rpg/profile";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
@@ -15,7 +17,7 @@ const data = new SlashCommandBuilder()
   .setName("equip")
   .setDescription("Equip a tool from your inventory");
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -58,7 +60,8 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     return;
   }
 
-  const currentWeapon = user.rpgProfile?.loadout?.weapon;
+  const profile = await getRpgProfile(ctx, userId).catch(() => null);
+  const currentWeapon = profile?.loadout?.weapon;
   const currentItemId =
     currentWeapon && typeof currentWeapon === "object" && "itemId" in currentWeapon
       ? currentWeapon.itemId

@@ -4,8 +4,8 @@
  * `gatherAtLocation` performs one round of mining/cutting at a validated
  * location: durability tick, drop roll, inventory update. The handler that
  * routes button clicks (`handlers/gather.ts`) narrows the raw Discord custom
- * ID to typed `GatherAction` + `LocationId` before calling here — domain code
- * never receives an arbitrary string.
+ * ID with runtime parser helpers before calling here. Location IDs are strings
+ * because dashboard-authored runtime content can replace the map after startup.
  *
  * Invariants:
  * - Equipped tool kind must match the action (pickaxe→mine, axe→forest).
@@ -14,8 +14,8 @@
  * - Inventory items are stored as numeric quantities at `inventory.<MaterialId>`.
  */
 
+import type { RpgProfileValue } from "@/components/rpg-profile";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { ensureRpgProfile, patchRpgProfile } from "@/db/repositories/rpg";
 import { getUser, updateUserPaths } from "@/db/repositories/users";
 import type { GatherAction } from "@/features/rpg/content/actions";
 import { LOCATIONS, type LocationId } from "@/features/rpg/content/locations";
@@ -26,6 +26,8 @@ import {
   toolKind,
   toolTier,
 } from "@/features/rpg/content/tools";
+import { ensureRpgProfile, getRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
+import type { Ctx } from "@/framework/types";
 
 export { TOOL_TIER_FALLBACK };
 
@@ -93,17 +95,22 @@ function rollDrops(materials: readonly MaterialId[]): Array<{ id: MaterialId; qu
  * Callers must narrow Discord input to `GatherAction` + `LocationId` first.
  */
 export async function gatherAtLocation(
+  ctx: Ctx,
   userId: string,
   action: GatherAction,
   locationId: LocationId,
 ): Promise<Result<GatheringResult, GatherError>> {
-  const profileRes = await ensureRpgProfile(userId);
-  if (profileRes.isErr()) {
+  let profile: RpgProfileValue;
+  try {
+    profile = await ensureRpgProfile(ctx, userId);
+  } catch {
     return ErrResult(new GatherError("PROFILE_NOT_FOUND", "RPG profile not found"));
   }
-  const profile = profileRes.unwrap();
 
   const location = LOCATIONS[locationId];
+  if (!location) {
+    return ErrResult(new GatherError("LOCATION_NOT_FOUND", "This location is no longer available"));
+  }
   if (location.action !== action) {
     const actionName = action === "mine" ? "mining" : "woodcutting";
     return ErrResult(
@@ -151,8 +158,9 @@ export async function gatherAtLocation(
       : { instanceId: equipped.instanceId, itemId: equipped.itemId, durability: newDurability },
   };
 
-  const patchRes = await patchRpgProfile(userId, { loadout: newLoadout });
-  if (patchRes.isErr()) {
+  try {
+    await patchRpgProfile(ctx, userId, { loadout: newLoadout });
+  } catch {
     return ErrResult(new GatherError("UPDATE_FAILED", "Failed to save tool durability"));
   }
 
@@ -169,6 +177,12 @@ export async function gatherAtLocation(
 
   const invRes = await updateUserPaths(userId, paths);
   if (invRes.isErr()) {
+    await patchRpgProfile(ctx, userId, { loadout: profile.loadout }).catch((error) => {
+      ctx.logger.error(
+        "Failed to roll back RPG tool durability after inventory update failed",
+        error,
+      );
+    });
     return ErrResult(new GatherError("UPDATE_FAILED", "Failed to add materials to inventory"));
   }
 
@@ -193,12 +207,15 @@ export async function gatherAtLocation(
  * Falls back to TOOL_TIER_FALLBACK when no tool is equipped, the item is
  * unknown, or the user profile cannot be fetched.
  */
-export async function getEquippedToolTier(userId: string): Promise<number> {
-  const userRes = await getUser(userId);
-  if (userRes.isErr()) return TOOL_TIER_FALLBACK;
+export async function getEquippedToolTier(ctx: Ctx, userId: string): Promise<number> {
+  let profile: RpgProfileValue | null;
+  try {
+    profile = await getRpgProfile(ctx, userId);
+  } catch {
+    return TOOL_TIER_FALLBACK;
+  }
 
-  const user = userRes.unwrap();
-  const weapon = user?.rpgProfile?.loadout?.weapon;
+  const weapon = profile?.loadout?.weapon;
   if (!weapon) return TOOL_TIER_FALLBACK;
 
   const itemId = typeof weapon === "string" ? weapon : weapon.itemId;

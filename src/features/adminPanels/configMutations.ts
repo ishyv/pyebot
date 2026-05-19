@@ -14,6 +14,7 @@ import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import type {
   AutomodSettingsPatch,
   EconomyPatch,
+  EconomyTaxPatch,
   ModerationSettingsPatch,
   RolePolicyPatch,
 } from "@/webapp/bridge-types";
@@ -21,7 +22,7 @@ import type {
 /** Converts a partial object into Mongo dot-path updates under `prefix`. */
 export function flattenConfigPatch(
   prefix: string,
-  value: Readonly<Record<string, unknown>> | undefined,
+  value: Readonly<object> | undefined,
 ): Record<string, unknown> {
   const paths: Record<string, unknown> = {};
   if (!value) return paths;
@@ -29,6 +30,16 @@ export function flattenConfigPatch(
     if (entry !== undefined) paths[`${prefix}.${key}`] = entry;
   }
   return paths;
+}
+
+/** Saves legacy guild-document economy tax settings read by tax-aware commands. */
+export function saveEconomyTaxSettings(
+  guildId: string,
+  patch: EconomyTaxPatch,
+): Promise<Result<void>> {
+  return applyGuildConfigPaths(guildId, {
+    ...flattenConfigPatch("economy.tax", patch),
+  });
 }
 
 /** Applies legacy guild-document config paths used by moderation/automod/etc. */

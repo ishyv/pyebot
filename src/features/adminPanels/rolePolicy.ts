@@ -4,13 +4,23 @@ import type {
   RoleCommandOverride,
   RoleLimitRecord,
 } from "@/db/schemas/guild";
+import type { ModerationAction } from "@/features/moderation/actionContract";
 
+const ROLE_POLICY_ACTION_KEYS = [
+  "TIMEOUT",
+  "KICK",
+  "BAN",
+  "WARN",
+  "PURGE",
+] as const satisfies readonly ModerationAction[];
+
+/** Actions intentionally exposed for role policy controls. Not every stored sanction is role-manageable. */
 export const MODERATION_ACTIONS = [
-  { key: "timeout", label: "Timeout" },
-  { key: "kick", label: "Kick" },
-  { key: "ban", label: "Ban" },
-  { key: "warn", label: "Warn" },
-  { key: "purge", label: "Purge" },
+  { key: "timeout", label: "Timeout", action: ROLE_POLICY_ACTION_KEYS[0] },
+  { key: "kick", label: "Kick", action: ROLE_POLICY_ACTION_KEYS[1] },
+  { key: "ban", label: "Ban", action: ROLE_POLICY_ACTION_KEYS[2] },
+  { key: "warn", label: "Warn", action: ROLE_POLICY_ACTION_KEYS[3] },
+  { key: "purge", label: "Purge", action: ROLE_POLICY_ACTION_KEYS[4] },
 ] as const;
 
 export function normalizeActionKey(input: string): string {

@@ -58,6 +58,7 @@ export function defaultLoadout(): LoadoutValue {
 }
 
 export const StarterKitType = z.enum(["miner", "lumber"]);
+export type StarterKitTypeValue = z.infer<typeof StarterKitType>;
 
 export const RpgProfile = component({
   collection: "rpg_profiles",
@@ -70,6 +71,8 @@ export const RpgProfile = component({
     activeFightId: z.string().nullable().default(null),
     starterKitType: StarterKitType.nullable().default(null),
     starterKitClaimedAt: z.coerce.date().nullable().default(null),
+    stashSize: z.number().int().min(10).default(20),
+    activeExpeditionId: z.string().nullable().default(null),
     createdAt: z.coerce.date().default(() => new Date()),
     updatedAt: z.coerce.date().default(() => new Date()),
     /** Optimistic-concurrency version; bumped on every adjustment. */

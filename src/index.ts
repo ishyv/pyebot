@@ -80,7 +80,7 @@ async function bootstrap(): Promise<void> {
   process.on("SIGTERM", shutdown);
 
   const token = process.env.DISCORD_TOKEN;
-  if (!token) throw new Error("TOKEN environment variable is not set.");
+  if (!token) throw new Error("DISCORD_TOKEN environment variable is not set.");
   await client.login(token);
 
   client.once(Events.ClientReady, async (c) => {

@@ -1,7 +1,8 @@
 import type { ButtonInteraction } from "discord.js";
-import { patchRpgProfile } from "@/db/repositories/rpg";
-import type { EquippedItem, StarterKitType } from "@/db/schemas/rpg-profile";
+import type { EquippedItemValue, StarterKitTypeValue } from "@/components/rpg-profile";
 import { TOOLS } from "@/features/rpg/content/tools";
+import { patchRpgProfile } from "@/features/rpg/profile";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
 export const ONBOARD_PREFIX = "rpg:onboard:";
@@ -10,7 +11,7 @@ export function isOnboardButton(customId: string): boolean {
   return customId.startsWith(ONBOARD_PREFIX);
 }
 
-const STARTER_TOOLS: Record<StarterKitType, EquippedItem> = {
+const STARTER_TOOLS: Record<StarterKitTypeValue, EquippedItemValue> = {
   miner: {
     instanceId: "starter",
     itemId: "starter_pickaxe",
@@ -23,8 +24,8 @@ const STARTER_TOOLS: Record<StarterKitType, EquippedItem> = {
   },
 };
 
-export async function handleOnboard(interaction: ButtonInteraction): Promise<void> {
-  const profession = interaction.customId.slice(ONBOARD_PREFIX.length) as StarterKitType;
+export async function handleOnboard(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
+  const profession = interaction.customId.slice(ONBOARD_PREFIX.length) as StarterKitTypeValue;
 
   if (profession !== "miner" && profession !== "lumber") {
     await interaction.reply({ content: "Unknown profession.", ephemeral: true });
@@ -35,22 +36,22 @@ export async function handleOnboard(interaction: ButtonInteraction): Promise<voi
 
   const starterTool = STARTER_TOOLS[profession];
 
-  const result = await patchRpgProfile(interaction.user.id, {
-    starterKitType: profession,
-    starterKitClaimedAt: new Date(),
-    loadout: {
-      weapon: starterTool,
-      shield: null,
-      helmet: null,
-      chest: null,
-      pants: null,
-      boots: null,
-      ring: null,
-      necklace: null,
-    },
-  });
-
-  if (result.isErr()) {
+  try {
+    await patchRpgProfile(ctx, interaction.user.id, {
+      starterKitType: profession,
+      starterKitClaimedAt: new Date(),
+      loadout: {
+        weapon: starterTool,
+        shield: null,
+        helmet: null,
+        chest: null,
+        pants: null,
+        boots: null,
+        ring: null,
+        necklace: null,
+      },
+    });
+  } catch {
     await interaction.editReply({ content: "Failed to set your path. Please try again." });
     return;
   }
