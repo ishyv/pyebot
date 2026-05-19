@@ -1,17 +1,24 @@
-import type { Client, Message } from "discord.js";
+import type { Message } from "discord.js";
 import { getGuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
 import { resolveConfiguredChannel } from "@/core/featureConfig";
 import { createLogger } from "@/core/logger";
 import { mongoCountingStateRepository } from "@/db/repositories/counting";
 import { getGuild } from "@/db/repositories/guilds";
-import { countingFeatureConfig } from "@/features/counting/config";
-import countingFeature from "@/features/counting/index";
-import { processCountingMessage } from "../service";
+import { Listen, type Ctx } from "@/framework";
+import { countingFeatureConfig } from "./config";
+import countingFeature from "./index";
+import { processCountingMessage } from "./service";
 
 const log = createLogger("counting:message");
 
-export function register(client: Client): void {
-  client.on("messageCreate", async (message: Message) => {
+/**
+ * Runtime adapter for Discord message events owned by the current feature loader.
+ * Counting still gates itself because raw `@Listen` events bypass slash-command
+ * feature middleware.
+ */
+export default class CountingHandlers {
+  @Listen("messageCreate")
+  async onMessage(message: Message, ctx: Ctx): Promise<void> {
     try {
       if (message.author.bot || !message.guildId) return;
 
@@ -25,7 +32,7 @@ export function register(client: Client): void {
       if (!resolveFeatureEnabled(countingFeature, featureState.unwrap().overrides)) return;
 
       const configuredChannel = await resolveConfiguredChannel(
-        client,
+        ctx.client,
         guildConfig,
         countingFeatureConfig,
         "channel",
@@ -49,5 +56,5 @@ export function register(client: Client): void {
     } catch (error) {
       log.error("Error in counting messageCreate handler", error);
     }
-  });
+  }
 }
