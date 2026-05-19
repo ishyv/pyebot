@@ -10,6 +10,13 @@ export interface FeatureCatalogEntry extends FeatureDescriptor {
   readonly config?: FeatureConfigDefinition;
 }
 
+/**
+ * Dashboard-only config metadata keyed by feature id.
+ * This stays outside `FeatureDescriptor` so runtime feature manifests remain
+ * pure loader metadata instead of becoming a dumping ground for admin UI state.
+ */
+export type FeatureConfigRegistry = Readonly<Record<string, FeatureConfigDefinition | undefined>>;
+
 let loadedFeatures: readonly FeatureCatalogEntry[] = [];
 
 /**
@@ -17,8 +24,14 @@ let loadedFeatures: readonly FeatureCatalogEntry[] = [];
  * Runtime dispatch still uses the loader result directly; this exists only so
  * read-only UI code does not import framework bootstrap internals.
  */
-export function setFeatureCatalog(features: readonly LoadedFeature[]): void {
-  loadedFeatures = features.map((feature) => feature.descriptor);
+export function setFeatureCatalog(
+  features: readonly LoadedFeature[],
+  configs: FeatureConfigRegistry = {},
+): void {
+  loadedFeatures = features.map((feature) => {
+    const config = configs[feature.descriptor.id];
+    return config ? { ...feature.descriptor, config } : feature.descriptor;
+  });
 }
 
 /** Returns loaded feature metadata in framework loader order. */

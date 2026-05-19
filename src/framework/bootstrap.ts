@@ -34,6 +34,7 @@ import type {
 } from "discord.js";
 import { setFeatureCatalog } from "@/core/featureCatalog";
 import { createLogger } from "@/core/logger";
+import { FEATURE_CONFIGS } from "@/features/config";
 import { buildCommandCatalog, installCommandCatalog } from "@/utils/command-registry";
 import { getListenMetadata, getOnMetadata } from "./decorators";
 import { loadFeatures } from "./loader";
@@ -57,7 +58,7 @@ type CommandOwner = Map<string, FeatureDescriptor | null>;
 
 export async function bootstrapFramework(client: Client): Promise<BootstrapResult> {
   const features = await loadFeatures();
-  setFeatureCatalog(features);
+  setFeatureCatalog(features, FEATURE_CONFIGS);
   const world = await World.create(client);
   const router = new ComponentRouter();
 

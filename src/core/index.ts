@@ -2,7 +2,7 @@ export { type BusEvent, bus } from "./bus";
 export { createClient } from "./client";
 export { disconnectDb, getDb, getMongoClient } from "./db";
 export type { CommandContext, ComponentInteraction, MiddlewareFn } from "./feature";
-export type { FeatureCatalogEntry } from "./featureCatalog";
+export type { FeatureCatalogEntry, FeatureConfigRegistry } from "./featureCatalog";
 export { listConfigurableFeatures, listFeatureCatalog, setFeatureCatalog } from "./featureCatalog";
 export {
   booleanConfigField,
