@@ -1,6 +1,6 @@
 import type { Filter } from "mongodb";
 import type { Result } from "@/core/result";
-import { OkResult } from "@/core/result";
+import { ErrResult, OkResult } from "@/core/result";
 import { type EmbedConfig, EmbedConfigSchema } from "@/db/schemas/embed-config";
 import { MongoStore } from "@/db/store";
 
@@ -30,7 +30,7 @@ export async function findStickyForChannel(
     channelId,
     stickyEnabled: true,
   } as Filter<EmbedConfig>);
-  if (res.isErr()) return res as unknown as Result<EmbedConfig | null>;
+  if (res.isErr()) return ErrResult(res.error);
   const configs = res.unwrap();
   return OkResult(configs[0] ?? null);
 }
@@ -53,6 +53,6 @@ export async function patchEmbedConfig(
   return embedStore.patch(id, patch);
 }
 
-export async function deleteEmbedConfig(guildId: string, name: string): Promise<Result<boolean>> {
-  return embedStore.delete(embedConfigId(guildId, name));
+export async function deleteEmbedConfig(id: string): Promise<Result<boolean>> {
+  return embedStore.delete(id);
 }

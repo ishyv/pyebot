@@ -1,3 +1,13 @@
+/**
+ * Embed config schema.
+ *
+ * Stores per-guild embed templates created through the embed-creator feature.
+ * Each document is keyed `{guildId}:{name}` (see `embedConfigId` in the
+ * embeds repository). Configs can optionally be pinned as sticky messages,
+ * sent on a recurring schedule, or used as one-off embed templates.
+ *
+ * Validated at the repository boundary; plain `EmbedConfig` type used inside.
+ */
 import { z } from "zod";
 
 export const SCHEDULE_INTERVAL_HOURS = [1, 6, 12, 24, 168] as const;
