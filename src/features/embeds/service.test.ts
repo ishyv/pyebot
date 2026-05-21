@@ -89,7 +89,8 @@ describe("buildEmbed", () => {
     const config = makeConfig({
       embedFields: [{ name: "Static", value: "Field", inline: false }],
       scriptEnabled: true,
-      script: "(ctx) => ({ fields: [{ name: 'Script A', value: 'Val A' }, { name: 'Script B', value: 'Val B' }] })",
+      script:
+        "(ctx) => ({ fields: [{ name: 'Script A', value: 'Val A' }, { name: 'Script B', value: 'Val B' }] })",
     });
 
     const embed = await buildEmbed(config, BASE_CHANNEL, BASE_GUILD);
@@ -135,7 +136,6 @@ describe("buildEmbed", () => {
   });
 
   it("script disabled — script is not run even if provided", async () => {
-    let scriptRan = false;
     const config = makeConfig({
       embedTitle: "static",
       scriptEnabled: false,
@@ -147,6 +147,5 @@ describe("buildEmbed", () => {
     const json = embed.toJSON();
 
     expect(json.title).toBe("static");
-    expect(scriptRan).toBe(false);
   });
 });
