@@ -576,7 +576,8 @@ export default class EmbedHandlers {
     const options: any = { components: [payload.container], flags: MessageFlags.IsComponentsV2 };
     if (interaction instanceof ModalSubmitInteraction) {
       await interaction.deferUpdate();
-      await interaction.message?.edit(options);
+      // Ephemeral messages must be edited via the interaction webhook, not the direct message endpoint.
+      await interaction.editReply(options);
     } else {
       await interaction.update(options);
     }
