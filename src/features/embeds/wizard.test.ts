@@ -85,7 +85,7 @@ describe("EmbedWizardRegistry", () => {
     const oldUpdatedAt = session.updatedAt;
     const retrieved = registry.get(session.id);
     expect(retrieved).not.toBeNull();
-    expect(retrieved!.updatedAt).toBeGreaterThan(oldUpdatedAt);
+    expect(retrieved?.updatedAt).toBeGreaterThan(oldUpdatedAt);
   });
 
   it("get() returns session when within TTL window", () => {

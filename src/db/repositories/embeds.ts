@@ -17,6 +17,11 @@ export async function getEmbedConfig(
   return embedStore.get(embedConfigId(guildId, name));
 }
 
+/** Reads an embed config by its durable `{guildId}:{name}` document id. */
+export async function getEmbedConfigById(id: string): Promise<Result<EmbedConfig | null>> {
+  return embedStore.get(id);
+}
+
 export async function listEmbedConfigs(guildId: string): Promise<Result<EmbedConfig[]>> {
   return embedStore.find({ guildId } as Filter<EmbedConfig>);
 }
@@ -50,7 +55,22 @@ export async function patchEmbedConfig(
   id: string,
   patch: Partial<EmbedConfig>,
 ): Promise<Result<EmbedConfig>> {
-  return embedStore.patch(id, patch);
+  try {
+    const col = await embedStore.collection();
+    const { _id: _ignoredId, ...safePatch } = patch;
+    const res = await col.findOneAndUpdate(
+      { _id: id } as Filter<EmbedConfig>,
+      { $set: { ...safePatch, updatedAt: new Date() } },
+      { returnDocument: "after" },
+    );
+    if (!res) return ErrResult(new Error(`Embed config not found: ${id}`));
+
+    const parsed = EmbedConfigSchema.safeParse(res);
+    if (!parsed.success) return ErrResult(parsed.error);
+    return OkResult(parsed.data);
+  } catch (error) {
+    return ErrResult(error instanceof Error ? error : new Error(String(error)));
+  }
 }
 
 export async function deleteEmbedConfig(id: string): Promise<Result<boolean>> {

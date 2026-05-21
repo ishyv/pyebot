@@ -1,11 +1,5 @@
-import type {
-  ChatInputCommandInteraction,
-  Guild,
-  Message,
-  TextBasedChannel,
-  TextChannel,
-} from "discord.js";
-import { EmbedBuilder, MessageFlags } from "discord.js";
+import type { Guild, Message, TextBasedChannel, TextChannel } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { createLogger } from "@/core/logger";
 import type { EmbedConfig } from "@/db/schemas/embed-config";
 import { EMBED_MAX_FIELDS } from "./config";
@@ -98,31 +92,4 @@ export async function sendEmbed(
   // PartialGroupDMChannel (part of TextBasedChannel) doesn't expose .send() in discord.js types;
   // in practice callers always pass guild text channels, so we cast via TextChannel.
   return (targetChannel as TextChannel).send({ embeds: [embed] });
-}
-
-/**
- * Reply to an interaction with an ephemeral preview of the embed.
- */
-export async function renderEmbedPreview(
-  config: EmbedConfig,
-  interaction: ChatInputCommandInteraction,
-  guild: Guild,
-): Promise<void> {
-  const channel = interaction.channel ?? { id: interaction.channelId ?? "0", name: "channel" };
-  const channelCtx = {
-    id: channel.id,
-    name: "name" in channel ? (channel as { name: string }).name : "channel",
-  };
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  try {
-    const embed = await buildEmbed(config, channelCtx, {
-      id: guild.id,
-      name: guild.name,
-      memberCount: guild.memberCount,
-    });
-    await interaction.editReply({ embeds: [embed] });
-  } catch (err) {
-    log.error("Preview failed", err);
-    await interaction.editReply("Failed to build preview.");
-  }
 }

@@ -2,7 +2,6 @@ import {
   ButtonBuilder,
   ButtonStyle,
   type ChatInputCommandInteraction,
-  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
@@ -12,8 +11,16 @@ import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import type { ContainerChild } from "@/ui/v2";
 import { container, row, section, separator, text } from "@/ui/v2";
-import { renderEmbedPreview, sendEmbed } from "../service";
-import { type EmbedConfigDraft, embedWizardSessions, renderWizardPanel } from "../wizard";
+import { createBlankEmbedDraft, draftFromConfig, parseEmbedName } from "../model";
+import {
+  deferEphemeral,
+  editDeferredEmbed,
+  editDeferredText,
+  replyEphemeralPanel,
+  replyEphemeralText,
+} from "../responses";
+import { buildEmbed, sendEmbed } from "../service";
+import { embedWizardSessions, renderWizardPanel } from "../wizard";
 
 const log = createLogger("embeds:command");
 
@@ -61,50 +68,12 @@ const data = new SlashCommandBuilder()
   );
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function sanitizeName(raw: string): string {
-  return raw
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9_-]/g, "")
-    .slice(0, 64);
-}
-
-function blankDraft(): EmbedConfigDraft {
-  return {
-    embedTitle: null,
-    embedDescription: null,
-    embedColor: null,
-    embedUrl: null,
-    embedThumbnail: null,
-    embedImage: null,
-    embedAuthorName: null,
-    embedAuthorIconUrl: null,
-    embedAuthorUrl: null,
-    embedFooterText: null,
-    embedFooterIconUrl: null,
-    embedFields: [],
-    script: null,
-    scriptEnabled: false,
-    channelId: null,
-    scheduleEnabled: false,
-    scheduleIntervalHours: null,
-    stickyEnabled: false,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Execute dispatcher
 // ---------------------------------------------------------------------------
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guildId || !interaction.guild) {
-    await interaction.reply({
-      content: "Use this command in a server.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Use this command in a server.");
     return;
   }
   const sub = interaction.options.getSubcommand();
@@ -122,110 +91,77 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
 async function handleCreate(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
   const raw = interaction.options.getString("name", true);
-  const name = sanitizeName(raw);
+  const name = parseEmbedName(raw);
   if (!name) {
-    await interaction.reply({
-      content: "Name must contain at least one alphanumeric character.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Name must contain at least one alphanumeric character.");
     return;
   }
-  const existing = await getEmbedConfig(interaction.guildId!, name);
+  if (!interaction.guildId) return;
+  const existing = await getEmbedConfig(interaction.guildId, name);
   if (existing.isErr()) {
-    await interaction.reply({
-      content: "Failed to check existing embeds.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Failed to check existing embeds.");
     return;
   }
   if (existing.unwrap() !== null) {
-    await interaction.reply({
-      content: `An embed named \`${name}\` already exists. Use \`/embed edit ${name}\` to edit it.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(
+      interaction,
+      `An embed named \`${name}\` already exists. Use \`/embed edit ${name}\` to edit it.`,
+    );
     return;
   }
   const session = embedWizardSessions.create(
     interaction.user.id,
-    interaction.guildId!,
+    interaction.guildId,
     name,
-    blankDraft(),
+    createBlankEmbedDraft(),
     false,
   );
   const payload = renderWizardPanel(session);
-  await interaction.reply({
-    components: [payload.container],
-    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-  });
+  await replyEphemeralPanel(interaction, payload.container);
 }
 
 async function handleEdit(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
-  const name = sanitizeName(interaction.options.getString("name", true));
-  const res = await getEmbedConfig(interaction.guildId!, name);
+  const name = parseEmbedName(interaction.options.getString("name", true));
+  if (!name) {
+    await replyEphemeralText(interaction, "Name must contain at least one alphanumeric character.");
+    return;
+  }
+  if (!interaction.guildId) return;
+  const res = await getEmbedConfig(interaction.guildId, name);
   if (res.isErr()) {
-    await interaction.reply({
-      content: "Failed to fetch embed config.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Failed to fetch embed config.");
     return;
   }
   const config = res.unwrap();
   if (!config) {
-    await interaction.reply({
-      content: `No embed named \`${name}\` found.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, `No embed named \`${name}\` found.`);
     return;
   }
-  const draft: EmbedConfigDraft = {
-    embedTitle: config.embedTitle,
-    embedDescription: config.embedDescription,
-    embedColor: config.embedColor,
-    embedUrl: config.embedUrl,
-    embedThumbnail: config.embedThumbnail,
-    embedImage: config.embedImage,
-    embedAuthorName: config.embedAuthorName,
-    embedAuthorIconUrl: config.embedAuthorIconUrl,
-    embedAuthorUrl: config.embedAuthorUrl,
-    embedFooterText: config.embedFooterText,
-    embedFooterIconUrl: config.embedFooterIconUrl,
-    embedFields: [...config.embedFields],
-    script: config.script,
-    scriptEnabled: config.scriptEnabled,
-    channelId: config.channelId,
-    scheduleEnabled: config.scheduleEnabled,
-    scheduleIntervalHours: config.scheduleIntervalHours,
-    stickyEnabled: config.stickyEnabled,
-  };
   const session = embedWizardSessions.create(
     interaction.user.id,
-    interaction.guildId!,
+    interaction.guildId,
     name,
-    draft,
+    draftFromConfig(config),
     true,
   );
   const payload = renderWizardPanel(session);
-  await interaction.reply({
-    components: [payload.container],
-    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-  });
+  await replyEphemeralPanel(interaction, payload.container);
 }
 
 async function handleDelete(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
-  const name = sanitizeName(interaction.options.getString("name", true));
-  const res = await getEmbedConfig(interaction.guildId!, name);
+  const name = parseEmbedName(interaction.options.getString("name", true));
+  if (!name) {
+    await replyEphemeralText(interaction, "Name must contain at least one alphanumeric character.");
+    return;
+  }
+  if (!interaction.guildId) return;
+  const res = await getEmbedConfig(interaction.guildId, name);
   if (res.isErr()) {
-    await interaction.reply({
-      content: "Failed to fetch embed.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Failed to fetch embed.");
     return;
   }
   if (!res.unwrap()) {
-    await interaction.reply({
-      content: `No embed named \`${name}\` found.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, `No embed named \`${name}\` found.`);
     return;
   }
   const confirmId = `emb:direct:delete:${name}`;
@@ -243,27 +179,22 @@ async function handleDelete(interaction: ChatInputCommandInteraction, _ctx: Ctx)
       new ButtonBuilder().setCustomId(cancelId).setLabel("Cancel").setStyle(ButtonStyle.Secondary),
     ),
   );
-  await interaction.reply({
-    components: [panel],
-    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-  });
+  await replyEphemeralPanel(interaction, panel);
 }
 
 async function handleList(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
-  const res = await listEmbedConfigs(interaction.guildId!);
+  if (!interaction.guildId) return;
+  const res = await listEmbedConfigs(interaction.guildId);
   if (res.isErr()) {
-    await interaction.reply({
-      content: "Failed to fetch embeds.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Failed to fetch embeds.");
     return;
   }
   const configs = res.unwrap();
   if (configs.length === 0) {
-    await interaction.reply({
-      content: "No embeds created yet. Use `/embed create` to make one.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(
+      interaction,
+      "No embeds created yet. Use `/embed create` to make one.",
+    );
     return;
   }
   const children: ContainerChild[] = [text("## Your Embeds")];
@@ -287,48 +218,38 @@ async function handleList(interaction: ChatInputCommandInteraction, _ctx: Ctx): 
     children.push(separator("sm"));
     children.push(text(`_Showing 10 of ${configs.length} embeds._`));
   }
-  await interaction.reply({
-    components: [container("info", ...children)],
-    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-  });
+  await replyEphemeralPanel(interaction, container("info", ...children));
 }
 
 async function handleSend(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
-  const name = sanitizeName(interaction.options.getString("name", true));
-  const res = await getEmbedConfig(interaction.guildId!, name);
+  const name = parseEmbedName(interaction.options.getString("name", true));
+  if (!name) {
+    await replyEphemeralText(interaction, "Name must contain at least one alphanumeric character.");
+    return;
+  }
+  if (!interaction.guildId || !interaction.guild) return;
+  const res = await getEmbedConfig(interaction.guildId, name);
   if (res.isErr()) {
-    await interaction.reply({
-      content: "Failed to fetch embed.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Failed to fetch embed.");
     return;
   }
   const config = res.unwrap();
   if (!config) {
-    await interaction.reply({
-      content: `No embed named \`${name}\` found.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, `No embed named \`${name}\` found.`);
     return;
   }
   if (!config.channelId) {
-    await interaction.reply({
-      content: "This embed has no target channel set. Edit it first.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "This embed has no target channel set. Edit it first.");
     return;
   }
-  const channel = await interaction.guild!.channels.fetch(config.channelId).catch(() => null);
-  if (!channel || !channel.isTextBased()) {
-    await interaction.reply({
-      content: "Target channel not found or is not a text channel.",
-      flags: MessageFlags.Ephemeral,
-    });
+  const channel = await interaction.guild.channels.fetch(config.channelId).catch(() => null);
+  if (!channel?.isTextBased()) {
+    await replyEphemeralText(interaction, "Target channel not found or is not a text channel.");
     return;
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await deferEphemeral(interaction);
   try {
-    const sent = await sendEmbed(config, channel, interaction.guild!);
+    const sent = await sendEmbed(config, channel, interaction.guild);
     if (config.stickyEnabled) {
       const patchRes = await patchEmbedConfig(config._id, {
         stickyMessageId: sent.id,
@@ -338,32 +259,47 @@ async function handleSend(interaction: ChatInputCommandInteraction, _ctx: Ctx): 
         log.warn("Failed to update sticky message ID after send", patchRes.error);
       }
     }
-    await interaction.editReply("Embed sent successfully.");
+    await editDeferredText(interaction, "Embed sent successfully.");
   } catch (err) {
     log.error("Failed to send embed", err);
-    await interaction.editReply("Failed to send embed.");
+    await editDeferredText(interaction, "Failed to send embed.");
   }
 }
 
 async function handlePreview(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
-  const name = sanitizeName(interaction.options.getString("name", true));
-  const res = await getEmbedConfig(interaction.guildId!, name);
+  const name = parseEmbedName(interaction.options.getString("name", true));
+  if (!name) {
+    await replyEphemeralText(interaction, "Name must contain at least one alphanumeric character.");
+    return;
+  }
+  if (!interaction.guildId || !interaction.guild) return;
+  const res = await getEmbedConfig(interaction.guildId, name);
   if (res.isErr()) {
-    await interaction.reply({
-      content: "Failed to fetch embed.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, "Failed to fetch embed.");
     return;
   }
   const config = res.unwrap();
   if (!config) {
-    await interaction.reply({
-      content: `No embed named \`${name}\` found.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    await replyEphemeralText(interaction, `No embed named \`${name}\` found.`);
     return;
   }
-  await renderEmbedPreview(config, interaction, interaction.guild!);
+  await deferEphemeral(interaction);
+  try {
+    const channel = interaction.channel ?? { id: interaction.channelId ?? "0", name: "channel" };
+    const embed = await buildEmbed(
+      config,
+      { id: channel.id, name: "name" in channel ? (channel as { name: string }).name : "channel" },
+      {
+        id: interaction.guild.id,
+        name: interaction.guild.name,
+        memberCount: interaction.guild.memberCount,
+      },
+    );
+    await editDeferredEmbed(interaction, embed);
+  } catch (err) {
+    log.error("Failed to preview embed", err);
+    await editDeferredText(interaction, "Failed to build preview.");
+  }
 }
 
 // ---------------------------------------------------------------------------

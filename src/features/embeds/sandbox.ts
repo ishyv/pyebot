@@ -59,10 +59,12 @@ export async function runScript(script: string, ctx: ScriptContext): Promise<Scr
     }
   });
 
-  let handle: ReturnType<typeof setTimeout>;
+  let handle: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     handle = setTimeout(() => reject(new Error("Script timeout")), 1000);
   });
 
-  return Promise.race([execution, timeout]).finally(() => clearTimeout(handle!));
+  return Promise.race([execution, timeout]).finally(() => {
+    if (handle) clearTimeout(handle);
+  });
 }
