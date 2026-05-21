@@ -3,11 +3,18 @@ import { TempRoleGrant, tempRoleGrantId } from "@/components/temp-role-grant";
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import { MemberJoined } from "@/events/member-joined";
+import { recordAutomodSystemCase } from "@/features/moderation/service";
 import { Listen, On } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { detectAiClassificationSignals } from "./aiDetector";
 import { detectCrossChannelSpam } from "./crossChannelSpam";
 import { detectMentionSpam } from "./mentionSpam";
+import {
+  evaluatePerUserSlow,
+  newlyAddedPerUserSlowRules,
+  type PerUserSlowDecision,
+  perUserSlowInputFromMessage,
+} from "./perUserSlow";
 import {
   applyAutomodDecision,
   detectMessageContentSignals,
@@ -23,6 +30,8 @@ import {
 
 const EXPIRY_SWEEP_MS = 60_000;
 const RECENTLY_JOINED_POLICY_ID = "recentlyJoined";
+const PER_USER_SLOW_POLICY_PREFIX = "perUserSlow:";
+const observedSlowGrantIds = new Set<string>();
 const log = createLogger("automod:handlers");
 
 export default class AutomodHandlers {
@@ -48,11 +57,13 @@ export default class AutomodHandlers {
       return;
     }
 
-    await grantTempRole(ctx, member, policy.roleId!, policy.durationSeconds);
+    const roleId = policy.roleId;
+    if (!roleId) return;
+    await grantTempRole(ctx, member, roleId, policy.durationSeconds);
   }
 
   @Listen("messageCreate")
-  async onMessage(message: Message, _ctx: Ctx): Promise<void> {
+  async onMessage(message: Message, ctx: Ctx): Promise<void> {
     try {
       if (message.author.bot || !message.guild) return;
       const guildResult = await getGuild(message.guild.id);
@@ -60,6 +71,18 @@ export default class AutomodHandlers {
       if (!guild) return;
 
       const config = guild.automod;
+      const slowInput = perUserSlowInputFromMessage(message);
+      if (slowInput) {
+        const slowDecision = evaluatePerUserSlow(config, slowInput);
+        if (slowDecision.rule && message.member) {
+          await recoverPerUserSlowGrant(ctx, message.member, slowDecision.rule);
+        }
+        if (slowDecision.action !== "allow") {
+          await applyPerUserSlowDecision(message, slowDecision);
+          return;
+        }
+      }
+
       const tempPolicy = config.tempRolePolicies.recentlyJoined;
       const tempSignals = detectTempRolePolicySignals(message, tempPolicy);
       const tempDecision = directTempRoleDecision(tempSignals);
@@ -87,6 +110,17 @@ export default class AutomodHandlers {
     }
   }
 
+  @Listen(Events.GuildMemberUpdate)
+  async onMemberUpdated(oldMember: GuildMember, newMember: GuildMember, ctx: Ctx): Promise<void> {
+    const guildResult = await getGuild(newMember.guild.id);
+    const guild = guildResult.isOk() ? guildResult.unwrap() : null;
+    if (!guild) return;
+
+    for (const rule of newlyAddedPerUserSlowRules(guild.automod, oldMember, newMember)) {
+      await savePerUserSlowGrant(ctx, newMember, rule.roleId, rule.durationSeconds);
+    }
+  }
+
   @Listen(Events.ClientReady)
   onReady(_client: Client, ctx: Ctx): void {
     if (this.expiryTimer) return;
@@ -96,6 +130,10 @@ export default class AutomodHandlers {
       });
     }, EXPIRY_SWEEP_MS);
   }
+}
+
+function perUserSlowPolicyId(roleId: string): string {
+  return `${PER_USER_SLOW_POLICY_PREFIX}${roleId}`;
 }
 
 async function grantTempRole(
@@ -130,18 +168,83 @@ async function grantTempRole(
   );
 }
 
+async function savePerUserSlowGrant(
+  ctx: Ctx,
+  member: GuildMember,
+  roleId: string,
+  durationSeconds: number,
+): Promise<void> {
+  if (!roleId || !member.roles.cache.has(roleId)) return;
+  const grantId = tempRoleGrantId(member.guild.id, member.id, perUserSlowPolicyId(roleId));
+  observedSlowGrantIds.add(grantId);
+  await ctx.set(grantId, TempRoleGrant, {
+    guildId: member.guild.id,
+    userId: member.id,
+    policyId: perUserSlowPolicyId(roleId),
+    roleId,
+    expiresAt: new Date(Date.now() + durationSeconds * 1000),
+    createdAt: new Date(),
+  });
+}
+
+async function recoverPerUserSlowGrant(
+  ctx: Ctx,
+  member: GuildMember,
+  rule: { readonly roleId: string; readonly durationSeconds: number },
+): Promise<void> {
+  const grantId = tempRoleGrantId(member.guild.id, member.id, perUserSlowPolicyId(rule.roleId));
+  if (observedSlowGrantIds.has(grantId)) return;
+  observedSlowGrantIds.add(grantId);
+  const existing = await ctx.get(grantId, TempRoleGrant);
+  if (existing) return;
+  await savePerUserSlowGrant(ctx, member, rule.roleId, rule.durationSeconds);
+}
+
+async function applyPerUserSlowDecision(
+  message: Message,
+  decision: Exclude<PerUserSlowDecision, { readonly action: "allow" }>,
+): Promise<void> {
+  await message.delete().catch(() => {});
+
+  const retryAt = Math.ceil(decision.cooldownEndsAt / 1000);
+  const reason = `Per-user slow role cooldown (${decision.rule.cooldownSeconds}s)`;
+  if (decision.action === "warn") {
+    await message.author
+      .send(
+        `Your message in ${message.guild?.name ?? "the server"} was removed because you are on a per-user slow cooldown. Wait until <t:${retryAt}:R> before posting again. If you post again before then, you will be timed out.`,
+      )
+      .catch(() => {});
+  }
+
+  if (decision.action === "timeout" && message.guild && message.member) {
+    const durationMs = decision.rule.cooldownSeconds * 1000;
+    await message.member.timeout(durationMs, reason).catch((error) => {
+      log.error("Failed to apply per-user slow timeout", error);
+    });
+    await recordAutomodSystemCase(
+      message.guild,
+      message.member,
+      "TIMEOUT",
+      reason,
+      `Per-user slow role <@&${decision.rule.roleId}> violation ${decision.violations}.`,
+    ).catch((error) => log.error("Failed to record per-user slow timeout case", error));
+  }
+}
+
 async function sweepExpiredTempRoles(ctx: Ctx): Promise<void> {
   const grants = await ctx.query(TempRoleGrant, { filter: { expiresAt: { $lte: new Date() } } });
   for (const grant of grants) {
     const guild = await ctx.client.guilds.fetch(grant.guildId).catch(() => null);
     const member = guild ? await guild.members.fetch(grant.userId).catch(() => null) : null;
     if (member?.roles.cache.has(grant.roleId)) {
-      await member.roles
-        .remove(grant.roleId, "Recently joined temp role expired")
-        .catch((error) => {
-          log.error(`Failed to remove expired temp role ${grant.roleId}`, error);
-        });
+      const reason = grant.policyId.startsWith(PER_USER_SLOW_POLICY_PREFIX)
+        ? "Per-user slow role expired"
+        : "Recently joined temp role expired";
+      await member.roles.remove(grant.roleId, reason).catch((error) => {
+        log.error(`Failed to remove expired temp role ${grant.roleId}`, error);
+      });
     }
+    observedSlowGrantIds.delete(grant._id);
     await ctx.delete(grant._id, TempRoleGrant);
   }
 }

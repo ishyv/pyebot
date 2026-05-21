@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ModalBuilder,
+  RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   TextInputBuilder,
@@ -27,6 +28,7 @@ const AUTOMOD_SECTIONS = [
   "mentionSpam",
   "crossChannelSpam",
   "slowmode",
+  "perUserSlow",
   "raidDetection",
   "domainWhitelist",
   "shorteners",
@@ -45,6 +47,7 @@ function sectionLabel(section: AutomodSection): string {
     mentionSpam: "Mention spam",
     crossChannelSpam: "Cross-channel spam",
     slowmode: "Auto slowmode",
+    perUserSlow: "User slow roles",
     raidDetection: "Raid detection",
     domainWhitelist: "Domain whitelist",
     shorteners: "Short links",
@@ -130,6 +133,26 @@ function selectedField(section: AutomodSection, cfg: GuildConfig): APIEmbedField
         ].join("\n"),
         inline: false,
       };
+    case "perUserSlow":
+      return {
+        name: "Selected - User slow roles",
+        value: [
+          `Status: **${state(automod.perUserSlow.enabled)}**`,
+          `Rules: **${automod.perUserSlow.rules.length} configured**`,
+          automod.perUserSlow.rules.length
+            ? limitText(
+                automod.perUserSlow.rules
+                  .map(
+                    (rule) =>
+                      `${rule.enabled ? "On" : "Off"} - <@&${rule.roleId}> - ${rule.cooldownSeconds}s cooldown - ${rule.durationSeconds}s effect`,
+                  )
+                  .join("\n"),
+                900,
+              )
+            : "No slow roles configured.",
+        ].join("\n"),
+        inline: false,
+      };
     case "raidDetection":
       return {
         name: "Selected - Raid detection",
@@ -197,6 +220,7 @@ function coverageField(cfg: GuildConfig): APIEmbedField {
       automod.slowmode.enabled,
       `${automod.slowmode.messagesPerWindow}/${automod.slowmode.windowSeconds}s`,
     ],
+    ["perUserSlow", automod.perUserSlow.enabled, `${automod.perUserSlow.rules.length} roles`],
     ["raidDetection", automod.raidDetection.enabled, `${automod.raidDetection.joinsPerMinute}/min`],
     [
       "domainWhitelist",
@@ -281,6 +305,14 @@ export function render(session: PanelState, cfg: GuildConfig): PanelPayload {
           .setMinValues(1)
           .setMaxValues(1),
       ),
+      new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
+        new RoleSelectMenuBuilder()
+          .setCustomId(makePanelCustomId(session, "automod", "slow-role"))
+          .setPlaceholder("Select user slow role")
+          .setDisabled(section !== "perUserSlow")
+          .setMinValues(1)
+          .setMaxValues(1),
+      ),
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(makePanelCustomId(session, "automod", "toggle"))
@@ -298,6 +330,11 @@ export function render(session: PanelState, cfg: GuildConfig): PanelPayload {
           .setCustomId(makePanelCustomId(session, "automod", "clear-patterns"))
           .setLabel("Clear patterns")
           .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(makePanelCustomId(session, "automod", "remove-slow-rule"))
+          .setLabel("Remove slow role")
+          .setStyle(ButtonStyle.Danger)
+          .setDisabled(section !== "perUserSlow"),
       ),
     ],
   };
@@ -322,6 +359,14 @@ async function showConfigModal(
           .setRequired(false),
       ),
     );
+  } else if (section === "perUserSlow") {
+    const roleId = session.selectedRoleIds[0];
+    if (!roleId) throw new Error("Select a slow role first.");
+    modal.addComponents(
+      modalInput("a", "Cooldown seconds", "30", true),
+      modalInput("b", "Effect duration seconds", "3600", true),
+      modalInput("c", "Rule enabled: true or false", "true", false),
+    );
   } else {
     modal.addComponents(
       modalInput("a", "Primary number", "4", false),
@@ -336,6 +381,7 @@ async function saveConfig(
   interaction: ComponentInteraction,
   session: PanelState,
   section: string,
+  cfg: GuildConfig,
 ): Promise<void> {
   if (!interaction.isModalSubmit()) return;
   if (section === "domainWhitelist") {
@@ -375,6 +421,24 @@ async function saveConfig(
     if (numA !== null) patch["automod.slowmode.messagesPerWindow"] = Math.trunc(numA);
     if (numB !== null) patch["automod.slowmode.windowSeconds"] = Math.trunc(numB);
     if (c) patch["automod.slowmode.slowmodeSeconds"] = Math.trunc(Number(c));
+  } else if (section === "perUserSlow") {
+    const roleId = session.selectedRoleIds[0];
+    if (!roleId) throw new Error("Select a slow role first.");
+    const existing = cfg.automod.perUserSlow.rules.find((rule) => rule.roleId === roleId);
+    const enabled = c ? c === "true" || c === "yes" || c === "1" || c === "on" : true;
+    const nextRule = {
+      enabled,
+      roleId,
+      cooldownSeconds: Math.trunc(numA ?? existing?.cooldownSeconds ?? 30),
+      durationSeconds: Math.trunc(numB ?? existing?.durationSeconds ?? 3600),
+    };
+    if (nextRule.cooldownSeconds < 1) throw new Error("Cooldown seconds must be at least 1.");
+    if (nextRule.durationSeconds < 60) throw new Error("Effect duration must be at least 60s.");
+    patch["automod.perUserSlow.enabled"] = true;
+    patch["automod.perUserSlow.rules"] = [
+      ...cfg.automod.perUserSlow.rules.filter((rule) => rule.roleId !== roleId),
+      nextRule,
+    ];
   } else if (section === "raidDetection") {
     if (numA !== null) patch["automod.raidDetection.joinsPerMinute"] = Math.trunc(numA);
     if (numB !== null) patch["automod.raidDetection.minAccountAgeDays"] = Math.trunc(numB);
@@ -397,6 +461,11 @@ export async function action(
   const automod = cfg.automod as unknown as Record<string, { enabled?: boolean }>;
   if (interaction.isStringSelectMenu() && actionStr === "section") {
     session.selectedAutomodSection = interaction.values[0];
+    return true;
+  }
+  if (interaction.isRoleSelectMenu() && actionStr === "slow-role") {
+    if (section !== "perUserSlow") throw new Error("Switch to User slow roles first.");
+    session.selectedRoleIds = interaction.values;
     return true;
   }
   if (actionStr === "toggle") {
@@ -422,7 +491,23 @@ export async function action(
     return false;
   }
   if (actionStr === "config-submit" && interaction.isModalSubmit()) {
-    await saveConfig(interaction, session, section);
+    await saveConfig(interaction, session, section, cfg);
+    return true;
+  }
+  if (actionStr === "remove-slow-rule") {
+    if (section !== "perUserSlow") throw new Error("Switch to User slow roles first.");
+    const roleId = session.selectedRoleIds[0];
+    if (!roleId) throw new Error("Select a slow role first.");
+    await applyGuildConfigPaths(
+      session.guildId,
+      {
+        "automod.perUserSlow.rules": cfg.automod.perUserSlow.rules.filter(
+          (rule) => rule.roleId !== roleId,
+        ),
+      },
+      { upsert: true },
+    );
+    session.selectedRoleIds = [];
     return true;
   }
   if (actionStr === "pattern-modal" && interaction.isButton()) {

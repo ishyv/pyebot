@@ -41,4 +41,33 @@ describe("automod admin panel", () => {
     expect(rendered).not.toContain('"enabled"');
     expect(rendered).not.toContain("{\\n");
   });
+
+  it("renders per-user slow role summaries", () => {
+    const guild = GuildSchema.parse({
+      _id: "guild-1",
+      automod: {
+        perUserSlow: {
+          enabled: true,
+          rules: [
+            {
+              enabled: true,
+              roleId: "slow-role",
+              cooldownSeconds: 30,
+              durationSeconds: 3600,
+            },
+          ],
+        },
+      },
+    });
+    const session = new PanelSessionRegistry().create("user-1", "guild-1", "automod");
+    session.selectedAutomodSection = "perUserSlow";
+
+    const payload = renderAutomodPanel(session, guild);
+    const rendered = JSON.stringify(payload.container.toJSON());
+
+    expect(rendered).toContain("User slow roles");
+    expect(rendered).toContain("30s cooldown");
+    expect(rendered).toContain("3600s effect");
+    expect(rendered).toContain("<@&slow-role>");
+  });
 });

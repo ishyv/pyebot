@@ -222,6 +222,29 @@ export const TempRolePoliciesSchema = z
   })
   .catch(() => ({ recentlyJoined: defaultRecentlyJoinedPolicy() }));
 
+const defaultPerUserSlow = () => ({
+  enabled: false,
+  rules: [],
+});
+
+export const PerUserSlowRuleSchema = z.object({
+  enabled: z.boolean().catch(true),
+  roleId: z.string().catch(""),
+  cooldownSeconds: z.number().int().min(1).catch(30),
+  durationSeconds: z
+    .number()
+    .int()
+    .min(60)
+    .catch(60 * 60),
+});
+
+export const PerUserSlowSchema = z
+  .object({
+    enabled: z.boolean().catch(false),
+    rules: z.array(PerUserSlowRuleSchema).catch(() => []),
+  })
+  .catch(() => defaultPerUserSlow());
+
 export const AutomodSchema = z.object({
   linkSpam: z
     .object({
@@ -345,6 +368,7 @@ export const AutomodSchema = z.object({
   tempRolePolicies: TempRolePoliciesSchema.catch(() => ({
     recentlyJoined: defaultRecentlyJoinedPolicy(),
   })),
+  perUserSlow: PerUserSlowSchema.catch(() => defaultPerUserSlow()),
   policy: z
     .object({
       preset: z.enum(["relaxed", "balanced", "strict"]).catch("balanced"),
@@ -676,6 +700,8 @@ export type AutomodConfig = z.infer<typeof AutomodSchema>;
 export type TempRolePolicyConfig = z.infer<typeof TempRolePolicySchema>;
 export type TempRoleMessageRule = z.infer<typeof TempRoleMessageRuleSchema>;
 export type TempRoleAccessRule = z.infer<typeof TempRoleAccessRuleSchema>;
+export type PerUserSlowConfig = z.infer<typeof PerUserSlowSchema>;
+export type PerUserSlowRuleConfig = z.infer<typeof PerUserSlowRuleSchema>;
 export type GuildRoleRecord = z.infer<typeof GuildRoleSchema>;
 export type RoleLimitRecord = z.infer<typeof RoleLimitSchema>;
 export type ReputationConfig = z.infer<typeof ReputationConfigSchema>;

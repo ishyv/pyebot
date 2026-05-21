@@ -100,4 +100,30 @@ describe("guild schema admin panel defaults", () => {
     expect(guild.automod.tempRolePolicies.recentlyJoined.enabled).toBe(false);
     expect(guild.automod.tempRolePolicies.recentlyJoined.messageRules).toEqual([]);
   });
+
+  it("accepts per-user slow role rules", () => {
+    const guild = GuildSchema.parse({
+      _id: "guild-1",
+      automod: {
+        perUserSlow: {
+          enabled: true,
+          rules: [
+            {
+              enabled: true,
+              roleId: "slow-role",
+              cooldownSeconds: 30,
+              durationSeconds: 3600,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(guild.automod.perUserSlow.enabled).toBe(true);
+    expect(guild.automod.perUserSlow.rules[0]).toMatchObject({
+      roleId: "slow-role",
+      cooldownSeconds: 30,
+      durationSeconds: 3600,
+    });
+  });
 });

@@ -36,6 +36,8 @@ describe("GuildSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.automod.linkSpam.enabled).toBe(false);
+      expect(result.data.automod.perUserSlow.enabled).toBe(false);
+      expect(result.data.automod.perUserSlow.rules).toEqual([]);
       expect(result.data.automod.policy.preset).toBe("balanced");
       expect(result.data.automod.policy.profileRetentionDays).toBe(30);
     }

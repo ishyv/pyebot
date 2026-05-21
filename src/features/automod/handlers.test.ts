@@ -9,7 +9,7 @@ describe("automod handlers", () => {
 
     expect(getOnMetadata(handlers).map((entry) => entry.event)).toContain(MemberJoined);
     expect(getListenMetadata(handlers).map((entry) => entry.event)).toEqual(
-      expect.arrayContaining(["messageCreate", "clientReady"]),
+      expect.arrayContaining(["messageCreate", "guildMemberUpdate", "clientReady"]),
     );
   });
 });

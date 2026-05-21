@@ -96,6 +96,7 @@ export function saveAutomodSettings(
   return applyGuildConfigPaths(guildId, {
     ...flattenConfigPatch("automod.linkSpam", patch.linkSpam),
     ...flattenConfigPatch("automod.mentionSpam", patch.mentionSpam),
+    ...flattenConfigPatch("automod.perUserSlow", patch.perUserSlow),
   });
 }
 

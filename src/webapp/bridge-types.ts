@@ -119,6 +119,15 @@ export interface AutomodSettingsPatch {
     readonly maxMentions?: number;
     readonly windowSeconds?: number;
   };
+  readonly perUserSlow?: {
+    readonly enabled?: boolean;
+    readonly rules?: readonly {
+      readonly enabled: boolean;
+      readonly roleId: string;
+      readonly cooldownSeconds: number;
+      readonly durationSeconds: number;
+    }[];
+  };
 }
 
 export interface RolePolicyPatch {
