@@ -214,7 +214,14 @@ async function handleEdit(interaction: ChatInputCommandInteraction, _ctx: Ctx): 
 async function handleDelete(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
   const name = sanitizeName(interaction.options.getString("name", true));
   const res = await getEmbedConfig(interaction.guildId!, name);
-  if (res.isErr() || !res.unwrap()) {
+  if (res.isErr()) {
+    await interaction.reply({
+      content: "Failed to fetch embed.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  if (!res.unwrap()) {
     await interaction.reply({
       content: `No embed named \`${name}\` found.`,
       flags: MessageFlags.Ephemeral,
@@ -276,6 +283,10 @@ async function handleList(interaction: ChatInputCommandInteraction, _ctx: Ctx): 
       ),
     );
   }
+  if (configs.length > 10) {
+    children.push(separator("sm"));
+    children.push(text(`_Showing 10 of ${configs.length} embeds._`));
+  }
   await interaction.reply({
     components: [container("info", ...children)],
     flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
@@ -285,14 +296,21 @@ async function handleList(interaction: ChatInputCommandInteraction, _ctx: Ctx): 
 async function handleSend(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
   const name = sanitizeName(interaction.options.getString("name", true));
   const res = await getEmbedConfig(interaction.guildId!, name);
-  if (res.isErr() || !res.unwrap()) {
+  if (res.isErr()) {
+    await interaction.reply({
+      content: "Failed to fetch embed.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const config = res.unwrap();
+  if (!config) {
     await interaction.reply({
       content: `No embed named \`${name}\` found.`,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
-  const config = res.unwrap()!;
   if (!config.channelId) {
     await interaction.reply({
       content: "This embed has no target channel set. Edit it first.",
@@ -312,10 +330,13 @@ async function handleSend(interaction: ChatInputCommandInteraction, _ctx: Ctx): 
   try {
     const sent = await sendEmbed(config, channel, interaction.guild!);
     if (config.stickyEnabled) {
-      await patchEmbedConfig(config._id, {
+      const patchRes = await patchEmbedConfig(config._id, {
         stickyMessageId: sent.id,
         stickyLastResendAt: new Date(),
       });
+      if (patchRes.isErr()) {
+        log.warn("Failed to update sticky message ID after send", patchRes.error);
+      }
     }
     await interaction.editReply("Embed sent successfully.");
   } catch (err) {
@@ -327,14 +348,22 @@ async function handleSend(interaction: ChatInputCommandInteraction, _ctx: Ctx): 
 async function handlePreview(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
   const name = sanitizeName(interaction.options.getString("name", true));
   const res = await getEmbedConfig(interaction.guildId!, name);
-  if (res.isErr() || !res.unwrap()) {
+  if (res.isErr()) {
+    await interaction.reply({
+      content: "Failed to fetch embed.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const config = res.unwrap();
+  if (!config) {
     await interaction.reply({
       content: `No embed named \`${name}\` found.`,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
-  await renderEmbedPreview(res.unwrap()!, interaction, interaction.guild!);
+  await renderEmbedPreview(config, interaction, interaction.guild!);
 }
 
 // ---------------------------------------------------------------------------
