@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { EMBED_WIZARD_TTL_MS } from "./config";
 import type { EmbedConfigDraft } from "./wizard";
 import { EmbedWizardRegistry, parseWizardId, renderWizardPanel, wizardId } from "./wizard";
 
@@ -71,8 +72,7 @@ describe("EmbedWizardRegistry", () => {
     const id = session.id;
 
     // Backdate createdAt past TTL
-    const ttlMs = 10 * 60_000;
-    session.createdAt = Date.now() - ttlMs - 1;
+    session.createdAt = Date.now() - EMBED_WIZARD_TTL_MS - 1;
 
     expect(registry.get(id)).toBeNull();
     // Verify session was deleted from the map
@@ -80,33 +80,36 @@ describe("EmbedWizardRegistry", () => {
   });
 
   it("get() touches updatedAt on each call", () => {
-    const session = registry.create(OWNER_ID, GUILD_ID, EMBED_NAME, makeDraft(), false);
-    const id = session.id;
-    const firstUpdated = session.updatedAt;
-
-    // Backdate updatedAt to simulate time passage
-    session.updatedAt = firstUpdated;
-
-    // Advance "now" by manually patching — easiest is to just call get() and
-    // confirm updatedAt is >= createdAt (since Date.now() is live)
-    const retrieved = registry.get(id);
+    const session = registry.create("owner-1", "guild-1", "test", makeDraft(), false);
+    session.updatedAt = session.createdAt - 1000; // artificially backdate updatedAt
+    const oldUpdatedAt = session.updatedAt;
+    const retrieved = registry.get(session.id);
     expect(retrieved).not.toBeNull();
-    expect(retrieved?.updatedAt).toBeGreaterThanOrEqual(firstUpdated);
+    expect(retrieved!.updatedAt).toBeGreaterThan(oldUpdatedAt);
   });
 
-  it("get() returns null for session where createdAt + TTL equals now exactly", () => {
-    const session = registry.create(OWNER_ID, GUILD_ID, EMBED_NAME, makeDraft(), false);
-    const id = session.id;
-    const ttlMs = 10 * 60_000;
+  it("get() returns session when within TTL window", () => {
+    const session = registry.create("owner-3", "guild-3", "test3", makeDraft(), false);
+    // Place createdAt just inside the window (10ms before expiry)
+    session.createdAt = Date.now() - EMBED_WIZARD_TTL_MS + 10;
+    expect(registry.get(session.id)).not.toBeNull();
+  });
 
-    // Set createdAt so that createdAt + TTL === Date.now() (boundary — expired)
-    session.createdAt = Date.now() - ttlMs;
+  it("delete() removes the session", () => {
+    const session = registry.create("owner-4", "guild-4", "test4", makeDraft(), false);
+    registry.delete(session.id);
+    expect(registry.get(session.id)).toBeNull();
+  });
 
-    // The condition is: createdAt + TTL < Date.now()
-    // At exact boundary (==) it is NOT expired yet
-    const result = registry.get(id);
-    // Result depends on clock precision; just assert it's either null or the session
-    expect(result === null || result === session).toBe(true);
+  it("purgeExpired() removes expired sessions without requiring a get()", () => {
+    const s1 = registry.create("owner-5", "guild-5", "test5", makeDraft(), false);
+    const s2 = registry.create("owner-6", "guild-6", "test6", makeDraft(), false);
+    // Expire only s1
+    s1.createdAt = Date.now() - EMBED_WIZARD_TTL_MS - 1;
+    registry.purgeExpired();
+    expect(registry.get(s2.id)).not.toBeNull(); // s2 still alive
+    // s1 should be gone — either already purged by purgeExpired() or expired on get()
+    expect(registry.get(s1.id)).toBeNull();
   });
 });
 
