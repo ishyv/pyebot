@@ -1,16 +1,16 @@
 import type {
+  ChatInputCommandInteraction,
   Guild,
   Message,
   TextBasedChannel,
   TextChannel,
-  ChatInputCommandInteraction,
 } from "discord.js";
 import { EmbedBuilder, MessageFlags } from "discord.js";
+import { createLogger } from "@/core/logger";
 import type { EmbedConfig } from "@/db/schemas/embed-config";
+import { EMBED_MAX_FIELDS } from "./config";
 import type { ScriptContext } from "./sandbox";
 import { runScript } from "./sandbox";
-import { EMBED_MAX_FIELDS } from "./config";
-import { createLogger } from "@/core/logger";
 
 const log = createLogger("embeds:service");
 

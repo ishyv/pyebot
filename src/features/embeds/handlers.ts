@@ -184,8 +184,12 @@ export default class EmbedHandlers {
 
     if (action.startsWith("delete:")) {
       const name = action.slice(7);
-      const deleteRes = await deleteEmbedConfig(embedConfigId(interaction.guildId, name));
-      this.invalidateStickyCache(interaction.guildId);
+      const id = embedConfigId(interaction.guildId, name);
+      // Fetch config before deleting so we know which channel to evict from the sticky cache
+      const cfgRes = await getEmbedConfig(interaction.guildId, name);
+      const channelId = cfgRes.isOk() ? (cfgRes.unwrap()?.channelId ?? null) : null;
+      const deleteRes = await deleteEmbedConfig(id);
+      if (channelId) this.invalidateStickyCache(channelId);
       if ("update" in interaction && typeof interaction.update === "function") {
         await (
           interaction as {
@@ -456,33 +460,57 @@ export default class EmbedHandlers {
     // One-sticky-per-channel check
     if (session.draft.stickyEnabled) {
       const existingRes = await findStickyForChannel(interaction.guildId, session.draft.channelId);
-      if (!existingRes.isErr()) {
-        const existing = existingRes.unwrap();
-        if (existing && existing._id !== embedConfigId(interaction.guildId, session.embedName)) {
-          await interaction.reply({
-            content: "Another embed is already sticky in that channel. Disable it first.",
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
+      if (existingRes.isErr()) {
+        await interaction.reply({
+          content: "Could not verify sticky status. Please try again.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const existing = existingRes.unwrap();
+      if (existing && existing._id !== embedConfigId(interaction.guildId, session.embedName)) {
+        await interaction.reply({
+          content: "Another embed is already sticky in that channel. Disable it first.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
       }
     }
 
     const now = new Date();
+    let preservedCreatedAt: Date = now;
+    let preservedStickyMessageId: string | null = null;
+    let preservedStickyLastResendAt: Date | null = null;
+
+    if (session.isEdit) {
+      const prevRes = await getEmbedConfig(interaction.guildId, session.embedName);
+      if (prevRes.isOk()) {
+        const prev = prevRes.unwrap();
+        if (prev) {
+          preservedCreatedAt = prev.createdAt;
+          // Carry sticky state forward only when the channel hasn't changed
+          if (prev.channelId === session.draft.channelId) {
+            preservedStickyMessageId = prev.stickyMessageId;
+            preservedStickyLastResendAt = prev.stickyLastResendAt;
+          }
+        }
+      }
+    }
+
     const config: EmbedConfig = {
       _id: embedConfigId(interaction.guildId, session.embedName),
       guildId: interaction.guildId,
       name: session.embedName,
       createdBy: session.ownerId,
       ...session.draft,
-      stickyMessageId: null,
-      stickyLastResendAt: null,
+      stickyMessageId: preservedStickyMessageId,
+      stickyLastResendAt: preservedStickyLastResendAt,
       scheduledNextSendAt:
         session.draft.scheduleEnabled && session.draft.scheduleIntervalHours
           ? new Date(now.getTime() + session.draft.scheduleIntervalHours * 3_600_000)
           : null,
       scheduledLastSentAt: null,
-      createdAt: now,
+      createdAt: preservedCreatedAt,
       updatedAt: now,
     };
 
