@@ -25,6 +25,7 @@ import {
 import type { EmbedConfig } from "@/db/schemas/embed-config";
 import { Handle, Listen } from "@/framework";
 import type { BoundComponentHandler, Ctx } from "@/framework/types";
+import { container, text } from "@/ui/v2";
 import { EMBED_MAX_FIELDS, EMBED_STICKY_DEBOUNCE_MS, SCHEDULE_SWEEP_INTERVAL_MS } from "./config";
 import { buildEmbed, sendEmbed } from "./service";
 import {
@@ -191,13 +192,15 @@ export default class EmbedHandlers {
       const deleteRes = await deleteEmbedConfig(id);
       if (channelId) this.invalidateStickyCache(channelId);
       if ("update" in interaction && typeof interaction.update === "function") {
+        const msg = deleteRes.isErr() ? "Failed to delete embed." : `Embed \`${name}\` deleted.`;
         await (
           interaction as {
-            update: (opts: { content: string; components: unknown[] }) => Promise<unknown>;
+            update: (opts: { components: unknown[]; flags: number }) => Promise<unknown>;
           }
         ).update({
-          content: deleteRes.isErr() ? "Failed to delete embed." : `Embed \`${name}\` deleted.`,
-          components: [],
+          // biome-ignore lint/suspicious/noExplicitAny: ContainerBuilder not in UpdateOptions types
+          components: [container("info", text(msg))] as any,
+          flags: MessageFlags.IsComponentsV2,
         });
       }
       return;
@@ -206,9 +209,13 @@ export default class EmbedHandlers {
       if ("update" in interaction && typeof interaction.update === "function") {
         await (
           interaction as {
-            update: (opts: { content: string; components: unknown[] }) => Promise<unknown>;
+            update: (opts: { components: unknown[]; flags: number }) => Promise<unknown>;
           }
-        ).update({ content: "Cancelled.", components: [] });
+        ).update({
+          // biome-ignore lint/suspicious/noExplicitAny: ContainerBuilder not in UpdateOptions types
+          components: [container("info", text("Cancelled."))] as any,
+          flags: MessageFlags.IsComponentsV2,
+        });
       }
       return;
     }
@@ -348,7 +355,11 @@ export default class EmbedHandlers {
       }
       if (action === "cancel") {
         embedWizardSessions.delete(session.id);
-        await interaction.update({ content: "Cancelled.", components: [] });
+        await interaction.update({
+          // biome-ignore lint/suspicious/noExplicitAny: ContainerBuilder not in UpdateOptions types
+          components: [container("info", text("Cancelled."))] as any,
+          flags: MessageFlags.IsComponentsV2,
+        });
         return;
       }
     }
@@ -523,7 +534,11 @@ export default class EmbedHandlers {
     this.invalidateStickyCache(session.draft.channelId);
     embedWizardSessions.delete(session.id);
 
-    await interaction.update({ content: `Embed \`${session.embedName}\` saved.`, components: [] });
+    await interaction.update({
+      // biome-ignore lint/suspicious/noExplicitAny: ContainerBuilder not in UpdateOptions types
+      components: [container("info", text(`Embed \`${session.embedName}\` saved.`))] as any,
+      flags: MessageFlags.IsComponentsV2,
+    });
   }
 
   // ─── Private: schedule sweep ──────────────────────────────────────────────
