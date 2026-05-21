@@ -24,6 +24,26 @@ export async function startWebApp(client: Client): Promise<void> {
   }
   registerBridge(createBridgeFromClient(client));
 
+  const port = Number(process.env.WEBAPP_PORT ?? 4000);
+
+  // The SvelteKit Node adapter defaults the request protocol to `https` when
+  // neither ORIGIN nor PROTOCOL_HEADER is set (see get_origin in the built
+  // handler). On a plain-http localhost that makes the server's computed origin
+  // (https://localhost:PORT) disagree with the browser's Origin header
+  // (http://localhost:PORT), so SvelteKit's CSRF guard rejects every POST form
+  // action with 403. Set ORIGIN before importing the handler (it reads the env
+  // at module load) so form submissions work out of the box. An explicitly set
+  // ORIGIN — e.g. a production https domain — is always respected.
+  if (!process.env.ORIGIN) {
+    try {
+      process.env.ORIGIN = process.env.DISCORD_REDIRECT_URI
+        ? new URL(process.env.DISCORD_REDIRECT_URI).origin
+        : `http://localhost:${port}`;
+    } catch {
+      process.env.ORIGIN = `http://localhost:${port}`;
+    }
+  }
+
   const handlerUrl = new URL("../../webapp/build/handler.js", import.meta.url);
   let handler: (req: unknown, res: unknown, next?: () => void) => void;
   try {
@@ -39,9 +59,8 @@ export async function startWebApp(client: Client): Promise<void> {
     return;
   }
 
-  const port = Number(process.env.WEBAPP_PORT ?? 4000);
   const server = createServer((req, res) => handler(req, res));
   server.listen(port, () => {
-    log.info(`Webapp listening on http://localhost:${port}`);
+    log.info(`Webapp listening on ${process.env.ORIGIN} (port ${port})`);
   });
 }

@@ -211,6 +211,60 @@ export type ModerationBridgeAction =
       readonly reason: string;
     };
 
+export type EmbedScheduleIntervalHours = 1 | 6 | 12 | 24 | 168;
+
+export interface EmbedFieldDTO {
+  readonly name: string;
+  readonly value: string;
+  readonly inline: boolean;
+}
+
+/** The editable subset of an embed sent from the dashboard. Mirrors `EmbedConfigDraft`. */
+export interface EmbedDraftDTO {
+  readonly embedTitle: string | null;
+  readonly embedDescription: string | null;
+  readonly embedColor: number | null;
+  readonly embedUrl: string | null;
+  readonly embedThumbnail: string | null;
+  readonly embedImage: string | null;
+  readonly embedAuthorName: string | null;
+  readonly embedAuthorIconUrl: string | null;
+  readonly embedAuthorUrl: string | null;
+  readonly embedFooterText: string | null;
+  readonly embedFooterIconUrl: string | null;
+  readonly embedFields: readonly EmbedFieldDTO[];
+  readonly script: string | null;
+  readonly scriptEnabled: boolean;
+  readonly channelId: string | null;
+  readonly scheduleEnabled: boolean;
+  readonly scheduleIntervalHours: EmbedScheduleIntervalHours | null;
+  readonly stickyEnabled: boolean;
+}
+
+/** Full stored embed returned to the editor. Mirrors `EmbedConfig`. */
+export interface EmbedConfigDTO extends EmbedDraftDTO {
+  readonly _id: string;
+  readonly guildId: string;
+  readonly name: string;
+  readonly createdBy: string;
+  readonly stickyMessageId: string | null;
+  readonly stickyLastResendAt: Date | null;
+  readonly scheduledNextSendAt: Date | null;
+  readonly scheduledLastSentAt: Date | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+/** Compact embed shape for the list page. */
+export interface EmbedSummary {
+  readonly name: string;
+  readonly channelId: string | null;
+  readonly stickyEnabled: boolean;
+  readonly scheduleEnabled: boolean;
+  readonly scheduleIntervalHours: EmbedScheduleIntervalHours | null;
+  readonly updatedAt: Date;
+}
+
 export type BotEventType =
   | "automod_trigger"
   | "mod_action"
@@ -305,5 +359,23 @@ export interface BotBridge {
     actorId?: string | null,
   ): Promise<Result<void, Error>>;
   triggerAction(guildId: string, action: BotAction): Promise<Result<void, Error>>;
+  listEmbeds(guildId: string): Promise<Result<readonly EmbedSummary[], Error>>;
+  getEmbed(guildId: string, name: string): Promise<Result<EmbedConfigDTO | null, Error>>;
+  saveEmbed(
+    guildId: string,
+    name: string,
+    draft: EmbedDraftDTO,
+    actorId?: string | null,
+  ): Promise<Result<EmbedConfigDTO, Error>>;
+  deleteEmbed(
+    guildId: string,
+    name: string,
+    actorId?: string | null,
+  ): Promise<Result<boolean, Error>>;
+  sendEmbed(
+    guildId: string,
+    name: string,
+    actorId?: string | null,
+  ): Promise<Result<{ readonly messageId: string }, Error>>;
   readonly events: EventEmitter;
 }

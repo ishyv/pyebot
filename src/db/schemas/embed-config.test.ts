@@ -4,6 +4,9 @@ import {
   EmbedConfigSchema,
   type EmbedField,
   EmbedFieldSchema,
+  EMBED_LIMITS,
+  EmbedDraftInputSchema,
+  embedTotalLength,
   SCHEDULE_INTERVAL_HOURS,
   type ScheduleIntervalHours,
 } from "./embed-config";
@@ -241,5 +244,95 @@ describe("Exported types (compile-time check via usage)", () => {
   test("ScheduleIntervalHours type accepts only valid values", () => {
     const h: ScheduleIntervalHours = 168;
     expect(SCHEDULE_INTERVAL_HOURS).toContain(h);
+  });
+});
+
+describe("embedTotalLength", () => {
+  test("counts title, description, author, footer, and every field name + value", () => {
+    expect(
+      embedTotalLength({
+        embedTitle: "abc",
+        embedDescription: "de",
+        embedAuthorName: "f",
+        embedFooterText: "gh",
+        embedFields: [
+          { name: "ij", value: "klm" },
+          { name: "n", value: "o" },
+        ],
+      }),
+    ).toBe(3 + 2 + 1 + 2 + (2 + 3) + (1 + 1));
+  });
+
+  test("treats null parts as zero", () => {
+    expect(
+      embedTotalLength({
+        embedTitle: null,
+        embedDescription: null,
+        embedAuthorName: null,
+        embedFooterText: null,
+        embedFields: [],
+      }),
+    ).toBe(0);
+  });
+});
+
+const baseDraftInput = {
+  embedTitle: null,
+  embedDescription: null,
+  embedColor: null,
+  embedUrl: null,
+  embedThumbnail: null,
+  embedImage: null,
+  embedAuthorName: null,
+  embedAuthorIconUrl: null,
+  embedAuthorUrl: null,
+  embedFooterText: null,
+  embedFooterIconUrl: null,
+  embedFields: [],
+};
+
+describe("EmbedDraftInputSchema", () => {
+  test("accepts an empty draft", () => {
+    expect(EmbedDraftInputSchema.safeParse(baseDraftInput).success).toBe(true);
+  });
+
+  test("rejects a draft over the combined character limit", () => {
+    const result = EmbedDraftInputSchema.safeParse({
+      ...baseDraftInput,
+      embedTitle: "a".repeat(200),
+      embedDescription: "b".repeat(4000),
+      embedFooterText: "c".repeat(2000),
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((i) => i.message.includes(String(EMBED_LIMITS.total))),
+      ).toBe(true);
+    }
+  });
+
+  test("rejects an over-length field value", () => {
+    const result = EmbedDraftInputSchema.safeParse({
+      ...baseDraftInput,
+      embedFields: [{ name: "ok", value: "x".repeat(EMBED_LIMITS.fieldValue + 1), inline: false }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects a malformed url", () => {
+    const result = EmbedDraftInputSchema.safeParse({ ...baseDraftInput, embedImage: "not-a-url" });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects a color outside 0..0xffffff", () => {
+    expect(
+      EmbedDraftInputSchema.safeParse({ ...baseDraftInput, embedColor: 0x1000000 }).success,
+    ).toBe(false);
+  });
+
+  test("coerces blank author name to null", () => {
+    const result = EmbedDraftInputSchema.safeParse({ ...baseDraftInput, embedAuthorName: "   " });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.embedAuthorName).toBeNull();
   });
 });
