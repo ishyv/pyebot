@@ -1,0 +1,29 @@
+# Build output
+.svelte-kit/
+build/
+dist/
+.vercel/
+
+# Dependencies
+node_modules/
+
+
+# Lockfiles (regenerated; keep one repo's lockfile out so contributors
+# don't churn it across package managers — switch this if you pin to one)
+bun.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Logs / build artifacts
+*.log
+*.tsbuildinfo
+coverage/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

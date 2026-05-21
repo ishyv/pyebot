@@ -1,0 +1,78 @@
+/* =============================================================================
+ * HyvUI project override layer
+ * -----------------------------------------------------------------------------
+ * This is the SANCTIONED override surface per HyvUI's `system/override-template.css`.
+ * It tunes presence/weight/scale for the tx-v2 dashboard without modifying tokens.css
+ * or targeting library class names directly.
+ *
+ * Keep this file SMALL. Anything beyond `--reg-*` knobs and a few project utilities
+ * should be a feature request against HyvUI, not an override here.
+ * ========================================================================== */
+
+:root {
+  /* ── Type presence ────────────────────────────────────────────────────────
+   * Bump body to 1.05rem (~16.8px at the default 16px root). Comfortable for
+   * 1440p without going editorial. The library's default (1rem) skews to
+   * "operator console density" which reads tight on modern displays.            */
+  --reg-body-size: 1.05rem;
+  --reg-label-size: 0.78rem;
+  --reg-label-tracking: 0.13em;
+
+  /* ── Spacing presence ─────────────────────────────────────────────────────
+   * 10% more breathing room across every `var(--space-*)` consumer. Stops
+   * nested Panel > Stack > Card layouts from looking crowded on wide displays. */
+  --reg-spacing-scale: 1.1;
+
+  /* ── Ornament presence ────────────────────────────────────────────────────
+   * Library defaults: hextech 0.22, arcane 0.28. Roughly doubled so ambient
+   * HexGrid / ArcaneVein / GridOverlay layers actually register visually
+   * instead of disappearing into the background.                                */
+  --reg-ornament-opacity: 0.42;
+
+  /* ── Surface presence ─────────────────────────────────────────────────────
+   * Heavier alpha on --surface-card / --surface-panel. Cards read as "material"
+   * rather than vapor. Range 0.4 (ghostly) → 1.0 (fully opaque).                */
+  --reg-surface-opacity: 0.95;
+}
+
+/* =============================================================================
+ * Project utilities
+ * ========================================================================== */
+
+/* `.lift` — subtle hover lift for interactive Cards/rows that aren't inside a
+ * FloatCard. The tilt of FloatCard already supplies its own hover signal, so
+ * do not combine the two. Use only on cards that link/open something. */
+.lift {
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  cursor: pointer;
+}
+.lift:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lift {
+    transition: none;
+  }
+  .lift:hover {
+    transform: none;
+  }
+}
+
+/* `.float-slot` — wraps each FloatCard in a grid where neighbors should stay
+ * out of the way during the hover tilt. Hovered slot lifts in stacking order
+ * so the tilt sits over neighbors instead of physically pushing them.
+ * The transition-delay trick keeps the z-index high until the tilt-back
+ * animation finishes, then drops it instantly. */
+.float-slot {
+  position: relative;
+  z-index: 1;
+  transition: z-index 0s 250ms;
+}
+.float-slot:hover {
+  z-index: 5;
+  transition: z-index 0s 0s;
+}

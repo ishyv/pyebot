@@ -1,0 +1,72 @@
+@import "tailwindcss";
+/* HyvUI tokens, registers, expressions, base components, fixed background layer. */
+@import "@hyvnt/hyvui/styles.css";
+/* Project override layer (sanctioned per HyvUI's system/override-template.css).
+   MUST come after the library import so :root overrides win the cascade. */
+@import "./theme.css";
+
+@plugin "@tailwindcss/forms";
+@plugin "@tailwindcss/typography";
+
+/* ET Book — body serif. Two faces only (no bold; design law caps weight at 400). */
+@font-face {
+  font-family: "ET Book";
+  src: url("/fonts/et-book-roman-line-figures.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ET Book";
+  src: url("/fonts/et-book-display-italic-old-style-figures.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Bridge HyvUI's CSS custom properties into Tailwind v4 utilities so token-only
+   class names (text-accent, bg-bg-elev, border-line) compile. */
+@theme {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-elev-soft: var(--bg-elev-soft);
+  --color-text: var(--text);
+  --color-text-soft: var(--text-soft);
+  --color-muted: var(--muted);
+  --color-muted-strong: var(--muted-strong);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-signal: var(--signal);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-status-ok: var(--status-ok);
+  --color-status-pend: var(--status-pend);
+  --color-status-warn: var(--status-warn);
+  --color-status-fail: var(--status-fail);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+  --shadow-veil: var(--shadow-veil);
+  --shadow-card: var(--shadow-card);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+}
+
+/* Document defaults. --bg drives backgrounds via the active register; no hardcoded fill. */
+html,
+body {
+  min-height: 100%;
+}
+body {
+  margin: 0;
+  color: var(--text);
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}

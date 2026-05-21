@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Self-hosted moderation dashboard for the tx Discord bot." />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#08090b" />
+    <link rel="icon" href="data:," />
+    <title>tx Dashboard</title>
+    <style>
+      /* Critical CSS: paints base dark surface before any stylesheet evaluates.
+         Sanctioned exception to the no-hex rule (see webapp/CLAUDE.md). */
+      html { background: #08090b; color: #f0e8da; color-scheme: dark; }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>
