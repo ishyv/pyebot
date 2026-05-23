@@ -18,6 +18,23 @@ const embedConfigs = new Map<string, Record<string, unknown>>();
 const sentEmbeds: Array<{ args: unknown[] }> = [];
 let activeBridgeBannedImages: unknown[] = [];
 
+function matchesFilter(doc: Record<string, unknown>, filter: unknown): boolean {
+  if (!filter || typeof filter !== "object") return true;
+  return Object.entries(filter as Record<string, unknown>).every(
+    ([key, value]) => doc[key] === value,
+  );
+}
+
+function collectionDocs(name: string, filter?: unknown): Record<string, unknown>[] {
+  const docs =
+    name === "banned_images"
+      ? (activeBridgeBannedImages as Record<string, unknown>[])
+      : name === "embed_configs"
+        ? [...embedConfigs.values()]
+        : [];
+  return docs.filter((doc) => matchesFilter(doc, filter));
+}
+
 function samplePng(): Promise<Buffer> {
   return sharp({
     create: {
@@ -37,6 +54,18 @@ mock.module("@/core/db", () => ({
       insertOne: async (doc: unknown) => {
         if (name === "banned_images") activeBridgeBannedImages.push(doc);
         return { insertedId: (doc as { _id?: string })._id };
+      },
+      replaceOne: async (filter: unknown, doc: Record<string, unknown>) => {
+        if (name === "embed_configs") {
+          embedConfigs.set(String(doc._id), doc);
+        }
+        collectionUpdates.push({
+          collection: name,
+          filter,
+          update: { $replace: doc },
+          options: {},
+        });
+        return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
       },
       updateOne: async (filter: unknown, update: Record<string, unknown>, options: unknown) => {
         collectionUpdates.push({ collection: name, filter, update, options });
@@ -59,21 +88,36 @@ mock.module("@/core/db", () => ({
           Object.assign(existing, (update.$set as Record<string, unknown> | undefined) ?? {});
           return existing;
         }
+        if (name === "embed_configs") {
+          const criteria = filter as { _id?: string };
+          const existing = criteria._id ? embedConfigs.get(criteria._id) : undefined;
+          if (!existing) return null;
+          Object.assign(existing, (update.$set as Record<string, unknown> | undefined) ?? {});
+          return existing;
+        }
         return { _id: "guild-1", daily: {}, work: {}, sectors: {} };
       },
-      find: () => ({
+      find: (filter?: unknown) => ({
         sort: () => ({
           limit: () => ({
             toArray: async () => [],
           }),
-          toArray: async () => (name === "banned_images" ? activeBridgeBannedImages : []),
+          toArray: async () => collectionDocs(name, filter),
         }),
         limit: () => ({
           toArray: async () => [],
         }),
-        toArray: async () => [],
+        toArray: async () => collectionDocs(name, filter),
       }),
-      findOne: async () => null,
+      findOne: async (filter?: unknown) => collectionDocs(name, filter)[0] ?? null,
+      deleteOne: async (filter: unknown) => {
+        if (name === "embed_configs") {
+          const criteria = filter as { _id?: string };
+          const deleted = criteria._id ? embedConfigs.delete(criteria._id) : false;
+          return { deletedCount: deleted ? 1 : 0 };
+        }
+        return { deletedCount: 0 };
+      },
     }),
   }),
 }));
@@ -118,35 +162,6 @@ mock.module("@/components/guild-features", () => ({
   resolveFeatureEnabled: () => true,
   setGuildFeatureOverride: async () => OkResult({ overrides: {} }),
   setGuildFeatureOverrides: async () => OkResult({ overrides: {} }),
-}));
-
-mock.module("@/db/repositories/embeds", () => ({
-  deleteEmbedConfig: async (id: string) => {
-    const deleted = embedConfigs.delete(id);
-    return OkResult(deleted);
-  },
-  embedConfigId: (guildId: string, name: string) => `${guildId}:${name}`,
-  getEmbedConfig: async (guildId: string, name: string) =>
-    OkResult(embedConfigs.get(`${guildId}:${name}`) ?? null),
-  listEmbedConfigs: async (guildId: string) =>
-    OkResult([...embedConfigs.values()].filter((config) => config.guildId === guildId)),
-  patchEmbedConfig: async (id: string, patch: Record<string, unknown>) => {
-    const existing = embedConfigs.get(id);
-    if (!existing) return OkResult(null);
-    Object.assign(existing, patch);
-    return OkResult(existing);
-  },
-  saveEmbedConfig: async (config: Record<string, unknown>) => {
-    embedConfigs.set(String(config._id), config);
-    return OkResult(config);
-  },
-}));
-
-mock.module("@/features/embeds/service", () => ({
-  sendEmbed: async (...args: unknown[]) => {
-    sentEmbeds.push({ args });
-    return { id: "message-1" };
-  },
 }));
 
 mock.module("@/core/featureCatalog", () => ({
@@ -250,7 +265,10 @@ function fakeClient(canModerate = true) {
       fetch: async () => ({
         isTextBased: () => true,
         permissionsFor: () => ({ has: () => true }),
-        send: async () => ({ id: "message-1" }),
+        send: async (...args: unknown[]) => {
+          sentEmbeds.push({ args });
+          return { id: "message-1" };
+        },
       }),
     },
     roles: { cache: new Map() },
