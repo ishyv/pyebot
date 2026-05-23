@@ -19,6 +19,7 @@ coverage/
 docs/superpowers/
 docs/ai
 
+
 # Local refactor planning scratchpad
 plans/
 
@@ -40,3 +41,6 @@ bun.lock
 history.json
 tasks.json
 __file_log
+
+
+bun.lock

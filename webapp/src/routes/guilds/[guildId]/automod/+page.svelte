@@ -2,10 +2,13 @@
 import type { ResolveStatus } from "@hyvnt/hyvui";
 import {
   Button,
+  Badge,
+  ConfirmDialog,
   Input,
   PageHeader,
   Panel,
   resolve,
+  Select,
   Stack,
   surface,
   Toggle,
@@ -16,6 +19,7 @@ import { enhance } from "$app/forms";
 import ChannelSelect from "$lib/components/ChannelSelect.svelte";
 import FormField from "$lib/components/FormField.svelte";
 import RolePicker from "$lib/components/RolePicker.svelte";
+import type { BannedImageTestResult } from "$shared/bridge-types";
 import type { PageData } from "./$types";
 
 interface Props {
@@ -36,6 +40,7 @@ const { data }: Props = $props();
 const initialLink = untrack(() => data.linkSpam);
 const initialMention = untrack(() => data.mentionSpam);
 const initialSlow = untrack(() => data.perUserSlow);
+const initialImage = untrack(() => data.imageDetection);
 
 let linkSpamEnabled = $state(initialLink.enabled);
 let linkSpamMaxLinks = $state(String(initialLink.maxLinks));
@@ -51,17 +56,34 @@ let slowRoleId = $state("");
 let slowCooldownSeconds = $state("30");
 let slowDurationSeconds = $state("3600");
 let slowRules = $state<SlowRule[]>(normalizeSlowRules(initialSlow.rules));
+let imageDetectionEnabled = $state(initialImage.enabled);
+let imageReportChannelId = $state(initialImage.reportChannelId);
+let imageTolerance = $state(initialImage.tolerance);
+let addImageLabel = $state("");
+let addImageReason = $state("");
+let imageDrafts = $state<Record<string, { reason: string; label: string }>>({});
 
 let savingLink = $state(false);
 let savingMention = $state(false);
 let savingSlow = $state(false);
+let savingImageSettings = $state(false);
+let addingImage = $state(false);
+let testingImage = $state(false);
+let testResult = $state<BannedImageTestResult | null>(null);
+let removeCandidate = $state<{ id: string; label: string } | null>(null);
 
 // `use:resolve` actions trigger a status flash on the form border.
 let linkResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let mentionResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let slowResolve: { trigger: (s: ResolveStatus) => void } | undefined;
+let imageResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 
 const slowRulesJson = $derived(JSON.stringify(slowRules));
+const toleranceOptions = [
+  { value: "strict", label: "strict" },
+  { value: "balanced", label: "balanced" },
+  { value: "loose", label: "loose" },
+];
 
 function roleNameFor(roleId: string): string {
   return data.roles.find((role) => role.id === roleId)?.name ?? roleId;
@@ -99,6 +121,24 @@ function upsertSlowRule(): void {
 function removeSlowRule(roleId: string): void {
   slowRules = slowRules.filter((rule) => rule.roleId !== roleId);
 }
+
+function imageLabel(record: PageData["bannedImages"][number]): string {
+  return record.label || record.sourceFilename || record.id;
+}
+
+function formatAddedAt(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+$effect(() => {
+  imageDrafts = Object.fromEntries(
+    data.bannedImages.map((record) => [
+      record.id,
+      { reason: record.reason, label: record.label ?? "" },
+    ]),
+  );
+});
 </script>
 
 <Stack gap="var(--space-lg)">
@@ -294,7 +334,235 @@ function removeSlowRule(roleId: string): void {
       </form>
     </Panel>
   </div>
+
+  <div use:surface={{ delay: 180 }}>
+    <Panel withInset>
+      {#snippet header()}
+        <div class="panel-head">
+          <span class="panel-title">banned images</span>
+          <Toggle
+            bind:checked={imageDetectionEnabled}
+            label={imageDetectionEnabled ? "enabled" : "disabled"}
+          />
+        </div>
+      {/snippet}
+
+      <form
+        method="POST"
+        action="?/saveImageDetection"
+        use:resolve={(a) => (imageResolve = a)}
+        use:enhance={() => {
+          savingImageSettings = true;
+          return async ({ result, update }) => {
+            savingImageSettings = false;
+            if (result.type === "success") {
+              imageResolve?.trigger("ok");
+              toastStore.push("image detection saved", "ok");
+            } else {
+              imageResolve?.trigger("fail");
+              toastStore.push("save failed, retry", "fail");
+            }
+            await update({ reset: false });
+          };
+        }}
+      >
+        <input type="hidden" name="enabled" value={imageDetectionEnabled ? "on" : ""} />
+
+        <div class="image-settings-grid">
+          <FormField label="report channel" description="where banned-image detections get reported first.">
+            <ChannelSelect
+              name="reportChannelId"
+              bind:value={imageReportChannelId}
+              channels={data.channels}
+              types={["text"]}
+            />
+            <input type="hidden" name="reportChannelId" value={imageReportChannelId} />
+          </FormField>
+
+          <FormField label="tolerance" description="how closely uploads must match a stored fingerprint.">
+            <Select bind:value={imageTolerance} options={toleranceOptions} />
+            <input type="hidden" name="tolerance" value={imageTolerance} />
+          </FormField>
+        </div>
+
+        <div class="actions">
+          <Button type="submit" variant="primary" disabled={savingImageSettings} echo>
+            {savingImageSettings ? "saving" : "save image detection"}
+          </Button>
+        </div>
+      </form>
+
+      <div class="image-tools">
+        <form
+          method="POST"
+          action="?/addBannedImage"
+          enctype="multipart/form-data"
+          class="image-tool"
+          use:enhance={() => {
+            addingImage = true;
+            return async ({ result, update }) => {
+              addingImage = false;
+              if (result.type === "success") {
+                addImageLabel = "";
+                addImageReason = "";
+              }
+              toastStore.push(
+                result.type === "success" ? "banned image added" : "add failed",
+                result.type === "success" ? "ok" : "fail",
+              );
+              await update();
+            };
+          }}
+        >
+          <FormField label="add image" description="store a perceptual hash, reason, and review metadata.">
+            <input class="file-input" type="file" name="image" accept="image/*" required />
+          </FormField>
+          <div class="image-form-grid">
+            <Input bind:value={addImageLabel} placeholder="label" />
+            <Input bind:value={addImageReason} placeholder="required reason" />
+            <input type="hidden" name="label" value={addImageLabel} />
+            <input type="hidden" name="reason" value={addImageReason} />
+            <Button type="submit" variant="primary" disabled={addingImage} echo>
+              {addingImage ? "adding" : "add"}
+            </Button>
+          </div>
+        </form>
+
+        <form
+          method="POST"
+          action="?/testBannedImage"
+          enctype="multipart/form-data"
+          class="image-tool"
+          use:enhance={() => {
+            testingImage = true;
+            return async ({ result, update }) => {
+              testingImage = false;
+              if (result.type === "success") {
+                const data = result.data as { imageTest?: BannedImageTestResult } | undefined;
+                testResult = data?.imageTest ?? null;
+                toastStore.push(testResult?.matched ? "image matched" : "no match", "ok");
+              } else {
+                testResult = null;
+                toastStore.push("test failed", "fail");
+              }
+              await update({ reset: false });
+            };
+          }}
+        >
+          <FormField label="test image" description="hash an upload and compare it against active records.">
+            <input class="file-input" type="file" name="image" accept="image/*" required />
+          </FormField>
+          <div class="actions compact">
+            <Button type="submit" variant="secondary" disabled={testingImage} echo>
+              {testingImage ? "testing" : "test"}
+            </Button>
+          </div>
+          {#if testResult}
+            <div class="test-result">
+              <Badge variant={testResult.matched ? "warn" : "accent"}>
+                {testResult.matched ? "match" : "clear"}
+              </Badge>
+              {#if testResult.record && testResult.distance}
+                <span>{imageLabel(testResult.record)} · total {testResult.distance.total}</span>
+              {:else}
+                <span>no active record matched this image.</span>
+              {/if}
+            </div>
+          {/if}
+        </form>
+      </div>
+
+      {#if data.bannedImages.length === 0}
+        <p class="empty">no active banned images.</p>
+      {:else}
+        <div class="image-list">
+          {#each data.bannedImages as record (record.id)}
+            {@const draft = imageDrafts[record.id] ?? { reason: record.reason, label: record.label ?? "" }}
+            <div class="image-row">
+              <div class="image-preview">
+                {#if record.sourceUrl}
+                  <img src={record.sourceUrl} alt={imageLabel(record)} loading="lazy" />
+                {:else}
+                  <span>hash</span>
+                {/if}
+              </div>
+              <div class="image-meta">
+                <div class="image-title">
+                  <Badge variant="accent">{record.id}</Badge>
+                  <span>{imageLabel(record)}</span>
+                </div>
+                <span>{record.sourceFilename ?? "dashboard upload"} · {formatAddedAt(record.addedAt)}</span>
+              </div>
+              <form method="POST" action="?/editBannedImage" class="image-edit">
+                <input type="hidden" name="id" value={record.id} />
+                <Input
+                  value={draft.label}
+                  placeholder="label"
+                  oninput={(e) =>
+                    (imageDrafts[record.id] = {
+                      ...draft,
+                      label: (e.target as HTMLInputElement).value,
+                    })}
+                />
+                <Input
+                  value={draft.reason}
+                  placeholder="reason"
+                  oninput={(e) =>
+                    (imageDrafts[record.id] = {
+                      ...draft,
+                      reason: (e.target as HTMLInputElement).value,
+                    })}
+                />
+                <input type="hidden" name="label" value={draft.label} />
+                <input type="hidden" name="reason" value={draft.reason} />
+                <div class="row-buttons">
+                  <Button type="submit" size="sm">save</Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onclick={() => (removeCandidate = { id: record.id, label: imageLabel(record) })}
+                  >
+                    remove
+                  </Button>
+                </div>
+              </form>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </Panel>
+  </div>
 </Stack>
+
+<form
+  method="POST"
+  action="?/removeBannedImage"
+  id="banned-image-remove-form"
+  use:enhance={() => async ({ result, update }) => {
+    toastStore.push(
+      result.type === "success" ? "banned image removed" : "remove failed",
+      result.type === "success" ? "ok" : "fail",
+    );
+    removeCandidate = null;
+    await update();
+  }}
+>
+  <input type="hidden" name="id" value={removeCandidate?.id ?? ""} />
+</form>
+
+<ConfirmDialog
+  open={!!removeCandidate}
+  title={`remove ${removeCandidate?.label ?? "banned image"}`}
+  description="this disables the image record but keeps audit metadata."
+  confirmLabel="remove"
+  cancelLabel="keep"
+  destructive
+  onconfirm={() => {
+    (document.getElementById("banned-image-remove-form") as HTMLFormElement | null)?.requestSubmit();
+  }}
+  oncancel={() => (removeCandidate = null)}
+/>
 
 <style>
   .panel-head {
@@ -339,9 +607,120 @@ function removeSlowRule(roleId: string): void {
     font-family: var(--font-mono);
     font-size: 0.82rem;
   }
+  .image-settings-grid,
+  .image-tools,
+  .image-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+    align-items: end;
+  }
+  .image-tools {
+    margin-top: var(--space-md);
+    align-items: stretch;
+  }
+  .image-tool {
+    display: grid;
+    align-content: start;
+    padding: var(--space-sm);
+    border: 1px solid var(--line);
+  }
+  .image-form-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+    gap: var(--space-sm);
+  }
+  .file-input {
+    width: 100%;
+    min-height: 2.35rem;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+  .compact {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .test-result {
+    display: flex;
+    gap: var(--space-xs);
+    align-items: center;
+    margin-top: var(--space-sm);
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+  .empty {
+    margin: var(--space-sm) 0 0;
+    color: var(--text-soft);
+  }
+  .image-list {
+    display: grid;
+    gap: var(--space-xs);
+    margin-top: var(--space-md);
+  }
+  .image-row {
+    display: grid;
+    grid-template-columns: 4rem minmax(10rem, 0.8fr) minmax(14rem, 1.5fr);
+    gap: var(--space-sm);
+    align-items: center;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--line);
+  }
+  .image-preview {
+    display: grid;
+    place-items: center;
+    width: 4rem;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+  }
+  .image-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .image-meta {
+    display: grid;
+    gap: var(--space-2xs);
+    min-width: 0;
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .image-title {
+    display: flex;
+    gap: var(--space-xs);
+    align-items: center;
+    min-width: 0;
+    color: var(--text);
+  }
+  .image-title span,
+  .image-meta span {
+    overflow-wrap: anywhere;
+  }
+  .image-edit {
+    display: grid;
+    grid-template-columns: minmax(6rem, 0.7fr) minmax(10rem, 1fr) auto;
+    gap: var(--space-xs);
+    align-items: center;
+  }
+  .row-buttons {
+    display: inline-flex;
+    gap: var(--space-2xs);
+  }
   @media (max-width: 860px) {
     .slow-builder,
-    .slow-rule {
+    .slow-rule,
+    .image-settings-grid,
+    .image-tools,
+    .image-form-grid,
+    .image-row,
+    .image-edit {
       grid-template-columns: 1fr;
     }
   }

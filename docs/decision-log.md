@@ -1,5 +1,48 @@
 # Decision Log
 
+## 2026-05-23 - Money model canonical storage
+
+**Cambio:** The money model is documented as distinct-by-design. Current economy spendable
+balances live in `UserCurrency.balances`, current bank balances live in
+`UserCurrency.bankBalances`, and current economy status/activity/streak metadata lives in the
+`EconomyAccount` component. Legacy `UserSchema.currency`, `UserSchema.bank`, and embedded
+`UserSchema.economyAccount` remain schema-visible user-doc fields, but they are not the current
+economy source of truth.
+
+**Motivo:** Economy services and commands read/write the component-backed `UserCurrency` and
+`EconomyAccount` paths. Legacy RPG money still uses `user.currency.coins` in hideout/processing
+flows, so migrating it would be behavior and data movement work, not documentation cleanup.
+
+**Alternativas:** Consolidating or removing the legacy user-doc fields was rejected for this
+slice. That requires a separate migration plan for RPG money and persisted user documents.
+
+**Riesgos:** Runtime risk is low because this changes comments/docs only. The remaining product
+risk is that legacy RPG money and current economy money stay separate until an explicit migration
+decides whether to merge them.
+
+**Cómo verificar:** `bun test src/features/economy`, `bun test src/db/schemas`, targeted Biome on
+the touched docs/schema files, then `bun run typecheck` and `bun run check` for broader baseline
+visibility.
+
+## 2026-05-22 - Framework cleanup: dead router method + storage barrel boundary
+
+**Cambio:** Se eliminó `ComponentRouter.dispatch()` (método muerto; `bootstrap.ts` usa
+`router.resolve()` directamente y no había call-sites). Se corrigió `docs/storage.md` para importar
+los adapters desde `@/framework/storage` en lugar del barrel `@/framework`.
+
+**Motivo:** `dispatch()` era una segunda forma, no usada, de hacer lo que ya hace `resolve()`. El
+doc prometía un import (`@/framework`) que el barrel `src/framework/index.ts` no exporta — drift
+doc/código.
+
+**Alternativas:** Exponer los adapters en el barrel `@/framework` para cumplir el doc fue rechazado:
+anunciaría una segunda ruta de persistencia junto a `World`, en contra de la política latest-only y
+del criterio de mantener mínima la superficie pública (`docs/codebase-audit.md`).
+
+**Riesgos:** Bajo. Borrar código muerto no cambia comportamiento; el cambio de doc no toca runtime.
+
+**Cómo verificar:** `bun test src/framework`, `bun run typecheck`, `bun run check`. Confirmar
+`rg "\.dispatch\(" src` sin resultados.
+
 ## 2026-05-19 - Market vertical slice boundaries
 
 **Cambio:** `src/features/economy/market.ts` now keeps the command-facing orchestration API, while market result/config/error types, pure listing transitions, and the legacy listing-store adapter live in focused modules.

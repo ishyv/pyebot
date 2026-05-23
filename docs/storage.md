@@ -3,8 +3,12 @@
 tx-v2 keeps a small storage adapter contract for starter bots and framework-owned utilities.
 The bundled full bot runtime uses Mongo-backed `World` components and feature repositories.
 
+These adapters are deliberately **not** part of the public `@/framework` barrel — exposing them
+there would advertise a second persistence path alongside `World`. Import them directly from the
+module instead:
+
 ```ts
-import { FileStorageAdapter, MemoryStorageAdapter } from "@/framework";
+import { FileStorageAdapter, MemoryStorageAdapter } from "@/framework/storage";
 
 const dev = new MemoryStorageAdapter();
 const localFile = new FileStorageAdapter(".tx-data");

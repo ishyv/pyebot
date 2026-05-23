@@ -35,17 +35,48 @@ export class CooldownManager {
 // ─── SessionManager ───────────────────────────────────────────────────────────
 /**
  * Generic typed session store. Features create their own instances: `new SessionManager<MyType>()`.
- * NOTE: No TTL or size limit. Callers are responsible for deleting entries to avoid unbounded growth.
+ * Entries are bounded by a generous TTL and max size by default so missed
+ * feature cleanup cannot leak memory for the whole process lifetime.
  */
+export interface SessionManagerOptions {
+  /** Milliseconds before an entry expires. `null` disables time-based expiry. */
+  readonly ttlMs?: number | null;
+  /** Maximum retained entries. `null` disables size-based eviction. */
+  readonly maxEntries?: number | null;
+}
+
+interface SessionEntry<T> {
+  readonly value: T;
+  readonly createdAt: number;
+}
+
 export class SessionManager<T> {
-  private readonly map = new Map<string, T>();
+  private readonly map = new Map<string, SessionEntry<T>>();
+  private readonly ttlMs: number | null;
+  private readonly maxEntries: number | null;
+
+  constructor(options: SessionManagerOptions = {}) {
+    this.ttlMs = options.ttlMs === undefined ? 24 * 60 * 60 * 1000 : options.ttlMs;
+    this.maxEntries = options.maxEntries === undefined ? 10_000 : options.maxEntries;
+  }
 
   get(key: string): T | undefined {
-    return this.map.get(key);
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    if (this.isExpired(entry)) {
+      this.map.delete(key);
+      return undefined;
+    }
+    this.map.delete(key);
+    this.map.set(key, entry);
+    return entry.value;
   }
 
   set(key: string, value: T): void {
-    this.map.set(key, value);
+    this.pruneExpired();
+    if (this.map.has(key)) this.map.delete(key);
+    this.map.set(key, { value, createdAt: Date.now() });
+    this.enforceMaxEntries();
   }
 
   delete(key: string): void {
@@ -53,7 +84,33 @@ export class SessionManager<T> {
   }
 
   has(key: string): boolean {
-    return this.map.has(key);
+    const entry = this.map.get(key);
+    if (!entry) return false;
+    if (this.isExpired(entry)) {
+      this.map.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  private isExpired(entry: SessionEntry<T>): boolean {
+    return this.ttlMs !== null && Date.now() - entry.createdAt >= this.ttlMs;
+  }
+
+  private pruneExpired(): void {
+    if (this.ttlMs === null) return;
+    for (const [key, entry] of this.map) {
+      if (this.isExpired(entry)) this.map.delete(key);
+    }
+  }
+
+  private enforceMaxEntries(): void {
+    if (this.maxEntries === null) return;
+    while (this.map.size > this.maxEntries) {
+      const oldestKey = this.map.keys().next().value;
+      if (oldestKey === undefined) return;
+      this.map.delete(oldestKey);
+    }
   }
 }
 

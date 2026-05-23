@@ -29,6 +29,7 @@ mock.module("@/core/db", () => ({
 }));
 
 mock.module("@/db/repositories/guilds", () => ({
+  getGuild: async (guildId: string) => OkResult({ _id: guildId, roles: {} }),
   updateGuildPaths: async (guildId: string, paths: Record<string, unknown>, options: unknown) => {
     guildWrites.push({ guildId, paths, options });
     return OkResult(undefined);
@@ -36,6 +37,17 @@ mock.module("@/db/repositories/guilds", () => ({
 }));
 
 mock.module("@/components/guild-features", () => ({
+  GuildFeatures: {
+    collection: "guild_features",
+    schema: { safeParse: () => ({ success: true, data: { overrides: {} } }) },
+  },
+  applyFeatureOverride: (
+    current: { overrides?: Record<string, boolean> },
+    featureId: string,
+    enabled: boolean,
+  ) => ({ overrides: { ...(current.overrides ?? {}), [featureId]: enabled } }),
+  getGuildFeatures: async () => OkResult({ overrides: {} }),
+  resolveFeatureEnabled: () => true,
   setGuildFeatureOverride: async (guildId: string, featureId: string, enabled: boolean) => {
     featureWrites.push({ guildId, featureId, enabled });
     return OkResult({ overrides: { [featureId]: enabled } });
@@ -109,6 +121,120 @@ describe("admin panel config mutations", () => {
           "channels.core.modlog": { channelId: "channel-2" },
           "moderation.quarantine.roleId": null,
           "moderation.quarantine.enabled": false,
+        },
+        options: { upsert: true },
+      },
+    ]);
+  });
+
+  it("writes image detection settings to the automod guild config path", async () => {
+    const { saveAutomodSettings } = await import("./configMutations");
+
+    const result = await saveAutomodSettings("guild-1", {
+      imageDetection: {
+        enabled: true,
+        reportChannelId: "reports",
+        tolerance: "strict",
+      },
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(guildWrites).toEqual([
+      {
+        guildId: "guild-1",
+        paths: {
+          "automod.imageDetection.enabled": true,
+          "automod.imageDetection.reportChannelId": "reports",
+          "automod.imageDetection.tolerance": "strict",
+        },
+        options: { upsert: true },
+      },
+    ]);
+  });
+
+  it("writes slash-command automod settings to exact guild config paths", async () => {
+    const { saveAutomodSettings } = await import("./configMutations");
+
+    const result = await saveAutomodSettings("guild-1", {
+      domainWhitelist: {
+        enabled: true,
+        domains: ["example.com"],
+      },
+      crossChannelSpam: {
+        enabled: true,
+        minChannels: 4,
+        windowSeconds: 45,
+        reportChannelId: "reports",
+        autoTimeout: false,
+        timeoutSeconds: 900,
+      },
+      slowmode: {
+        enabled: true,
+        messagesPerWindow: 25,
+        windowSeconds: 60,
+        slowmodeSeconds: 10,
+        releaseAfterSeconds: 120,
+      },
+      raidDetection: {
+        enabled: true,
+        joinsPerMinute: 12,
+        minAccountAgeDays: 5,
+        action: "alert",
+        reportChannelId: "raid-reports",
+      },
+      policy: {
+        preset: "strict",
+        aiDetectorEnabled: true,
+        staffBypass: false,
+        profileRetentionDays: 60,
+      },
+      customPatterns: [
+        {
+          name: "invite",
+          pattern: "discord\\.gg",
+          flags: "i",
+          action: "delete",
+          timeoutSeconds: 300,
+        },
+      ],
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(guildWrites).toEqual([
+      {
+        guildId: "guild-1",
+        paths: {
+          "automod.domainWhitelist.enabled": true,
+          "automod.domainWhitelist.domains": ["example.com"],
+          "automod.crossChannelSpam.enabled": true,
+          "automod.crossChannelSpam.minChannels": 4,
+          "automod.crossChannelSpam.windowSeconds": 45,
+          "automod.crossChannelSpam.reportChannelId": "reports",
+          "automod.crossChannelSpam.autoTimeout": false,
+          "automod.crossChannelSpam.timeoutSeconds": 900,
+          "automod.slowmode.enabled": true,
+          "automod.slowmode.messagesPerWindow": 25,
+          "automod.slowmode.windowSeconds": 60,
+          "automod.slowmode.slowmodeSeconds": 10,
+          "automod.slowmode.releaseAfterSeconds": 120,
+          "automod.raidDetection.enabled": true,
+          "automod.raidDetection.joinsPerMinute": 12,
+          "automod.raidDetection.minAccountAgeDays": 5,
+          "automod.raidDetection.action": "alert",
+          "automod.raidDetection.reportChannelId": "raid-reports",
+          "automod.policy.preset": "strict",
+          "automod.policy.aiDetector.enabled": true,
+          "automod.policy.bypass.staffBypass": false,
+          "automod.policy.profileRetentionDays": 60,
+          "automod.customPatterns": [
+            {
+              name: "invite",
+              pattern: "discord\\.gg",
+              flags: "i",
+              action: "delete",
+              timeoutSeconds: 300,
+            },
+          ],
         },
         options: { upsert: true },
       },

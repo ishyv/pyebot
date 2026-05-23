@@ -130,6 +130,37 @@ export function v2Message(...children: V2Top[]): {
   return { components: children, flags: MessageFlags.IsComponentsV2 };
 }
 
+/** Standard success response for short command confirmations. */
+export function successMessage(title: string, body: string) {
+  return v2Message(container("ok", text(`## ${title}\n${body}`)));
+}
+
+/** Standard failure response for command/database errors shown to users. */
+export function failureMessage(body: string, title = "Failed") {
+  return v2Message(container("danger", text(`## ${title}\n${body}`)));
+}
+
+/**
+ * Standard config-update response with optional detail and footer blocks.
+ * Kept thin so feature commands still own their wording.
+ */
+export function configUpdateMessage(
+  accent: AccentKey,
+  title: string,
+  body: string,
+  details?: string,
+  footer?: string,
+) {
+  return v2Message(
+    container(
+      accent,
+      text(`## ${title}\n${body}`),
+      ...(details ? [separator("sm"), text(details)] : []),
+      ...(footer ? [separator("sm"), text(footer)] : []),
+    ),
+  );
+}
+
 /**
  * Builds a `ContainerBuilder` with the given accent and children.
  *

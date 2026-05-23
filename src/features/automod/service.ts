@@ -6,10 +6,16 @@
  *   2. Content filters: regex patterns matching spam/scam phrases → delete + report
  *
  * Configuration read from guild.automod (schema: AutomodSchema in guild.ts).
- * OCR/image analysis is intentionally excluded.
+ * Banned-image analysis only emits signals; policy still owns actions.
  */
 
-import { type GuildMember, type Message, PermissionFlagsBits, type TextChannel } from "discord.js";
+import {
+  type GuildMember,
+  type Message,
+  type MessageCreateOptions,
+  PermissionFlagsBits,
+  type TextChannel,
+} from "discord.js";
 import { getDb } from "@/core/db";
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
@@ -535,6 +541,8 @@ function reportChannelForSignals(
   signals: readonly AutomodSignal[],
 ): string | null {
   for (const signal of signals) {
+    if (signal.detectorId === "bannedImage" && config.imageDetection.reportChannelId)
+      return config.imageDetection.reportChannelId;
     if (signal.detectorId === "mentionSpam" && config.mentionSpam.reportChannelId)
       return config.mentionSpam.reportChannelId;
     if (signal.detectorId === "crossChannelSpam" && config.crossChannelSpam.reportChannelId)
@@ -546,7 +554,8 @@ function reportChannelForSignals(
     config.linkSpam.reportChannelId ??
     config.mentionSpam.reportChannelId ??
     config.crossChannelSpam.reportChannelId ??
-    config.raidDetection.reportChannelId
+    config.raidDetection.reportChannelId ??
+    config.imageDetection.reportChannelId
   );
 }
 
@@ -731,7 +740,6 @@ async function reportToChannel(
     const channel = await message.guild.channels.fetch(channelId);
     if (!channel?.isTextBased() || !("send" in channel)) return;
 
-    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
     await (channel as TextChannel).send(
       v2Message(
         container(
@@ -745,7 +753,7 @@ async function reportToChannel(
               `**Content:** ${message.content.slice(0, 500) || "(empty)"}`,
           ),
         ),
-      ) as any,
+      ) as MessageCreateOptions,
     );
   } catch (err) {
     log.error("Failed to report to automod channel", err);

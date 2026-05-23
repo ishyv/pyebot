@@ -126,7 +126,7 @@ export async function process(
     return ErrResult(new ProcessingError("PROFILE_NOT_FOUND", "User not found"));
   }
   const inventory = user.inventory ?? {};
-  const available = (inventory[recipeId] as number | undefined) ?? 0;
+  const available = inventory[recipeId] ?? 0;
 
   if (available < requiredMaterials) {
     return ErrResult(
@@ -180,7 +180,7 @@ export async function process(
     const latestUserRes = await getUser(userId);
     const latestInventory =
       (latestUserRes.isOk() ? latestUserRes.unwrap()?.inventory : undefined) ?? {};
-    const currentOutput = (latestInventory[recipe.output] as number | undefined) ?? 0;
+    const currentOutput = latestInventory[recipe.output] ?? 0;
     const grantRes = await updateUserPaths(userId, {
       [`inventory.${recipe.output}`]: currentOutput + outputGained,
     });

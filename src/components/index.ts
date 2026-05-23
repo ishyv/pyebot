@@ -8,6 +8,7 @@
 
 export * from "./achievement";
 export * from "./autorole-rule";
+export * from "./banned-image";
 export * from "./economy-account";
 export * from "./guild-ai";
 export * from "./guild-automod";

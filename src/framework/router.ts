@@ -15,17 +15,8 @@
  * would add code for no measurable benefit.
  */
 
-import type {
-  ButtonInteraction,
-  ChannelSelectMenuInteraction,
-  MentionableSelectMenuInteraction,
-  ModalSubmitInteraction,
-  RoleSelectMenuInteraction,
-  StringSelectMenuInteraction,
-  UserSelectMenuInteraction,
-} from "discord.js";
 import { getHandleMetadata } from "./decorators";
-import type { BoundComponentHandler, Ctx, LoadedFeature } from "./types";
+import type { BoundComponentHandler, LoadedFeature } from "./types";
 
 interface Route {
   readonly prefix: string;
@@ -68,22 +59,5 @@ export class ComponentRouter {
         return { handler: route.handler, featureId: route.featureId };
     }
     return null;
-  }
-
-  async dispatch(
-    interaction:
-      | ButtonInteraction
-      | StringSelectMenuInteraction
-      | ChannelSelectMenuInteraction
-      | MentionableSelectMenuInteraction
-      | RoleSelectMenuInteraction
-      | UserSelectMenuInteraction
-      | ModalSubmitInteraction,
-    ctx: Ctx,
-  ): Promise<boolean> {
-    const route = this.resolve(interaction.customId);
-    if (!route) return false;
-    await route.handler(interaction, ctx);
-    return true;
   }
 }

@@ -7,6 +7,7 @@ import { recordAutomodSystemCase } from "@/features/moderation/service";
 import { Listen, On } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { detectAiClassificationSignals } from "./aiDetector";
+import { detectBannedImageSignals } from "./bannedImages";
 import { detectCrossChannelSpam } from "./crossChannelSpam";
 import { detectMentionSpam } from "./mentionSpam";
 import {
@@ -101,6 +102,7 @@ export default class AutomodHandlers {
         ...detectMessageContentSignals(message, config),
         ...detectCrossChannelSpam(message, config),
         ...detectMentionSpam(message, config),
+        ...(await detectBannedImageSignals(message, config)),
         ...(await detectAiClassificationSignals(message, config)),
       ];
       await processAutomodSignals(message, config, signals);

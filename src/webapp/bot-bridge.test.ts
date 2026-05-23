@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import sharp from "sharp";
 import { bus } from "@/core/bus";
 import { OkResult } from "@/core/result";
 
@@ -13,10 +14,30 @@ const guildWrites: Array<{ guildId: string; paths: Record<string, unknown>; opti
   [];
 
 const moderationCalls: Array<{ type: string; args: unknown[] }> = [];
+const embedConfigs = new Map<string, Record<string, unknown>>();
+const sentEmbeds: Array<{ args: unknown[] }> = [];
+let activeBridgeBannedImages: unknown[] = [];
+
+function samplePng(): Promise<Buffer> {
+  return sharp({
+    create: {
+      width: 8,
+      height: 8,
+      channels: 3,
+      background: { r: 255, g: 0, b: 0 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
 
 mock.module("@/core/db", () => ({
   getDb: async () => ({
     collection: (name: string) => ({
+      insertOne: async (doc: unknown) => {
+        if (name === "banned_images") activeBridgeBannedImages.push(doc);
+        return { insertedId: (doc as { _id?: string })._id };
+      },
       updateOne: async (filter: unknown, update: Record<string, unknown>, options: unknown) => {
         collectionUpdates.push({ collection: name, filter, update, options });
         return { matchedCount: 1, modifiedCount: 1 };
@@ -27,6 +48,17 @@ mock.module("@/core/db", () => ({
         options: unknown,
       ) => {
         collectionUpdates.push({ collection: name, filter, update, options });
+        if (name === "banned_images") {
+          const criteria = filter as { _id?: string; guildId?: string };
+          const existing = activeBridgeBannedImages.find(
+            (entry) =>
+              (entry as { _id?: string; guildId?: string })._id === criteria._id &&
+              (entry as { _id?: string; guildId?: string }).guildId === criteria.guildId,
+          ) as Record<string, unknown> | undefined;
+          if (!existing) return null;
+          Object.assign(existing, (update.$set as Record<string, unknown> | undefined) ?? {});
+          return existing;
+        }
         return { _id: "guild-1", daily: {}, work: {}, sectors: {} };
       },
       find: () => ({
@@ -34,6 +66,7 @@ mock.module("@/core/db", () => ({
           limit: () => ({
             toArray: async () => [],
           }),
+          toArray: async () => (name === "banned_images" ? activeBridgeBannedImages : []),
         }),
         limit: () => ({
           toArray: async () => [],
@@ -52,7 +85,7 @@ mock.module("@/db/repositories/guilds", () => ({
       _id: guildId,
       channels: { core: {} },
       moderation: { quarantine: { enabled: true, roleId: "quarantine-role" } },
-      automod: { linkSpam: {}, mentionSpam: {} },
+      automod: { linkSpam: {}, mentionSpam: {}, imageDetection: { tolerance: "balanced" } },
       roles: {},
     }),
   getGuild: async (guildId: string) =>
@@ -60,7 +93,7 @@ mock.module("@/db/repositories/guilds", () => ({
       _id: guildId,
       channels: { core: {} },
       moderation: { quarantine: { enabled: true, roleId: "quarantine-role" } },
-      automod: { linkSpam: {}, mentionSpam: {} },
+      automod: { linkSpam: {}, mentionSpam: {}, imageDetection: { tolerance: "balanced" } },
       roles: {},
     }),
   patchGuild: async (guildId: string, patch: Record<string, unknown>) =>
@@ -85,6 +118,35 @@ mock.module("@/components/guild-features", () => ({
   resolveFeatureEnabled: () => true,
   setGuildFeatureOverride: async () => OkResult({ overrides: {} }),
   setGuildFeatureOverrides: async () => OkResult({ overrides: {} }),
+}));
+
+mock.module("@/db/repositories/embeds", () => ({
+  deleteEmbedConfig: async (id: string) => {
+    const deleted = embedConfigs.delete(id);
+    return OkResult(deleted);
+  },
+  embedConfigId: (guildId: string, name: string) => `${guildId}:${name}`,
+  getEmbedConfig: async (guildId: string, name: string) =>
+    OkResult(embedConfigs.get(`${guildId}:${name}`) ?? null),
+  listEmbedConfigs: async (guildId: string) =>
+    OkResult([...embedConfigs.values()].filter((config) => config.guildId === guildId)),
+  patchEmbedConfig: async (id: string, patch: Record<string, unknown>) => {
+    const existing = embedConfigs.get(id);
+    if (!existing) return OkResult(null);
+    Object.assign(existing, patch);
+    return OkResult(existing);
+  },
+  saveEmbedConfig: async (config: Record<string, unknown>) => {
+    embedConfigs.set(String(config._id), config);
+    return OkResult(config);
+  },
+}));
+
+mock.module("@/features/embeds/service", () => ({
+  sendEmbed: async (...args: unknown[]) => {
+    sentEmbeds.push({ args });
+    return { id: "message-1" };
+  },
 }));
 
 mock.module("@/core/featureCatalog", () => ({
@@ -185,7 +247,11 @@ function fakeClient(canModerate = true) {
     iconURL: () => null,
     channels: {
       cache: new Map(),
-      fetch: async () => ({ isTextBased: () => true, send: async () => undefined }),
+      fetch: async () => ({
+        isTextBased: () => true,
+        permissionsFor: () => ({ has: () => true }),
+        send: async () => ({ id: "message-1" }),
+      }),
     },
     roles: { cache: new Map() },
     members: {
@@ -219,6 +285,42 @@ function fakeClient(canModerate = true) {
 }
 
 describe("webapp bot bridge", () => {
+  it("keeps root bridge composed from focused feature modules", async () => {
+    const modules = await Promise.all([
+      import("./bot-bridge/guild"),
+      import("./bot-bridge/features"),
+      import("./bot-bridge/economy"),
+      import("./bot-bridge/automod"),
+      import("./bot-bridge/banned-images"),
+      import("./bot-bridge/moderation"),
+      import("./bot-bridge/embeds"),
+      import("./bot-bridge/rpg-content"),
+    ]);
+
+    for (const module of modules) {
+      expect(Object.values(module).some((value) => typeof value === "function")).toBe(true);
+    }
+  });
+
+  it("exposes representative methods from every bridge cluster", async () => {
+    const { createBridgeFromClient } = await import("./bot-bridge");
+    const bridge = createBridgeFromClient(fakeClient() as never);
+
+    for (const method of [
+      "getChannels",
+      "saveChannels",
+      "listFeatures",
+      "saveEconomy",
+      "saveAutomod",
+      "listBannedImages",
+      "runModerationAction",
+      "listEmbeds",
+      "getRpgContent",
+    ] as const) {
+      expect(typeof bridge[method]).toBe("function");
+    }
+  });
+
   it("writes economy settings to the guild_economy component collection", async () => {
     collectionUpdates.length = 0;
     guildWrites.length = 0;
@@ -301,6 +403,99 @@ describe("webapp bot bridge", () => {
       detail: "Updated channels: logs",
       timestamp: expect.any(Number),
     });
+  });
+
+  it("adds dashboard-uploaded banned images without storing image bytes", async () => {
+    activeBridgeBannedImages = [];
+    const { createBridgeFromClient } = await import("./bot-bridge");
+    const bridge = createBridgeFromClient(fakeClient() as never) as never as {
+      addBannedImage: (
+        guildId: string,
+        input: {
+          filename: string;
+          contentType: string;
+          bytes: Uint8Array;
+          reason: string;
+          label: string;
+        },
+        actorId: string,
+      ) => Promise<{ isOk(): boolean; unwrap(): { id: string; sourceUrl: string | null } }>;
+    };
+
+    const result = await bridge.addBannedImage(
+      "guild-1",
+      {
+        filename: "image.png",
+        contentType: "image/png",
+        bytes: await samplePng(),
+        reason: "blocked",
+        label: "bad image",
+      },
+      "mod-1",
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({ sourceUrl: null });
+    expect(activeBridgeBannedImages).toHaveLength(1);
+    expect(activeBridgeBannedImages[0]).toMatchObject({
+      guildId: "guild-1",
+      reason: "blocked",
+      label: "bad image",
+      sourceUrl: null,
+      sourceContentType: "image/png",
+      sourceFilename: "image.png",
+    });
+    expect(activeBridgeBannedImages[0]).not.toHaveProperty("bytes");
+  });
+
+  it("tests uploaded images against active banned-image records without mutating", async () => {
+    const { hashImageBuffer } = await import("@/features/automod/imageHash");
+    const png = await samplePng();
+    activeBridgeBannedImages = [
+      {
+        _id: "guild-1:img-1",
+        guildId: "guild-1",
+        status: "active",
+        reason: "blocked",
+        label: "bad image",
+        sourceUrl: null,
+        sourceContentType: "image/png",
+        sourceFilename: "image.png",
+        hashes: await hashImageBuffer(png),
+        addedBy: "mod-1",
+        addedAt: new Date("2026-05-22T00:00:00.000Z"),
+        removedBy: null,
+        removedAt: null,
+      },
+    ];
+    const { createBridgeFromClient } = await import("./bot-bridge");
+    const bridge = createBridgeFromClient(fakeClient() as never) as never as {
+      testBannedImage: (
+        guildId: string,
+        input: { filename: string; contentType: string; bytes: Uint8Array },
+      ) => Promise<{
+        isOk(): boolean;
+        unwrap(): {
+          matched: boolean;
+          record: { id: string } | null;
+          distance: { total: number } | null;
+        };
+      }>;
+    };
+
+    const result = await bridge.testBannedImage("guild-1", {
+      filename: "probe.png",
+      contentType: "image/png",
+      bytes: png,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result.unwrap()).toMatchObject({
+      matched: true,
+      record: expect.objectContaining({ id: "img-1" }),
+      distance: { average: 0, difference: 0, verticalDifference: 0, total: 0 },
+    });
+    expect(activeBridgeBannedImages).toHaveLength(1);
   });
 
   it("does not fetch uncached guild status from Discord during dashboard reads", async () => {
@@ -389,6 +584,66 @@ describe("webapp bot bridge", () => {
 
     expect(result.isErr()).toBe(true);
     expect(guildWrites).toEqual([]);
+  });
+
+  it("saves, sends, and deletes embeds through the public bridge", async () => {
+    embedConfigs.clear();
+    sentEmbeds.length = 0;
+    const { createBridgeFromClient } = await import("./bot-bridge");
+    const bridge = createBridgeFromClient(fakeClient() as never);
+    const seen: unknown[] = [];
+    bridge.events.on("event", (event) => seen.push(event));
+
+    const draft = {
+      embedTitle: "Rules",
+      embedDescription: "Read them.",
+      embedColor: null,
+      embedUrl: null,
+      embedThumbnail: null,
+      embedImage: null,
+      embedAuthorName: null,
+      embedAuthorIconUrl: null,
+      embedAuthorUrl: null,
+      embedFooterText: null,
+      embedFooterIconUrl: null,
+      embedFields: [],
+      script: null,
+      scriptEnabled: false,
+      channelId: "channel-1",
+      scheduleEnabled: false,
+      scheduleIntervalHours: null,
+      stickyEnabled: true,
+    };
+
+    const saveResult = await bridge.saveEmbed("guild-1", "Rules!", draft, "mod-1");
+    const sendResult = await bridge.sendEmbed("guild-1", "rules", "mod-1");
+    const deleteResult = await bridge.deleteEmbed("guild-1", "rules", "mod-1");
+
+    expect(saveResult.isOk()).toBe(true);
+    expect(sendResult.isOk()).toBe(true);
+    expect(deleteResult.isOk()).toBe(true);
+    expect(sentEmbeds).toHaveLength(1);
+    expect(seen).toContainEqual({
+      type: "config_changed",
+      guildId: "guild-1",
+      actorId: "mod-1",
+      detail: "Saved embed rules",
+      timestamp: expect.any(Number),
+    });
+    expect(seen).toContainEqual({
+      type: "config_changed",
+      guildId: "guild-1",
+      actorId: "mod-1",
+      detail: "Sent embed rules",
+      timestamp: expect.any(Number),
+    });
+    expect(seen).toContainEqual({
+      type: "config_changed",
+      guildId: "guild-1",
+      actorId: "mod-1",
+      detail: "Deleted embed rules",
+      timestamp: expect.any(Number),
+    });
   });
 
   it("forwards moderation bus events to SSE subscribers", async () => {

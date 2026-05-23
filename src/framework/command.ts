@@ -4,6 +4,7 @@ import type { CommandHelp, CommandModule, Ctx } from "./types";
 type CommandDefinition = {
   readonly data: CommandModule["data"];
   readonly help: CommandHelp;
+  readonly requiresAdmin?: boolean;
   // biome-ignore lint/suspicious/noExplicitAny: some migrated commands still use the responder-based context.
   execute(interaction: ChatInputCommandInteraction, ctx: any): Promise<void>;
   autocomplete?(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void>;

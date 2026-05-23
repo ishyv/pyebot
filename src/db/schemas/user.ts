@@ -53,13 +53,23 @@ export const ModNoteSchema = z.object({
 });
 export type ModNote = z.infer<typeof ModNoteSchema>;
 
+/**
+ * Legacy RPG inventory stored directly on the user document.
+ * Keys are runtime item IDs; values are nonnegative stack counts.
+ */
+export const UserInventorySchema = z.record(z.string(), z.number().int().nonnegative()).default({});
+export type UserInventory = z.infer<typeof UserInventorySchema>;
+
 export const UserSchema = z.object({
   _id: z.string(),
   warns: z.array(WarnSchema).catch(() => []),
   sanction_history: z.record(z.string(), z.array(SanctionHistoryEntrySchema)).catch(() => ({})),
   openTickets: z.array(z.string()).catch(() => []),
+  // Legacy user-doc currency bag still used by RPG processing/hideout paths.
+  // Current economy spendable balances live in UserCurrency.balances.
   currency: CurrencyInventorySchema.catch(() => ({})),
-  inventory: z.record(z.string(), z.unknown()).catch(() => ({})),
+  inventory: UserInventorySchema,
+  // Legacy user-doc bank bag. Current economy bank balances live in UserCurrency.bankBalances.
   bank: z
     .record(z.string(), z.number())
     .optional()
@@ -76,7 +86,7 @@ export const UserSchema = z.object({
       z.array(z.string()).catch(() => []),
     )
     .catch(() => ({})),
-  // Economy account data
+  // Legacy embedded economy metadata. Current economy status/streak data lives in the EconomyAccount component.
   economyAccount: EconomyAccountSchema.optional().catch(() => undefined) as z.ZodType<
     EconomyAccountData | undefined
   >,

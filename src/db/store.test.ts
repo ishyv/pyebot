@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
+import { parseDocuments } from "./store";
 
 // We test MongoStore's parse/default behavior by using a minimal schema
 // DB integration tests require MONGO_URI
@@ -8,6 +9,37 @@ const TestSchema = z.object({
   _id: z.string(),
   name: z.string().catch("default_name"),
   count: z.number().int().catch(0),
+});
+
+// A strict schema with NO .catch() fallbacks, so a malformed document
+// actually fails Zod validation (TestSchema can never fail — every field catches).
+const StrictSchema = z.object({
+  _id: z.string(),
+  n: z.number(),
+});
+
+describe("parseDocuments (batch parse isolation)", () => {
+  test("keeps valid documents and skips invalid ones", () => {
+    const docs = [
+      { _id: "a", n: 1 },
+      { _id: "bad", n: "not a number" },
+      { _id: "b", n: 2 },
+    ];
+    const result = parseDocuments(StrictSchema, docs, "__test_store");
+    expect(result.map((d) => d._id)).toEqual(["a", "b"]);
+  });
+
+  test("returns every document when all are valid", () => {
+    const docs = [
+      { _id: "a", n: 1 },
+      { _id: "b", n: 2 },
+    ];
+    expect(parseDocuments(StrictSchema, docs, "__test_store")).toHaveLength(2);
+  });
+
+  test("returns an empty array for no documents", () => {
+    expect(parseDocuments(StrictSchema, [], "__test_store")).toEqual([]);
+  });
 });
 
 describe("MongoStore (unit — schema behavior)", () => {

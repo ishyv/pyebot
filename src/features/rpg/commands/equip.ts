@@ -43,8 +43,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   // Filter inventory to items that are valid tools and present with qty >= 1
   const availableTools = Object.entries(inventory)
-    .filter(([itemId, qty]) => EQUIPABLE_TOOLS.has(itemId) && typeof qty === "number" && qty >= 1)
-    .map(([itemId, qty]) => ({ itemId, qty: qty as number }));
+    .filter(([itemId, qty]) => EQUIPABLE_TOOLS.has(itemId) && qty >= 1)
+    .map(([itemId, qty]) => ({ itemId, qty }));
 
   if (availableTools.length === 0) {
     await interaction.editReply(

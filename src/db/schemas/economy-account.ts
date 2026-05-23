@@ -1,8 +1,9 @@
 /**
- * Zod schema for EconomyAccount subdocument.
+ * Legacy embedded EconomyAccount subdocument on UserSchema.
  *
- * Purpose: Runtime validation and default values for economy account metadata.
- * Encaje: Imported by UserSchema and the economy account feature module.
+ * Purpose: Runtime validation and default values for old user-doc account metadata.
+ * Encaje: Imported by UserSchema so persisted legacy user documents keep parsing.
+ * Current economy account state lives in src/components/economy-account.ts.
  * Dependencies: Zod for validation.
  * Invariants:
  * - All dates default to new Date() if missing/invalid.
@@ -31,14 +32,14 @@ export const EconomyAccountSchema = z.object({
   lastDailyAt: z.coerce.date().nullable().catch(null),
 });
 
-/** Type for economy account data as stored in DB. */
+/** Type for legacy embedded economy account data as stored in user documents. */
 export type EconomyAccountData = z.infer<typeof EconomyAccountSchema>;
 
 /** Partial type for updates. */
 export type EconomyAccountPatch = Partial<EconomyAccountData>;
 
 /**
- * Safely parse economy account data with full defaults.
+ * Safely parse legacy embedded economy account data with full defaults.
  * Returns null if input is null/undefined.
  * All fields have .catch() so EconomyAccountSchema.parse() never throws.
  */

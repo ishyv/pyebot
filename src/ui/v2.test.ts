@@ -13,9 +13,12 @@ import { describe, expect, test } from "bun:test";
 import { ButtonBuilder, ButtonStyle, MessageFlags } from "discord.js";
 import { parseCustomId } from "./customId";
 import {
+  configUpdateMessage,
   container,
+  failureMessage,
   progress,
   row,
+  successMessage,
   text,
   V2_COMPONENT_LIMIT,
   V2_TOP_LEVEL_LIMIT,
@@ -58,6 +61,40 @@ describe("v2Message", () => {
     const chunk = "a".repeat(2000);
     const payload = v2Message(container("info", text(chunk), text(chunk)));
     expect(payload.components).toHaveLength(1);
+  });
+});
+
+describe("standard V2 response builders", () => {
+  test("successMessage renders a V2 ok message with heading and body", () => {
+    const payload = successMessage("Saved", "Config updated.");
+
+    expect(payload.flags).toBe(MessageFlags.IsComponentsV2);
+    expect(JSON.stringify(payload.components)).toContain("## Saved\\nConfig updated.");
+  });
+
+  test("failureMessage defaults to the Failed heading and keeps custom body text", () => {
+    const payload = failureMessage("Could not update configuration.");
+
+    expect(payload.flags).toBe(MessageFlags.IsComponentsV2);
+    expect(JSON.stringify(payload.components)).toContain(
+      "## Failed\\nCould not update configuration.",
+    );
+  });
+
+  test("configUpdateMessage includes optional details and footer only when provided", () => {
+    const compact = configUpdateMessage("ok", "Saved", "Config updated.");
+    const detailed = configUpdateMessage(
+      "ok",
+      "Saved",
+      "Config updated.",
+      "**Window:** 5s",
+      "-# Use /automod status to see full config",
+    );
+
+    expect(JSON.stringify(compact.components)).not.toContain("Window");
+    expect(JSON.stringify(compact.components)).not.toContain("/automod status");
+    expect(JSON.stringify(detailed.components)).toContain("**Window:** 5s");
+    expect(JSON.stringify(detailed.components)).toContain("/automod status");
   });
 });
 

@@ -100,6 +100,52 @@ describe("SessionManager", () => {
     mgr.delete("key1");
     expect(mgr.has("key1")).toBe(false);
   });
+
+  test("entries expire after the configured ttl", () => {
+    const mgr = new SessionManager<string>({ ttlMs: 10, maxEntries: null });
+    mgr.set("key1", "data");
+
+    advance(11);
+
+    expect(mgr.get("key1")).toBeUndefined();
+    expect(mgr.has("key1")).toBe(false);
+  });
+
+  test("ttl can be disabled", () => {
+    const mgr = new SessionManager<string>({ ttlMs: null, maxEntries: null });
+    mgr.set("key1", "data");
+
+    advance(365 * 24 * 60 * 60 * 1000);
+
+    expect(mgr.get("key1")).toBe("data");
+    expect(mgr.has("key1")).toBe(true);
+  });
+
+  test("maxEntries evicts least recently used entries", () => {
+    const mgr = new SessionManager<string>({ ttlMs: null, maxEntries: 2 });
+    mgr.set("first", "a");
+    mgr.set("second", "b");
+    expect(mgr.get("first")).toBe("a");
+
+    mgr.set("third", "c");
+
+    expect(mgr.get("first")).toBe("a");
+    expect(mgr.get("second")).toBeUndefined();
+    expect(mgr.get("third")).toBe("c");
+  });
+
+  test("set prunes expired entries before enforcing maxEntries", () => {
+    const mgr = new SessionManager<string>({ ttlMs: 10, maxEntries: 2 });
+    mgr.set("expired", "a");
+    advance(11);
+
+    mgr.set("fresh1", "b");
+    mgr.set("fresh2", "c");
+
+    expect(mgr.get("expired")).toBeUndefined();
+    expect(mgr.get("fresh1")).toBe("b");
+    expect(mgr.get("fresh2")).toBe("c");
+  });
 });
 
 describe("LockSet", () => {

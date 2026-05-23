@@ -6,17 +6,38 @@ const updateCalls: Array<{
   paths: Record<string, unknown>;
   options: unknown;
 }> = [];
+const bannedImageCalls: Array<{ type: string; args: unknown[] }> = [];
+const invalidatedGuilds: string[] = [];
+
+interface TestGuild {
+  _id: string;
+  automod: {
+    domainWhitelist: {
+      enabled: boolean;
+      domains: string[];
+    };
+    customPatterns: unknown[];
+  };
+}
 
 let updateResult = OkResult(undefined);
+let activeBannedImages: unknown[] = [];
+let activeGuild: TestGuild | null = null;
 
 mock.module("@/db/repositories/guilds", () => ({
   guildStore: {},
   ensureGuild: async () => OkResult(null),
-  getGuild: async () => OkResult(null),
+  getGuild: async () => OkResult(activeGuild),
   patchGuild: async () => OkResult(null),
   updateGuildPaths: async (guildId: string, paths: Record<string, unknown>, options: unknown) => {
     updateCalls.push({ guildId, paths, options });
     return updateResult;
+  },
+}));
+
+mock.module("@/features/automod/service", () => ({
+  invalidatePatternCache: (guildId: string) => {
+    invalidatedGuilds.push(guildId);
   },
 }));
 
@@ -25,26 +46,101 @@ mock.module("@/features/adminPanels/panels", () => ({
   openAdminPanel: async () => undefined,
 }));
 
+mock.module("@/features/automod/imageHash", () => ({
+  hashImageBuffer: async () => ({
+    average: "ffff0000ffff0000",
+    difference: "0000ffff0000ffff",
+    verticalDifference: "f0f0f0f00f0f0f0f",
+  }),
+}));
+
+mock.module("@/features/automod/bannedImages", () => ({
+  addBannedImage: async (...args: unknown[]) => {
+    bannedImageCalls.push({ type: "addBannedImage", args });
+    return {
+      _id: "guild-1:image-1",
+      guildId: "guild-1",
+      status: "active",
+      reason: "scam image",
+      label: "scam",
+    };
+  },
+  displayBannedImageId: (record: { _id: string; guildId: string }) =>
+    record._id.replace(`${record.guildId}:`, ""),
+  fetchImageAttachmentBuffer: async (...args: unknown[]) => {
+    bannedImageCalls.push({ type: "fetchImageAttachmentBuffer", args });
+    return Buffer.from("image");
+  },
+  isSupportedImageAttachment: () => true,
+  listActiveBannedImages: async (...args: unknown[]) => {
+    bannedImageCalls.push({ type: "listActiveBannedImages", args });
+    return activeBannedImages;
+  },
+  removeBannedImage: async (...args: unknown[]) => {
+    bannedImageCalls.push({ type: "removeBannedImage", args });
+    return {
+      _id: "guild-1:image-1",
+      guildId: "guild-1",
+      status: "removed",
+      reason: "scam image",
+      label: "scam",
+    };
+  },
+}));
+
+function makeGuild(overrides: Partial<{ domains: string[]; patterns: unknown[] }> = {}) {
+  return {
+    _id: "guild-1",
+    automod: {
+      domainWhitelist: {
+        enabled: true,
+        domains: overrides.domains ?? [],
+      },
+      customPatterns: overrides.patterns ?? [],
+    },
+  };
+}
+
 function linkspamInteraction() {
+  return automodInteraction("linkspam", {
+    strings: {
+      action: "enable",
+      response: "delete",
+    },
+    integers: {
+      max_links: 2,
+      window_seconds: 5,
+    },
+  });
+}
+
+function automodInteraction(
+  subcommand: string,
+  values: {
+    strings?: Record<string, string | null>;
+    integers?: Record<string, number | null>;
+    booleans?: Record<string, boolean | null>;
+    channels?: Record<string, { id: string } | null>;
+  } = {},
+) {
   return {
     guildId: "guild-1",
+    user: { id: "mod-1" },
     options: {
-      getSubcommand: () => "linkspam",
+      getSubcommand: () => subcommand,
       getString: (name: string, required?: boolean) => {
-        const values: Record<string, string> = {
-          action: "enable",
-          response: "delete",
-        };
-        const value = values[name] ?? null;
+        const value = values.strings?.[name] ?? null;
         if (required && value === null) throw new Error(`missing ${name}`);
         return value;
       },
       getInteger: (name: string) => {
-        const values: Record<string, number> = {
-          max_links: 2,
-          window_seconds: 5,
-        };
-        return values[name] ?? null;
+        return values.integers?.[name] ?? null;
+      },
+      getBoolean: (name: string) => {
+        return values.booleans?.[name] ?? null;
+      },
+      getChannel: (name: string) => {
+        return values.channels?.[name] ?? null;
       },
     },
     async deferReply() {
@@ -52,6 +148,40 @@ function linkspamInteraction() {
     },
     async editReply() {
       throw new Error("automod commands must use ctx.respond instead of raw editReply");
+    },
+  };
+}
+
+function imageInteraction(subcommand: string) {
+  return {
+    guildId: "guild-1",
+    user: { id: "mod-1" },
+    options: {
+      getSubcommand: () => subcommand,
+      getAttachment: (name: string, required?: boolean) => {
+        if (name !== "image" && required) throw new Error(`missing ${name}`);
+        return {
+          id: "attachment-1",
+          url: "https://cdn.example/image.png",
+          contentType: "image/png",
+          name: "image.png",
+          size: 32,
+        };
+      },
+      getString: (name: string, required?: boolean) => {
+        const values: Record<string, string> = {
+          reason: "scam image",
+          label: "scam",
+          id: "image-1",
+          action: "enable",
+        };
+        const value = values[name] ?? null;
+        if (required && value === null) throw new Error(`missing ${name}`);
+        return value;
+      },
+      getInteger: () => null,
+      getBoolean: () => null,
+      getChannel: () => ({ id: "reports" }),
     },
   };
 }
@@ -110,5 +240,273 @@ describe("/automod linkspam", () => {
     await command.execute(linkspamInteraction() as never, ctx as never);
 
     expect(calls.map((call) => call.method)).toEqual(["defer", "fail"]);
+  });
+});
+
+describe("/automod command decomposition", () => {
+  it("keeps the slash data and subcommand table in focused modules", async () => {
+    const [{ data }, { automodSubcommands }] = await Promise.all([
+      import("./automod-data"),
+      import("./subcommands"),
+    ]);
+
+    expect(data.name).toBe("automod");
+    expect(typeof automodSubcommands.linkspam).toBe("function");
+    expect(typeof automodSubcommands["image-list"]).toBe("function");
+    expect(typeof automodSubcommands.panel).toBe("function");
+  });
+});
+
+describe("/automod config subcommands", () => {
+  it("writes cross-channel, slowmode, raid, and policy config paths", async () => {
+    updateCalls.length = 0;
+    updateResult = OkResult(undefined);
+    const { default: command } = await import("./automod");
+    const { ctx } = fakeContext();
+
+    await command.execute(
+      automodInteraction("crosschannel", {
+        strings: { action: "enable" },
+        integers: { min_channels: 4, window_seconds: 45, timeout_seconds: 900 },
+        booleans: { auto_timeout: false },
+        channels: { report_channel: { id: "reports" } },
+      }) as never,
+      ctx as never,
+    );
+    await command.execute(
+      automodInteraction("slowmode", {
+        strings: { action: "enable" },
+        integers: {
+          messages_per_window: 25,
+          window_seconds: 60,
+          slowmode_seconds: 10,
+          release_after: 120,
+        },
+      }) as never,
+      ctx as never,
+    );
+    await command.execute(
+      automodInteraction("raid", {
+        strings: { action: "enable", response: "alert" },
+        integers: { joins_per_minute: 12, min_account_age: 5 },
+        channels: { report_channel: { id: "raid-reports" } },
+      }) as never,
+      ctx as never,
+    );
+    await command.execute(
+      automodInteraction("policy", {
+        strings: { preset: "strict" },
+        booleans: { ai_detector: true, staff_bypass: false },
+        integers: { retention_days: 60 },
+      }) as never,
+      ctx as never,
+    );
+
+    expect(updateCalls.map((call) => call.paths)).toEqual([
+      {
+        "automod.crossChannelSpam.enabled": true,
+        "automod.crossChannelSpam.minChannels": 4,
+        "automod.crossChannelSpam.windowSeconds": 45,
+        "automod.crossChannelSpam.reportChannelId": "reports",
+        "automod.crossChannelSpam.autoTimeout": false,
+        "automod.crossChannelSpam.timeoutSeconds": 900,
+      },
+      {
+        "automod.slowmode.enabled": true,
+        "automod.slowmode.messagesPerWindow": 25,
+        "automod.slowmode.windowSeconds": 60,
+        "automod.slowmode.slowmodeSeconds": 10,
+        "automod.slowmode.releaseAfterSeconds": 120,
+      },
+      {
+        "automod.raidDetection.enabled": true,
+        "automod.raidDetection.joinsPerMinute": 12,
+        "automod.raidDetection.minAccountAgeDays": 5,
+        "automod.raidDetection.action": "alert",
+        "automod.raidDetection.reportChannelId": "raid-reports",
+      },
+      {
+        "automod.policy.preset": "strict",
+        "automod.policy.aiDetector.enabled": true,
+        "automod.policy.bypass.staffBypass": false,
+        "automod.policy.profileRetentionDays": 60,
+      },
+    ]);
+  });
+
+  it("preserves whitelist add/remove messages and writes", async () => {
+    updateCalls.length = 0;
+    activeGuild = makeGuild({ domains: ["old.example"] });
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(
+      automodInteraction("whitelist", {
+        strings: { action: "add", domain: "New.Example" },
+      }) as never,
+      ctx as never,
+    );
+    await command.execute(
+      automodInteraction("whitelist", {
+        strings: { action: "remove", domain: "old.example" },
+      }) as never,
+      ctx as never,
+    );
+
+    expect(updateCalls.map((call) => call.paths)).toEqual([
+      {
+        "automod.domainWhitelist.enabled": true,
+        "automod.domainWhitelist.domains": ["old.example", "new.example"],
+      },
+      {
+        "automod.domainWhitelist.enabled": true,
+        "automod.domainWhitelist.domains": [],
+      },
+    ]);
+    expect(calls.map((call) => call.method)).toEqual(["defer", "send", "defer", "send"]);
+  });
+
+  it("preserves pattern add/remove/list behavior and invalidates cache on writes", async () => {
+    updateCalls.length = 0;
+    invalidatedGuilds.length = 0;
+    activeGuild = makeGuild({
+      patterns: [
+        {
+          name: "invite",
+          pattern: "discord\\.gg",
+          flags: "i",
+          action: "delete",
+          timeoutSeconds: 300,
+        },
+      ],
+    });
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(
+      automodInteraction("pattern", {
+        strings: { action: "list" },
+      }) as never,
+      ctx as never,
+    );
+    await command.execute(
+      automodInteraction("pattern", {
+        strings: { action: "remove", name: "invite" },
+      }) as never,
+      ctx as never,
+    );
+    activeGuild = makeGuild({ patterns: [] });
+    await command.execute(
+      automodInteraction("pattern", {
+        strings: {
+          action: "add",
+          name: "invite",
+          regex: "discord\\.gg",
+          flags: "i",
+          response: "delete",
+        },
+        integers: { timeout_seconds: 300 },
+      }) as never,
+      ctx as never,
+    );
+
+    expect(updateCalls.map((call) => call.paths)).toEqual([
+      { "automod.customPatterns": [] },
+      {
+        "automod.customPatterns": [
+          {
+            name: "invite",
+            pattern: "discord\\.gg",
+            flags: "i",
+            action: "delete",
+            timeoutSeconds: 300,
+          },
+        ],
+      },
+    ]);
+    expect(invalidatedGuilds).toEqual(["guild-1", "guild-1"]);
+    expect(JSON.stringify(calls)).toContain("discord\\\\.gg");
+  });
+});
+
+describe("/automod banned images", () => {
+  it("adds a banned image through the framework responder", async () => {
+    bannedImageCalls.length = 0;
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(imageInteraction("image-add") as never, ctx as never);
+
+    expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
+    expect(bannedImageCalls.map((call) => call.type)).toEqual([
+      "fetchImageAttachmentBuffer",
+      "addBannedImage",
+    ]);
+    expect(bannedImageCalls[1]?.args[0]).toMatchObject({
+      guildId: "guild-1",
+      actorId: "mod-1",
+      reason: "scam image",
+      label: "scam",
+      sourceUrl: "https://cdn.example/image.png",
+    });
+  });
+
+  it("lists active banned images", async () => {
+    bannedImageCalls.length = 0;
+    activeBannedImages = [
+      {
+        _id: "guild-1:image-1",
+        guildId: "guild-1",
+        reason: "scam image",
+        label: "scam",
+      },
+    ];
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(imageInteraction("image-list") as never, ctx as never);
+
+    expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
+    expect(bannedImageCalls[0]).toEqual({
+      type: "listActiveBannedImages",
+      args: ["guild-1"],
+    });
+  });
+
+  it("soft-removes a banned image by id", async () => {
+    bannedImageCalls.length = 0;
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(imageInteraction("image-remove") as never, ctx as never);
+
+    expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
+    expect(bannedImageCalls[0]).toEqual({
+      type: "removeBannedImage",
+      args: ["guild-1", "image-1", "mod-1"],
+    });
+  });
+
+  it("toggles image detection and sets the image report channel", async () => {
+    updateCalls.length = 0;
+    updateResult = OkResult(undefined);
+    const { default: command } = await import("./automod");
+    const { ctx } = fakeContext();
+
+    await command.execute(imageInteraction("image-toggle") as never, ctx as never);
+    await command.execute(imageInteraction("image-channel") as never, ctx as never);
+
+    expect(updateCalls).toEqual([
+      {
+        guildId: "guild-1",
+        paths: { "automod.imageDetection.enabled": true },
+        options: { upsert: true },
+      },
+      {
+        guildId: "guild-1",
+        paths: { "automod.imageDetection.reportChannelId": "reports" },
+        options: { upsert: true },
+      },
+    ]);
   });
 });

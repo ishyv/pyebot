@@ -49,8 +49,6 @@ export interface RecipeSummary {
   };
 }
 
-export type { ItemDef };
-
 interface ParsedPack {
   readonly source: string;
   readonly sourceFile: ts.SourceFile;

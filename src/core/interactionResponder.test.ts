@@ -76,6 +76,21 @@ describe("InteractionResponder", () => {
       flags: MessageFlags.Ephemeral,
     });
   });
+
+  it("keeps the V2 flag when reporting an ephemeral failure", async () => {
+    const { interaction, calls } = fakeInteraction();
+    const responder = createInteractionResponder(interaction as never);
+
+    await responder.fail({
+      components: [],
+      flags: MessageFlags.IsComponentsV2,
+    });
+
+    expect(calls[0]?.payload).toEqual({
+      components: [],
+      flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+    });
+  });
 });
 
 describe("Discord interaction error classification", () => {

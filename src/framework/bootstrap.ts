@@ -32,13 +32,14 @@ import type {
   StringSelectMenuInteraction,
   UserSelectMenuInteraction,
 } from "discord.js";
+import { MessageFlags } from "discord.js";
 import { setFeatureCatalog } from "@/core/featureCatalog";
 import { createLogger } from "@/core/logger";
 import { FEATURE_CONFIGS } from "@/features/config";
 import { buildCommandCatalog, installCommandCatalog } from "@/utils/command-registry";
 import { getListenMetadata, getOnMetadata } from "./decorators";
 import { loadFeatures } from "./loader";
-import { isFeatureEnabled, safeReply } from "./middleware";
+import { isAdmin, isFeatureEnabled, safeReply } from "./middleware";
 import { buildFeaturesCommand, buildToggleHandler, TOGGLE_CUSTOM_ID_PREFIX } from "./panel";
 import { ComponentRouter } from "./router";
 import type { CommandModule, Ctx, FeatureDescriptor, LoadedFeature } from "./types";
@@ -152,7 +153,7 @@ export async function bootstrapFramework(client: Client): Promise<BootstrapResul
   async function handleChatInputCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     const cmd = commandMap.get(interaction.commandName);
     if (!cmd) {
-      await interaction.reply({ content: "Unknown command.", ephemeral: true });
+      await interaction.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
       return;
     }
     const owner = commandOwner.get(interaction.commandName) ?? null;
@@ -164,10 +165,18 @@ export async function bootstrapFramework(client: Client): Promise<BootstrapResul
       if (!enabled) {
         await interaction.reply({
           content: `The **${owner.name}** feature is disabled on this server. An admin can enable it with \`/features enable ${owner.id}\`.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
+    }
+
+    if (cmd.requiresAdmin && !isAdmin(interaction)) {
+      await interaction.reply({
+        content: "You need Manage Server permission to use this command.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
     }
 
     await cmd.execute(interaction, ctx);

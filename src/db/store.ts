@@ -12,8 +12,29 @@
 import type { Collection, Document, Filter, FindOptions, UpdateFilter } from "mongodb";
 import type { ZodSchema } from "zod";
 import { getDb } from "@/core/db";
+import { createLogger } from "@/core/logger";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { buildSafeUpsertUpdate } from "./helpers";
+
+const log = createLogger("db:store");
+
+/**
+ * Parse a batch of raw documents, keeping the valid ones and skipping
+ * (with a warning) any that fail schema validation.
+ *
+ * This is the batch-read counterpart to MongoStore's strict single-document
+ * `parse()`. Single reads (get/ensure/patch) intentionally surface malformed
+ * config as an error; batch list reads (leaderboards, market browse) must NOT
+ * let one corrupt row drop every valid row, so they isolate failures here.
+ */
+export function parseDocuments<T extends { _id: string }>(
+  schema: ZodSchema<T>,
+  docs: unknown[],
+  collectionName: string,
+): T[] {
+  // TODO(contribution): implement the parse-isolation loop. See request in chat.
+  throw new Error("parseDocuments not implemented");
+}
 
 export class MongoStore<T extends Document & { _id: string }> {
   constructor(
@@ -185,7 +206,7 @@ export class MongoStore<T extends Document & { _id: string }> {
     try {
       const col = await this.collection();
       const docs = await col.find(filter, options).toArray();
-      return OkResult(docs.map((doc) => this.parse(doc as any)));
+      return OkResult(parseDocuments(this.schema, docs as unknown[], this.collectionName));
     } catch (error) {
       return ErrResult(this.mapError(error));
     }

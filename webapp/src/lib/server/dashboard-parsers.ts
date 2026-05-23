@@ -1,5 +1,7 @@
 import type {
   AutomodSettingsPatch,
+  BannedImageTestInput,
+  BannedImageUploadInput,
   EconomyDailyPatch,
   EconomyTaxPatch,
   EconomyWorkPatch,
@@ -15,6 +17,9 @@ interface PerUserSlowRulePatch {
   readonly durationSeconds: number;
 }
 
+const MAX_DASHBOARD_IMAGE_BYTES = 8 * 1024 * 1024;
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
+
 function ok<T>(value: T): ParseResult<T> {
   return { ok: true, value };
 }
@@ -23,7 +28,7 @@ function err<T>(error: string): ParseResult<T> {
   return { ok: false, error };
 }
 
-function text(value: FormDataEntryValue | null): string | null {
+export function text(value: FormDataEntryValue | null): string | null {
   if (value === null) return null;
   const trimmed = String(value).trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -103,8 +108,22 @@ export function parseTaxEconomyPatch(data: FormData): ParseResult<EconomyTaxPatc
 
 export function parseAutomodPatch(
   data: FormData,
-  section: "linkSpam" | "mentionSpam" | "perUserSlow",
+  section: "linkSpam" | "mentionSpam" | "perUserSlow" | "imageDetection",
 ): ParseResult<AutomodSettingsPatch> {
+  if (section === "imageDetection") {
+    const tolerance = text(data.get("tolerance")) ?? "balanced";
+    if (tolerance !== "strict" && tolerance !== "balanced" && tolerance !== "loose") {
+      return err("tolerance must be strict, balanced, or loose.");
+    }
+    return ok({
+      imageDetection: {
+        enabled: data.get("enabled") === "on",
+        reportChannelId: text(data.get("reportChannelId")),
+        tolerance,
+      },
+    });
+  }
+
   if (section === "perUserSlow") {
     const parsedRules = parsePerUserSlowRules(data);
     if (!parsedRules.ok) return parsedRules;
@@ -139,6 +158,59 @@ export function parseAutomodPatch(
       windowSeconds: windowSeconds.value,
     },
   });
+}
+
+interface ParsedImageFile {
+  readonly filename: string | null;
+  readonly contentType: string | null;
+  readonly bytes: Uint8Array;
+}
+
+function extensionFromName(name: string | null): string | null {
+  const ext = name?.split(".").pop()?.toLowerCase();
+  return ext && IMAGE_EXTENSIONS.has(ext) ? ext : null;
+}
+
+async function parseImageFile(data: FormData): Promise<ParseResult<ParsedImageFile>> {
+  const file = data.get("image");
+  if (!(file instanceof File)) return err("image file required.");
+  if (file.size < 1) return err("image file required.");
+  if (file.size > MAX_DASHBOARD_IMAGE_BYTES) return err("image must be 8MB or smaller.");
+
+  const filename = text(file.name) ?? null;
+  const contentType = text(file.type) ?? null;
+  const supported =
+    (contentType?.startsWith("image/") && contentType !== "image/svg+xml") ||
+    extensionFromName(filename) !== null;
+  if (!supported) return err("image must be a supported raster format.");
+
+  return ok({
+    filename,
+    contentType,
+    bytes: new Uint8Array(await file.arrayBuffer()),
+  });
+}
+
+export async function parseBannedImageUpload(
+  data: FormData,
+): Promise<ParseResult<BannedImageUploadInput>> {
+  const reason = text(data.get("reason"));
+  if (!reason) return err("reason required.");
+  const image = await parseImageFile(data);
+  if (!image.ok) return image;
+  return ok({
+    ...image.value,
+    reason,
+    label: text(data.get("label")),
+  });
+}
+
+export async function parseBannedImageTest(
+  data: FormData,
+): Promise<ParseResult<BannedImageTestInput>> {
+  const image = await parseImageFile(data);
+  if (!image.ok) return image;
+  return ok(image.value);
 }
 
 function parsePerUserSlowRules(

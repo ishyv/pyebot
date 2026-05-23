@@ -93,11 +93,39 @@ export function saveAutomodSettings(
   guildId: string,
   patch: AutomodSettingsPatch,
 ): Promise<Result<void>> {
-  return applyGuildConfigPaths(guildId, {
+  const paths = {
     ...flattenConfigPatch("automod.linkSpam", patch.linkSpam),
+    ...flattenConfigPatch("automod.domainWhitelist", patch.domainWhitelist),
+    ...flattenConfigPatch("automod.crossChannelSpam", patch.crossChannelSpam),
     ...flattenConfigPatch("automod.mentionSpam", patch.mentionSpam),
+    ...flattenConfigPatch("automod.slowmode", patch.slowmode),
+    ...flattenConfigPatch("automod.raidDetection", patch.raidDetection),
     ...flattenConfigPatch("automod.perUserSlow", patch.perUserSlow),
-  });
+    ...flattenConfigPatch("automod.imageDetection", patch.imageDetection),
+    ...automodPolicyPaths(patch.policy),
+    ...(patch.customPatterns !== undefined
+      ? { "automod.customPatterns": patch.customPatterns }
+      : {}),
+  };
+  return applyGuildConfigPaths(guildId, paths);
+}
+
+function automodPolicyPaths(
+  policy: AutomodSettingsPatch["policy"] | undefined,
+): Record<string, unknown> {
+  const paths: Record<string, unknown> = {};
+  if (!policy) return paths;
+  if (policy.preset !== undefined) paths["automod.policy.preset"] = policy.preset;
+  if (policy.aiDetectorEnabled !== undefined) {
+    paths["automod.policy.aiDetector.enabled"] = policy.aiDetectorEnabled;
+  }
+  if (policy.staffBypass !== undefined) {
+    paths["automod.policy.bypass.staffBypass"] = policy.staffBypass;
+  }
+  if (policy.profileRetentionDays !== undefined) {
+    paths["automod.policy.profileRetentionDays"] = policy.profileRetentionDays;
+  }
+  return paths;
 }
 
 /** Saves economy command settings on the GuildEconomy component the commands read. */

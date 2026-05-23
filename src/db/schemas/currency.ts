@@ -1,14 +1,15 @@
 import { z } from "zod";
 
 /**
- * Currency balance for standard currencies (stored as plain number).
- * Represents the total amount (e.g. 100 coins, 50 rep).
+ * Legacy user-document currency balance for standard currencies.
+ * Component economy balances use src/components/user-currency.ts instead.
  */
 export const CurrencyBalanceSchema = z.number().int().min(0).catch(0);
 export type CurrencyBalance = z.infer<typeof CurrencyBalanceSchema>;
 
 /**
- * Currency inventory — the full wallet on a user document.
+ * Legacy user-document currency bag, not the current economy wallet.
+ * The current economy wallet is UserCurrency.balances; this remains for user-doc/RPG paths.
  * Keys are currency IDs (e.g. "coins", "rep").
  * Values are balances; negative values are allowed (debt, mod-applied deductions).
  */

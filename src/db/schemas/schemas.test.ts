@@ -11,6 +11,7 @@ describe("UserSchema", () => {
       expect(result.data._id).toBe("user123");
       expect(result.data.warns).toEqual([]);
       expect(result.data.currency).toEqual({});
+      expect(result.data.inventory).toEqual({});
     }
   });
 
@@ -18,6 +19,35 @@ describe("UserSchema", () => {
     const result = UserSchema.safeParse({ _id: "x", warns: "bad" });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.warns).toEqual([]);
+  });
+
+  test("preserves valid numeric inventory stacks", () => {
+    const result = UserSchema.safeParse({
+      _id: "x",
+      inventory: {
+        stone: 3,
+        stone_pickaxe: 1,
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.inventory).toEqual({ stone: 3, stone_pickaxe: 1 });
+  });
+
+  test("rejects malformed inventory stack values", () => {
+    const result = UserSchema.safeParse({
+      _id: "x",
+      inventory: {
+        stone: "3",
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects negative and fractional inventory stacks", () => {
+    expect(UserSchema.safeParse({ _id: "x", inventory: { stone: -1 } }).success).toBe(false);
+    expect(UserSchema.safeParse({ _id: "x", inventory: { stone: 1.5 } }).success).toBe(false);
   });
 });
 
@@ -38,6 +68,9 @@ describe("GuildSchema", () => {
       expect(result.data.automod.linkSpam.enabled).toBe(false);
       expect(result.data.automod.perUserSlow.enabled).toBe(false);
       expect(result.data.automod.perUserSlow.rules).toEqual([]);
+      expect(result.data.automod.imageDetection.enabled).toBe(false);
+      expect(result.data.automod.imageDetection.reportChannelId).toBeNull();
+      expect(result.data.automod.imageDetection.tolerance).toBe("balanced");
       expect(result.data.automod.policy.preset).toBe("balanced");
       expect(result.data.automod.policy.profileRetentionDays).toBe(30);
     }

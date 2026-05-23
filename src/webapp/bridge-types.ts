@@ -112,12 +112,49 @@ export interface AutomodSettingsPatch {
     readonly enabled?: boolean;
     readonly maxLinks?: number;
     readonly windowSeconds?: number;
+    readonly timeoutSeconds?: number;
+    readonly action?: "timeout" | "mute" | "delete" | "report";
     readonly reportChannelId?: string | null;
+  };
+  readonly domainWhitelist?: {
+    readonly enabled?: boolean;
+    readonly domains?: readonly string[];
+  };
+  readonly crossChannelSpam?: {
+    readonly enabled?: boolean;
+    readonly minChannels?: number;
+    readonly windowSeconds?: number;
+    readonly reportChannelId?: string | null;
+    readonly autoTimeout?: boolean;
+    readonly timeoutSeconds?: number;
   };
   readonly mentionSpam?: {
     readonly enabled?: boolean;
     readonly maxMentions?: number;
     readonly windowSeconds?: number;
+    readonly action?: "timeout" | "delete" | "report";
+    readonly timeoutSeconds?: number;
+    readonly reportChannelId?: string | null;
+  };
+  readonly slowmode?: {
+    readonly enabled?: boolean;
+    readonly messagesPerWindow?: number;
+    readonly windowSeconds?: number;
+    readonly slowmodeSeconds?: number;
+    readonly releaseAfterSeconds?: number;
+  };
+  readonly raidDetection?: {
+    readonly enabled?: boolean;
+    readonly joinsPerMinute?: number;
+    readonly minAccountAgeDays?: number;
+    readonly action?: "alert" | "lockdown" | "quarantine";
+    readonly reportChannelId?: string | null;
+  };
+  readonly policy?: {
+    readonly preset?: "relaxed" | "balanced" | "strict";
+    readonly aiDetectorEnabled?: boolean;
+    readonly staffBypass?: boolean;
+    readonly profileRetentionDays?: number;
   };
   readonly perUserSlow?: {
     readonly enabled?: boolean;
@@ -128,6 +165,63 @@ export interface AutomodSettingsPatch {
       readonly durationSeconds: number;
     }[];
   };
+  readonly customPatterns?: readonly {
+    readonly name: string;
+    readonly pattern: string;
+    readonly flags: string;
+    readonly action: "delete" | "timeout" | "report";
+    readonly timeoutSeconds: number;
+  }[];
+  readonly imageDetection?: {
+    readonly enabled?: boolean;
+    readonly reportChannelId?: string | null;
+    readonly tolerance?: ImageDetectionTolerance;
+  };
+}
+
+export type ImageDetectionTolerance = "strict" | "balanced" | "loose";
+
+export interface BannedImageDistanceDTO {
+  readonly average: number;
+  readonly difference: number;
+  readonly verticalDifference: number;
+  readonly total: number;
+}
+
+export interface BannedImageSummary {
+  readonly id: string;
+  readonly label: string | null;
+  readonly reason: string;
+  readonly sourceUrl: string | null;
+  readonly sourceContentType: string | null;
+  readonly sourceFilename: string | null;
+  readonly addedBy: string;
+  readonly addedAt: string;
+}
+
+export interface BannedImageUploadInput {
+  readonly filename: string | null;
+  readonly contentType: string | null;
+  readonly bytes: Uint8Array;
+  readonly reason: string;
+  readonly label?: string | null;
+}
+
+export interface BannedImageEditPatch {
+  readonly reason?: string;
+  readonly label?: string | null;
+}
+
+export interface BannedImageTestInput {
+  readonly filename: string | null;
+  readonly contentType: string | null;
+  readonly bytes: Uint8Array;
+}
+
+export interface BannedImageTestResult {
+  readonly matched: boolean;
+  readonly record: BannedImageSummary | null;
+  readonly distance: BannedImageDistanceDTO | null;
 }
 
 export interface RolePolicyPatch {
@@ -316,6 +410,27 @@ export interface BotBridge {
     patch: AutomodSettingsPatch,
     actorId?: string | null,
   ): Promise<Result<void, Error>>;
+  listBannedImages(guildId: string): Promise<Result<readonly BannedImageSummary[], Error>>;
+  addBannedImage(
+    guildId: string,
+    input: BannedImageUploadInput,
+    actorId?: string | null,
+  ): Promise<Result<BannedImageSummary, Error>>;
+  editBannedImage(
+    guildId: string,
+    id: string,
+    patch: BannedImageEditPatch,
+    actorId?: string | null,
+  ): Promise<Result<BannedImageSummary, Error>>;
+  removeBannedImage(
+    guildId: string,
+    id: string,
+    actorId?: string | null,
+  ): Promise<Result<BannedImageSummary, Error>>;
+  testBannedImage(
+    guildId: string,
+    input: BannedImageTestInput,
+  ): Promise<Result<BannedImageTestResult, Error>>;
   saveEconomy(
     guildId: string,
     patch: EconomyPatch,

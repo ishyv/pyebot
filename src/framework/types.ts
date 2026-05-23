@@ -107,6 +107,8 @@ export type CommandHelp =
 export interface CommandModule {
   readonly data: { name: string; toJSON(): unknown };
   readonly help: CommandHelp;
+  /** When true, bootstrap rejects non-ManageGuild callers before execute runs. */
+  readonly requiresAdmin?: boolean;
   execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void>;
   autocomplete?(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void>;
 }

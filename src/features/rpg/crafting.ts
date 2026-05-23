@@ -77,11 +77,7 @@ export async function craft(
     return ErrResult(new CraftingError("USER_NOT_FOUND", `User ${userId} not found`));
   }
 
-  // Coerce inventory values to numbers (Mongo can return mixed types from old rows).
-  const inventory: Record<string, number> = {};
-  for (const [k, v] of Object.entries(user.inventory ?? {})) {
-    inventory[k] = typeof v === "number" ? v : 0;
-  }
+  const inventory = user.inventory;
 
   for (const [material, required] of Object.entries(recipe.requires)) {
     const needed = (required ?? 0) * quantity;

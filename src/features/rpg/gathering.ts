@@ -171,7 +171,7 @@ export async function gatherAtLocation(
   const currentInventory = (userRes.isOk() ? userRes.unwrap()?.inventory : undefined) ?? {};
   const paths: Record<string, number> = {};
   for (const mat of materialsGained) {
-    const current = (currentInventory[mat.id] as number | undefined) ?? 0;
+    const current = currentInventory[mat.id] ?? 0;
     paths[`inventory.${mat.id}`] = current + mat.quantity;
   }
 

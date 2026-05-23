@@ -62,7 +62,7 @@ export async function handleEquipSelect(
 
   const user = userRes.unwrap();
   const inventory = user?.inventory ?? {};
-  const qty = (inventory[itemId] as number | undefined) ?? 0;
+  const qty = inventory[itemId] ?? 0;
 
   if (qty < 1) {
     await interaction.editReply(

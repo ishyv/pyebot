@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { blankEmbedDraft, parseEmbedDraft } from "./embed-parsers";
 
 function form(entries: Record<string, string>): FormData {

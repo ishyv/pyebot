@@ -1,4 +1,9 @@
-import { type BaseInteraction, type InteractionReplyOptions, MessageFlags } from "discord.js";
+import {
+  type BaseInteraction,
+  type InteractionReplyOptions,
+  MessageFlags,
+  MessageFlagsBitField,
+} from "discord.js";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 
 export type InteractionVisibility = "public" | "ephemeral";
@@ -109,7 +114,7 @@ export function createInteractionResponder(interaction: BaseInteraction): Intera
     },
 
     async fail(payload) {
-      return this.send({ flags: MessageFlags.Ephemeral, ...payload });
+      return this.send({ ...payload, flags: withEphemeralFlag(payload.flags) });
     },
   };
 }
@@ -158,6 +163,11 @@ export function classifyDiscordInteractionError(error: unknown): InteractionResp
 
 function visibilityPayload(visibility: InteractionVisibility): InteractionReplyOptions {
   return visibility === "ephemeral" ? { flags: MessageFlags.Ephemeral } : {};
+}
+
+function withEphemeralFlag(flags: InteractionReplyOptions["flags"]): number {
+  if (flags === undefined) return MessageFlags.Ephemeral;
+  return MessageFlagsBitField.resolve(flags as never) | MessageFlags.Ephemeral;
 }
 
 async function callDiscord(
