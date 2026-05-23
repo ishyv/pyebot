@@ -18,7 +18,11 @@
     "check": "biome check ."
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "3.0.69",
+    "@ai-sdk/google": "3.0.63",
+    "@ai-sdk/openai": "3.0.53",
     "@google/genai": "^1.47.0",
+    "ai": "6.0.161",
     "discord.js": "^14.16.0",
     "json5": "^2.2.3",
     "mongodb": "^6.21.0",

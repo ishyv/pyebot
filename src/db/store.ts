@@ -18,6 +18,12 @@ import { buildSafeUpsertUpdate } from "./helpers";
 
 const log = createLogger("db:store");
 
+function documentId(doc: unknown): string {
+  if (!doc || typeof doc !== "object" || !("_id" in doc)) return "unknown";
+  const id = (doc as { _id?: unknown })._id;
+  return typeof id === "string" ? id : "unknown";
+}
+
 /**
  * Parse a batch of raw documents, keeping the valid ones and skipping
  * (with a warning) any that fail schema validation.
@@ -32,8 +38,20 @@ export function parseDocuments<T extends { _id: string }>(
   docs: unknown[],
   collectionName: string,
 ): T[] {
-  // TODO(contribution): implement the parse-isolation loop. See request in chat.
-  throw new Error("parseDocuments not implemented");
+  const parsedDocs: T[] = [];
+  for (const doc of docs) {
+    const parsed = schema.safeParse(doc);
+    if (parsed.success) {
+      parsedDocs.push(parsed.data);
+      continue;
+    }
+
+    log.warn(`Skipping invalid ${collectionName} document`, {
+      id: documentId(doc),
+      error: parsed.error,
+    });
+  }
+  return parsedDocs;
 }
 
 export class MongoStore<T extends Document & { _id: string }> {

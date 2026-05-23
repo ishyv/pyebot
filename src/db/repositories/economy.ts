@@ -1,3 +1,4 @@
+import type { Filter } from "mongodb";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import {
   type AchievementProgressDoc,
@@ -25,14 +26,16 @@ export const achievementUnlocksStore = new MongoStore(
 
 /** Returns all unlock records for a user. */
 export async function getUnlocksForUser(userId: string): Promise<Result<UnlockedAchievementDoc[]>> {
-  return achievementUnlocksStore.find({ userId } as any);
+  const filter: Filter<UnlockedAchievementDoc> = { userId };
+  return achievementUnlocksStore.find(filter);
 }
 
 /** Returns all progress records for a user. */
 export async function getProgressForUser(
   userId: string,
 ): Promise<Result<AchievementProgressDoc[]>> {
-  return achievementProgressStore.find({ userId } as any);
+  const filter: Filter<AchievementProgressDoc> = { userId };
+  return achievementProgressStore.find(filter);
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +46,8 @@ export const questProgressStore = new MongoStore("questProgress", QuestProgressS
 
 /** Returns all active (not-yet-claimed) quests for a user. */
 export async function getActiveQuestsForUser(userId: string): Promise<Result<QuestProgressDoc[]>> {
-  return questProgressStore.find({ userId, rewardsClaimed: false } as any);
+  const filter: Filter<QuestProgressDoc> = { userId, rewardsClaimed: false };
+  return questProgressStore.find(filter);
 }
 
 // ---------------------------------------------------------------------------
@@ -57,13 +61,13 @@ export async function findActiveListings(
   guildId: string,
   options: { itemId?: string; sellerId?: string; limit?: number; skip?: number } = {},
 ): Promise<Result<MarketListingDoc[]>> {
-  const filter: Record<string, unknown> = { guildId, status: "active" };
+  const filter: Filter<MarketListingDoc> = { guildId, status: "active" };
   if (options.itemId) filter.itemId = options.itemId;
   if (options.sellerId) filter.sellerId = options.sellerId;
 
   try {
     const col = await marketStore.collection();
-    const cursor = col.find(filter as any).sort({ pricePerUnit: 1, createdAt: 1 });
+    const cursor = col.find(filter).sort({ pricePerUnit: 1, createdAt: 1 });
     if (options.skip) cursor.skip(options.skip);
     if (options.limit) cursor.limit(options.limit);
     const docs = await cursor.toArray();
@@ -80,7 +84,8 @@ export async function countActiveListings(
 ): Promise<Result<number>> {
   try {
     const col = await marketStore.collection();
-    const count = await col.countDocuments({ guildId, sellerId, status: "active" } as any);
+    const filter: Filter<MarketListingDoc> = { guildId, sellerId, status: "active" };
+    const count = await col.countDocuments(filter);
     return OkResult(count);
   } catch (error) {
     return ErrResult(error instanceof Error ? error : new Error(String(error)));

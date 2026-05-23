@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  EMBED_LIMITS,
   type EmbedConfig,
   EmbedConfigSchema,
+  EmbedDraftInputSchema,
   type EmbedField,
   EmbedFieldSchema,
-  EMBED_LIMITS,
-  EmbedDraftInputSchema,
   embedTotalLength,
   SCHEDULE_INTERVAL_HOURS,
   type ScheduleIntervalHours,
@@ -305,9 +305,9 @@ describe("EmbedDraftInputSchema", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(
-        result.error.issues.some((i) => i.message.includes(String(EMBED_LIMITS.total))),
-      ).toBe(true);
+      expect(result.error.issues.some((i) => i.message.includes(String(EMBED_LIMITS.total)))).toBe(
+        true,
+      );
     }
   });
 
