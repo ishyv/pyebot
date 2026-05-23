@@ -18,7 +18,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.2.20
       - run: bun install --frozen-lockfile
       - name: Biome check (src)
         run: bunx biome check src
