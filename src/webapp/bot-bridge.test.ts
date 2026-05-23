@@ -17,6 +17,7 @@ const moderationCalls: Array<{ type: string; args: unknown[] }> = [];
 const embedConfigs = new Map<string, Record<string, unknown>>();
 const sentEmbeds: Array<{ args: unknown[] }> = [];
 let activeBridgeBannedImages: unknown[] = [];
+let mockFeatureCatalog: Array<Record<string, unknown>> = [{ id: "economy", defaultEnabled: true }];
 
 function matchesFilter(doc: Record<string, unknown>, filter: unknown): boolean {
   if (!filter || typeof filter !== "object") return true;
@@ -159,15 +160,27 @@ mock.module("@/components/guild-features", () => ({
     enabled: boolean,
   ) => ({ overrides: { ...(current.overrides ?? {}), [featureId]: enabled } }),
   getGuildFeatures: async () => OkResult({ overrides: {} }),
-  resolveFeatureEnabled: () => true,
+  resolveFeatureEnabled: (
+    feature: { id: string; defaultEnabled?: boolean },
+    overrides?: Readonly<Record<string, boolean>> | null,
+  ) => overrides?.[feature.id] ?? feature.defaultEnabled !== false,
   setGuildFeatureOverride: async () => OkResult({ overrides: {} }),
   setGuildFeatureOverrides: async () => OkResult({ overrides: {} }),
 }));
 
 mock.module("@/core/featureCatalog", () => ({
-  setFeatureCatalog: () => undefined,
-  listFeatureCatalog: () => [{ id: "economy", defaultEnabled: true }],
-  listConfigurableFeatures: () => [{ id: "economy", defaultEnabled: true }],
+  setFeatureCatalog: (
+    features: readonly { descriptor: Record<string, unknown> }[],
+    configs: Record<string, unknown> = {},
+  ) => {
+    mockFeatureCatalog = features.map((feature) => {
+      const config = configs[String(feature.descriptor.id)];
+      return config ? { ...feature.descriptor, config } : feature.descriptor;
+    });
+  },
+  listFeatureCatalog: () => mockFeatureCatalog,
+  listConfigurableFeatures: () =>
+    mockFeatureCatalog.filter((feature) => feature.config !== undefined),
 }));
 
 mock.module("@/features/moderation/service", () => ({

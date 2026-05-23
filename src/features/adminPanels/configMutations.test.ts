@@ -47,7 +47,10 @@ mock.module("@/components/guild-features", () => ({
     enabled: boolean,
   ) => ({ overrides: { ...(current.overrides ?? {}), [featureId]: enabled } }),
   getGuildFeatures: async () => OkResult({ overrides: {} }),
-  resolveFeatureEnabled: () => true,
+  resolveFeatureEnabled: (
+    feature: { id: string; defaultEnabled?: boolean },
+    overrides?: Readonly<Record<string, boolean>> | null,
+  ) => overrides?.[feature.id] ?? feature.defaultEnabled !== false,
   setGuildFeatureOverride: async (guildId: string, featureId: string, enabled: boolean) => {
     featureWrites.push({ guildId, featureId, enabled });
     return OkResult({ overrides: { [featureId]: enabled } });
