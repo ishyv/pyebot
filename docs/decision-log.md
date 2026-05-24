@@ -1,5 +1,25 @@
 # Decision Log
 
+## 2026-05-24 - Main-only workflow rule
+
+**Cambio:** Project work should stay on `main` by default. Agents must not create,
+switch to, or keep feature branches unless the user explicitly asks for a branch.
+Use coherent commits along the way instead of branch ceremony.
+
+**Motivo:** This repo already uses local checkpoints and direct mainline work for
+small, scoped changes. Extra branches have caused cleanup noise, especially with
+the nested `webapp/` repository boundary.
+
+**Alternativas:** Feature branches remain available only when explicitly
+requested. They are not the default workflow.
+
+**Riesgos:** Larger risky rewrites need stricter commit checkpoints and focused
+verification because rollback is commit-based, not branch-based.
+
+**Cómo verificar:** Before editing, run `git status --short --branch` and confirm
+the current branch is `main`. Do not run `git switch`, `git checkout -b`, or
+`git branch` creation commands unless the user requested a branch.
+
 ## 2026-05-23 - Money model canonical storage
 
 **Cambio:** The money model is documented as distinct-by-design. Current economy spendable
