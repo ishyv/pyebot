@@ -246,7 +246,7 @@ describe("/automod linkspam", () => {
 describe("/automod command decomposition", () => {
   it("keeps the slash data and subcommand table in focused modules", async () => {
     const [{ data }, { automodSubcommands }] = await Promise.all([
-      import("./automod-data"),
+      import("../automod-data"),
       import("./subcommands"),
     ]);
 

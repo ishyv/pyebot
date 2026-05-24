@@ -1,7 +1,7 @@
 import type { ChatInputCommandInteraction } from "discord.js";
 import type { CommandContext } from "@/core/feature";
 import { defineCommand } from "@/framework";
-import { data } from "./automod-data";
+import { data } from "../automod-data";
 import { automodSubcommands } from "./subcommands";
 
 async function execute(
