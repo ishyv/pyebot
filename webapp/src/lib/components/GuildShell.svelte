@@ -16,6 +16,7 @@ const navItems = $derived(
   [
     { label: "overview", href: `/guilds/${guildId}` },
     { label: "features", href: `/guilds/${guildId}/features` },
+    { label: "guide", href: `/guilds/${guildId}/guide` },
     { label: "moderation", href: `/guilds/${guildId}/moderation` },
     { label: "automod", href: `/guilds/${guildId}/automod` },
     { label: "channels", href: `/guilds/${guildId}/channels` },
