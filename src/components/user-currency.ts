@@ -5,7 +5,7 @@
  * Missing currency = balance 0; negative balances are permitted for
  * moderator-driven adjustments (debt scenarios).
  *
- * Why a separate component from the old `user.currency` field?
+ * Why a separate component instead of the old `user.currency` field?
  * Currency is read on every economy interaction. Keeping it isolated
  * from the rest of the user document makes each read cheap and lets us
  * index by balance later if we add leaderboards.

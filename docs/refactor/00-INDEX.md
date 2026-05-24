@@ -14,12 +14,12 @@ corrected — see "Alignment notes" below.
 |---|------|-------|------|----------|
 | 01 | [Framework cleanup](01-framework-cleanup.md) | Dead method + doc/code drift | Low | Now |
 | 02 | [`find()` parse isolation](02-find-parse-isolation.md) | DB robustness | Low–Med | Now |
-| 03 | [Type the user-doc bags](03-type-user-bags.md) | Data-model clarity | Med | **Highest reward** |
+| 03 | [Type the user-doc bags](03-type-user-bags.md) | Superseded by component ownership | Med | Done/stale |
 | 04 | [Split the guild schema](04-split-guild-schema.md) | Data-model readability | Low | Later |
-| 05 | [Clarify the money model](05-money-model.md) | Data-model decision | Med | Later |
+| 05 | [Clarify the money model](05-money-model.md) | Superseded by UserCurrency canonical decision | Med | Done/stale |
 | 06 | [Response + DB-error helpers](06-response-helpers.md) | Repetition | Low–Med | Later |
-| 07 | [Automod command decomposition](07-automod-decomposition.md) | Bloat | Med | Later |
-| 08 | [Split the webapp bridge](08-bot-bridge-split.md) | Bloat | Med | Later |
+| 07 | [Automod command decomposition](07-automod-decomposition.md) | Superseded | Med | Done/stale |
+| 08 | [Split the webapp bridge](08-bot-bridge-split.md) | Superseded | Med | Done/stale |
 | 09 | [Robustness hardening](09-hardening.md) | Robustness | Med | Later |
 
 ## Alignment notes (do not re-litigate)
@@ -44,8 +44,8 @@ bun run check       # biome format + lint
 
 ## Open decisions blocking some plans
 
-1. **Money model** (plan 05): are `currency` / `bank` / `economyAccount` distinct by design, or
-   accreted overlap to consolidate?
+1. **Money model** (plan 05): resolved on 2026-05-24. `UserCurrency` is canonical; legacy
+   user-document money fields are no longer runtime schema.
 2. **Multi-guild scope** (plan 03): is per-user data keyed by `guildId` inside the user doc
    intentional (effectively single-guild), or should moderation history be guild-scoped?
 3. **Storage adapters** (plan 01): wire `MemoryStorageAdapter`/`FileStorageAdapter` into the

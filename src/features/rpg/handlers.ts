@@ -11,17 +11,17 @@ export default class RpgHandlers {
   @Handle("fight_accept:")
   async onFightAccept(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
-    _ctx: Ctx,
+    ctx: Ctx,
   ): Promise<void> {
-    await handleFightAccept(interaction as ButtonInteraction);
+    await handleFightAccept(interaction as ButtonInteraction, ctx);
   }
 
   @Handle("fight_move:")
   async onFightMove(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
-    _ctx: Ctx,
+    ctx: Ctx,
   ): Promise<void> {
-    await handleCombatMove(interaction as ButtonInteraction);
+    await handleCombatMove(interaction as ButtonInteraction, ctx);
   }
 
   @Handle("equip:")

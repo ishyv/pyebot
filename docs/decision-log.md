@@ -1,5 +1,31 @@
 # Decision Log
 
+## 2026-05-24 - RPG state canonical components
+
+**Cambio:** RPG runtime state no longer uses embedded `users` document fields.
+`RpgProfile` owns profile/loadout/fight state, `UserInventory` owns item stacks,
+and `UserCurrency` owns RPG coin fees and balances. The legacy RPG repository
+and embedded user-schema fields were removed from the runtime model.
+
+**Motivo:** `users` had become a mixed document for moderation, RPG, economy,
+tickets, minigames, and voting. That created split-brain state where economy
+market code used components while RPG crafting, processing, gathering, hideout,
+quests, and combat still read `users.inventory`, `users.currency`, or
+`users.rpgProfile`.
+
+**Alternativas:** Runtime dual-read migration and compatibility shims were
+rejected. This repo is latest-only; existing stale Mongo fields can remain
+physically present until a separate destructive cleanup script is requested, but
+runtime code must not model or read them.
+
+**Riesgos:** Existing persisted legacy RPG state is not auto-migrated. Servers
+that still only have the old embedded fields need an explicit migration if that
+data must be preserved.
+
+**Cómo verificar:** Run `bun test src/db src/features/rpg src/features/economy`,
+`bun run typecheck`, targeted Biome on touched files, `git diff --check`, and
+`bun run start` to confirm loader, login, webapp bind, and command registration.
+
 ## 2026-05-24 - Main-only workflow rule
 
 **Cambio:** Project work should stay on `main` by default. Agents must not create,
@@ -22,27 +48,26 @@ the current branch is `main`. Do not run `git switch`, `git checkout -b`, or
 
 ## 2026-05-23 - Money model canonical storage
 
-**Cambio:** The money model is documented as distinct-by-design. Current economy spendable
-balances live in `UserCurrency.balances`, current bank balances live in
-`UserCurrency.bankBalances`, and current economy status/activity/streak metadata lives in the
-`EconomyAccount` component. Legacy `UserSchema.currency`, `UserSchema.bank`, and embedded
-`UserSchema.economyAccount` remain schema-visible user-doc fields, but they are not the current
-economy source of truth.
+**Estado:** Superseded by `2026-05-24 - RPG state canonical components`.
 
-**Motivo:** Economy services and commands read/write the component-backed `UserCurrency` and
-`EconomyAccount` paths. Legacy RPG money still uses `user.currency.coins` in hideout/processing
-flows, so migrating it would be behavior and data movement work, not documentation cleanup.
+**Cambio original:** Economy spendable balances were documented as
+`UserCurrency.balances`, bank balances as `UserCurrency.bankBalances`, and
+economy status/activity/streak metadata as the `EconomyAccount` component. At
+the time, legacy user-doc money fields remained schema-visible because RPG still
+used embedded user money.
 
-**Alternativas:** Consolidating or removing the legacy user-doc fields was rejected for this
-slice. That requires a separate migration plan for RPG money and persisted user documents.
+**Decisión actual:** `UserCurrency` owns all spendable and bank balances,
+including RPG coin fees. Legacy `UserSchema.currency`, `UserSchema.bank`, and
+embedded `UserSchema.economyAccount` are no longer schema-visible runtime model
+fields.
 
-**Riesgos:** Runtime risk is low because this changes comments/docs only. The remaining product
-risk is that legacy RPG money and current economy money stay separate until an explicit migration
-decides whether to merge them.
+**Motivo:** The follow-up RPG state reset moved hideout and processing fees onto
+`UserCurrency`, removing the last runtime reason to keep embedded user money
+bags in the schema.
 
-**Cómo verificar:** `bun test src/features/economy`, `bun test src/db/schemas`, targeted Biome on
-the touched docs/schema files, then `bun run typecheck` and `bun run check` for broader baseline
-visibility.
+**Cómo verificar:** Use the newer 2026-05-24 verification set for RPG state:
+`bun test src/db src/features/rpg src/features/economy`, `bun run typecheck`,
+targeted Biome, `git diff --check`, and `bun run start`.
 
 ## 2026-05-22 - Framework cleanup: dead router method + storage barrel boundary
 

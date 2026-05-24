@@ -6,15 +6,16 @@ import {
   MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
-import { getUser } from "@/db/repositories/users";
+import { getRpgProfile } from "@/features/rpg/profile";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
 const data = new SlashCommandBuilder()
   .setName("expedition")
   .setDescription("Enter an expedition — explore a biome, gather resources, and venture deeper");
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
@@ -23,12 +24,8 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   }
 
   const userId = interaction.user.id;
-  const userRes = await getUser(userId);
-  if (userRes.isErr()) {
-    await interaction.editReply({ content: "Something went wrong. Please try again." });
-    return;
-  }
-  if (!userRes.unwrap()?.rpgProfile) {
+  const profile = await getRpgProfile(ctx, userId).catch(() => null);
+  if (!profile) {
     await interaction.editReply({
       content: "You need to set up your RPG profile first. Use `/rpg-profile` to get started.",
     });

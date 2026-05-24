@@ -7,8 +7,8 @@
 
 import type { StringSelectMenuInteraction } from "discord.js";
 import type { RpgProfileValue } from "@/components/rpg-profile";
-import { getUser } from "@/db/repositories/users";
 import { TOOLS } from "@/features/rpg/content/tools";
+import { getStackQuantity } from "@/features/rpg/inventory";
 import { ensureRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
@@ -44,25 +44,8 @@ export async function handleEquipSelect(
     return;
   }
 
-  // Re-fetch user to confirm current inventory (guard against race conditions)
-  const userRes = await getUser(userId);
-  if (userRes.isErr()) {
-    await interaction.editReply(
-      v2Message(
-        container(
-          "danger",
-          text(
-            `Something went wrong fetching your profile. Please try again.\n-# ${getHints("equip")}`,
-          ),
-        ),
-      ),
-    );
-    return;
-  }
-
-  const user = userRes.unwrap();
-  const inventory = user?.inventory ?? {};
-  const qty = inventory[itemId] ?? 0;
+  // Re-fetch inventory to guard against stale select menus.
+  const qty = await getStackQuantity(ctx, userId, itemId);
 
   if (qty < 1) {
     await interaction.editReply(

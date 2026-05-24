@@ -6,6 +6,7 @@ import {
 import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
 import { craft } from "@/features/rpg/crafting";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
@@ -37,7 +38,7 @@ async function autocomplete(interaction: AutocompleteInteraction): Promise<void>
   await interaction.respond(choices);
 }
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
   if (!interaction.guild) {
@@ -49,7 +50,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const quantity = interaction.options.getInteger("quantity") ?? 1;
   const userId = interaction.user.id;
 
-  const result = await craft(userId, itemId, quantity);
+  const result = await craft(ctx, userId, itemId, quantity);
 
   if (result.isErr()) {
     const err = result.error;

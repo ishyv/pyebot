@@ -15,6 +15,7 @@ import {
 } from "discord.js";
 import type { CombatMove } from "@/features/rpg/combat/engine";
 import { getFightSession, submitMove } from "@/features/rpg/combat/fight";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
 export const FIGHT_MOVE_PREFIX = "fight_move:";
@@ -23,7 +24,7 @@ export function isFightMoveButton(customId: string): boolean {
   return customId.startsWith(FIGHT_MOVE_PREFIX);
 }
 
-export async function handleCombatMove(interaction: ButtonInteraction): Promise<void> {
+export async function handleCombatMove(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
   // customId: "fight_move:{sessionId}:{move}"
   const rest = interaction.customId.slice(FIGHT_MOVE_PREFIX.length);
   const lastColon = rest.lastIndexOf(":");
@@ -37,7 +38,7 @@ export async function handleCombatMove(interaction: ButtonInteraction): Promise<
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const result = await submitMove(sessionId, interaction.user.id, move as "attack" | "block");
+  const result = await submitMove(ctx, sessionId, interaction.user.id, move as "attack" | "block");
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Move error: ${result.error.message}` });
@@ -52,7 +53,11 @@ export async function handleCombatMove(interaction: ButtonInteraction): Promise<
   }
 
   // Round resolved — build round summary
-  const round = data.round!;
+  const round = data.round;
+  if (!round) {
+    await interaction.editReply({ content: "Combat round resolved without round data." });
+    return;
+  }
   const session = getFightSession(sessionId);
 
   if (data.combatEnded && data.combatResult) {

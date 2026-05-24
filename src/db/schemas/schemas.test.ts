@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { GuildSchema } from "./guild";
-import { RpgProfileSchema } from "./rpg-profile";
 import { UserSchema } from "./user";
 
 describe("UserSchema", () => {
@@ -9,45 +8,68 @@ describe("UserSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data._id).toBe("user123");
-      expect(result.data.warns).toEqual([]);
-      expect(result.data.currency).toEqual({});
-      expect(result.data.inventory).toEqual({});
+      expect(result.data.sanction_history).toEqual({});
+      expect(result.data.mod_notes).toEqual({});
+      expect(result.data.quarantine_roles).toEqual({});
     }
   });
 
-  test("applies catch defaults for invalid warns", () => {
-    const result = UserSchema.safeParse({ _id: "x", warns: "bad" });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.warns).toEqual([]);
-  });
-
-  test("preserves valid numeric inventory stacks", () => {
+  test("preserves active moderation state", () => {
     const result = UserSchema.safeParse({
       _id: "x",
-      inventory: {
-        stone: 3,
-        stone_pickaxe: 1,
+      sanction_history: {
+        guild1: [
+          {
+            type: "WARN",
+            description: "spam",
+            caseId: 12,
+            moderatorId: "mod1",
+          },
+        ],
+      },
+      mod_notes: {
+        guild1: [{ note: "watch", moderatorId: "mod1", createdAt: "2026-05-24T00:00:00Z" }],
+      },
+      quarantine_roles: {
+        guild1: ["role1"],
       },
     });
 
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data.inventory).toEqual({ stone: 3, stone_pickaxe: 1 });
+    if (result.success) {
+      expect(result.data.sanction_history.guild1?.[0]?.type).toBe("WARN");
+      expect(result.data.mod_notes.guild1?.[0]?.note).toBe("watch");
+      expect(result.data.quarantine_roles.guild1).toEqual(["role1"]);
+    }
   });
 
-  test("rejects malformed inventory stack values", () => {
-    const result = UserSchema.safeParse({
+  test("drops legacy RPG, economy, minigame, voting, warn, and ticket bags", () => {
+    const result = UserSchema.parse({
       _id: "x",
-      inventory: {
-        stone: "3",
-      },
+      warns: [{ reason: "old", warn_id: "1", moderator: "m", timestamp: "t" }],
+      openTickets: ["channel1"],
+      currency: { coins: 1 },
+      inventory: { stone: 3 },
+      bank: { coins: 1 },
+      economyAccount: { status: "active" },
+      rpgProfile: { hpCurrent: 50 },
+      minigames: { trivia: true },
+      votingStats: { votes: 1 },
+      voteAggregates: { total: 1 },
+      votingPrefs: { showVotes: true },
     });
 
-    expect(result.success).toBe(false);
-  });
-
-  test("rejects negative and fractional inventory stacks", () => {
-    expect(UserSchema.safeParse({ _id: "x", inventory: { stone: -1 } }).success).toBe(false);
-    expect(UserSchema.safeParse({ _id: "x", inventory: { stone: 1.5 } }).success).toBe(false);
+    expect("warns" in result).toBe(false);
+    expect("openTickets" in result).toBe(false);
+    expect("currency" in result).toBe(false);
+    expect("inventory" in result).toBe(false);
+    expect("bank" in result).toBe(false);
+    expect("economyAccount" in result).toBe(false);
+    expect("rpgProfile" in result).toBe(false);
+    expect("minigames" in result).toBe(false);
+    expect("votingStats" in result).toBe(false);
+    expect("voteAggregates" in result).toBe(false);
+    expect("votingPrefs" in result).toBe(false);
   });
 });
 
@@ -79,31 +101,5 @@ describe("GuildSchema", () => {
   test("rejects malformed top-level automod config", () => {
     const result = GuildSchema.safeParse({ _id: "g1", automod: "bad" });
     expect(result.success).toBe(false);
-  });
-});
-
-describe("RpgProfileSchema", () => {
-  test("parses empty object with defaults", () => {
-    const result = RpgProfileSchema.safeParse({});
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.hpCurrent).toBe(100);
-      expect(result.data.wins).toBe(0);
-      expect(result.data.isFighting).toBe(false);
-    }
-  });
-
-  test("preserves valid data", () => {
-    const result = RpgProfileSchema.safeParse({
-      hpCurrent: 75,
-      wins: 3,
-      losses: 1,
-      isFighting: true,
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.hpCurrent).toBe(75);
-      expect(result.data.wins).toBe(3);
-    }
   });
 });

@@ -11,12 +11,11 @@
  * - Equipped tool kind must match the action (pickaxe→mine, axe→forest).
  * - Equipped tool tier must be ≥ the location's required tier.
  * - One durability point consumed per call; tool removed at 0.
- * - Inventory items are stored as numeric quantities at `inventory.<MaterialId>`.
+ * - Inventory items are stored as stack slots in the `UserInventory` component.
  */
 
 import type { RpgProfileValue } from "@/components/rpg-profile";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { getUser, updateUserPaths } from "@/db/repositories/users";
 import type { GatherAction } from "@/features/rpg/content/actions";
 import { LOCATIONS, type LocationId } from "@/features/rpg/content/locations";
 import type { MaterialId } from "@/features/rpg/content/materials";
@@ -26,6 +25,7 @@ import {
   toolKind,
   toolTier,
 } from "@/features/rpg/content/tools";
+import { addItemsToStash } from "@/features/rpg/inventory";
 import { ensureRpgProfile, getRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
 import type { Ctx } from "@/framework/types";
 
@@ -166,16 +166,12 @@ export async function gatherAtLocation(
 
   // Roll drops, add to inventory
   const materialsGained = rollDrops(location.materials);
-
-  const userRes = await getUser(userId);
-  const currentInventory = (userRes.isOk() ? userRes.unwrap()?.inventory : undefined) ?? {};
-  const paths: Record<string, number> = {};
+  const gainedByItem: Record<string, number> = {};
   for (const mat of materialsGained) {
-    const current = currentInventory[mat.id] ?? 0;
-    paths[`inventory.${mat.id}`] = current + mat.quantity;
+    gainedByItem[mat.id] = (gainedByItem[mat.id] ?? 0) + mat.quantity;
   }
 
-  const invRes = await updateUserPaths(userId, paths);
+  const invRes = await addItemsToStash(ctx, userId, gainedByItem);
   if (invRes.isErr()) {
     await patchRpgProfile(ctx, userId, { loadout: profile.loadout }).catch((error) => {
       ctx.logger.error(

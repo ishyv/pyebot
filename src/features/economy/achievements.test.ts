@@ -13,25 +13,19 @@ import type { User } from "@/db/schemas/user";
 // (adjustBalance inside claimRewards uses userStore)
 // ---------------------------------------------------------------------------
 
-function makeUser(currency: Record<string, number> = { coins: 100 }): User {
+function makeUser(_currency: Record<string, number> = { coins: 100 }): User {
   return {
     _id: "user-1",
-    warns: [],
     sanction_history: {},
-    openTickets: [],
-    currency,
     mod_notes: {},
     quarantine_roles: {},
-    economyAccount: undefined,
-    rpgProfile: undefined,
-    inventory: {},
   };
 }
 
 const mockUserGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
 const mockUserEnsure = mock(async (_id: string) => OkResult(makeUser()));
 const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
-  OkResult(undefined as void),
+  OkResult(undefined),
 );
 
 mock.module("@/db/repositories/users", () => ({
@@ -184,7 +178,7 @@ function resetAll() {
   });
   mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
   mockUserEnsure.mockImplementation(async () => OkResult(makeUser()));
-  mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined as void));
+  mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined));
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +214,8 @@ describe("updateProgress", () => {
   test("does not re-unlock an already unlocked achievement", async () => {
     // First unlock
     await updateProgress("user-1", "trivia_wins", 10);
-    const firstUnlock = unlocksStore.get("user-1:trivia_10")!;
+    const firstUnlock = unlocksStore.get("user-1:trivia_10");
+    if (!firstUnlock) throw new Error("Expected trivia_10 to be unlocked");
 
     // Second update at same value
     const result = await updateProgress("user-1", "trivia_wins", 10);
@@ -228,7 +223,8 @@ describe("updateProgress", () => {
     expect(result.unwrap().newlyUnlocked).toHaveLength(0); // not newly unlocked
 
     // Unlock record should be unchanged
-    const afterUnlock = unlocksStore.get("user-1:trivia_10")!;
+    const afterUnlock = unlocksStore.get("user-1:trivia_10");
+    if (!afterUnlock) throw new Error("Expected trivia_10 unlock to remain stored");
     expect(afterUnlock.unlockedAt.getTime()).toBe(firstUnlock.unlockedAt.getTime());
   });
 

@@ -5,8 +5,8 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
-import { getUser } from "@/db/repositories/users";
 import { EQUIPABLE_TOOLS } from "@/features/rpg/handlers/equip";
+import { getStackQuantity } from "@/features/rpg/inventory";
 import { getRpgProfile } from "@/features/rpg/profile";
 import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -27,24 +27,11 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   const userId = interaction.user.id;
 
-  const userRes = await getUser(userId);
-  if (userRes.isErr()) {
-    await interaction.editReply({ content: "Something went wrong. Please try again." });
-    return;
+  const availableTools: Array<{ itemId: string; qty: number }> = [];
+  for (const itemId of EQUIPABLE_TOOLS) {
+    const qty = await getStackQuantity(ctx, userId, itemId);
+    if (qty >= 1) availableTools.push({ itemId, qty });
   }
-
-  const user = userRes.unwrap();
-  if (!user) {
-    await interaction.editReply({ content: "User profile not found. Please try again." });
-    return;
-  }
-
-  const inventory = user.inventory ?? {};
-
-  // Filter inventory to items that are valid tools and present with qty >= 1
-  const availableTools = Object.entries(inventory)
-    .filter(([itemId, qty]) => EQUIPABLE_TOOLS.has(itemId) && qty >= 1)
-    .map(([itemId, qty]) => ({ itemId, qty }));
 
   if (availableTools.length === 0) {
     await interaction.editReply(

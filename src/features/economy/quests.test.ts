@@ -44,25 +44,19 @@ mock.module("@/core/state", () => ({
 // (adjustBalance inside claimRewards uses userStore)
 // ---------------------------------------------------------------------------
 
-function makeUser(currency: Record<string, number> = { coins: 100 }): User {
+function makeUser(_currency: Record<string, number> = { coins: 100 }): User {
   return {
     _id: "user-1",
-    warns: [],
     sanction_history: {},
-    openTickets: [],
-    currency,
     mod_notes: {},
     quarantine_roles: {},
-    economyAccount: undefined,
-    rpgProfile: undefined,
-    inventory: {},
   };
 }
 
 const mockUserGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
 const mockUserEnsure = mock(async (_id: string) => OkResult(makeUser()));
 const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
-  OkResult(undefined as void),
+  OkResult(undefined),
 );
 
 mock.module("@/db/repositories/users", () => ({
@@ -184,7 +178,7 @@ function resetAll() {
   );
   mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
   mockUserEnsure.mockImplementation(async () => OkResult(makeUser()));
-  mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined as void));
+  mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined));
 }
 
 // ---------------------------------------------------------------------------

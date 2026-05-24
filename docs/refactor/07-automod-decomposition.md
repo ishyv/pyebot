@@ -1,5 +1,8 @@
 # Plan 07 — Decompose the 1180-line automod command
 
+> Superseded. `/automod` is already split into a thin command, extracted command
+> data, and focused subcommand modules. Do not execute this stale plan as-is.
+
 ## Goal
 
 Shrink `automod.ts` to a thin command + a subcommand table, moving each handler into its own

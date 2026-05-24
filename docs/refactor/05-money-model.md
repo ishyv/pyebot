@@ -1,5 +1,9 @@
 # Plan 05 — Clarify the user money model (decision-first)
 
+> Superseded on 2026-05-24. `UserCurrency` is the canonical wallet/bank source;
+> legacy `users.currency`, `users.bank`, and embedded `users.economyAccount`
+> are no longer part of the runtime user schema. See `docs/decision-log.md`.
+
 ## Goal
 
 Resolve the undocumented overlap between the three money-related fields on the user document so

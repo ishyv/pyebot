@@ -38,18 +38,12 @@ function makeAccountValue(status: "ok" | "blocked" | "banned" = "ok") {
 // (mutations.ts uses userStore directly)
 // ---------------------------------------------------------------------------
 
-function makeUser(currency: Record<string, number> = { coins: 500 }): User {
+function makeUser(_currency: Record<string, number> = { coins: 500 }): User {
   return {
     _id: "user-1",
-    warns: [],
     sanction_history: {},
-    openTickets: [],
-    currency,
     mod_notes: {},
     quarantine_roles: {},
-    economyAccount: undefined,
-    rpgProfile: undefined,
-    inventory: {},
   };
 }
 

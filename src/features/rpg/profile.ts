@@ -3,8 +3,7 @@
  *
  * RPG profile state is active feature state, so new command/domain paths use
  * `Ctx` + `RpgProfile` instead of the legacy embedded `users.rpgProfile`
- * repository. Inventory and currency still live on the legacy user document
- * until those slices are moved separately.
+ * repository. Inventory and currency live in their own user components.
  */
 
 import { RpgProfile, type RpgProfileValue } from "@/components/rpg-profile";

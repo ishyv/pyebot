@@ -1,5 +1,9 @@
 # Plan 03 — Type the untyped bags on the user document
 
+> Superseded on 2026-05-24 for RPG/economy/minigame/voting bags. The chosen
+> hard-reset path removes stale user-document ownership instead of typing fields
+> that are no longer canonical. See `docs/decision-log.md`.
+
 ## Goal
 
 Replace the `z.record(string, unknown)` "bags" on the user schema with concrete Zod schemas so the

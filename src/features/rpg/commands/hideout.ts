@@ -1,5 +1,5 @@
 import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
-import { getUser, updateUserPaths } from "@/db/repositories/users";
+import { adjustBalance, getBalance } from "@/features/economy/mutations";
 import { getRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
 import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -96,13 +96,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     return;
   }
 
-  const userRes = await getUser(userId);
-  const user = userRes.isOk() ? userRes.unwrap() : null;
-  if (!user) {
-    await interaction.editReply({ content: "User data not found." });
-    return;
-  }
-  const balance = (user.currency?.coins ?? 0) as number;
+  const balance = await getBalance(ctx, userId, "coins");
   const stashSize = profile.stashSize ?? 20;
   const upgrade = getUpgradeCost(stashSize);
 
@@ -180,8 +174,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
     try {
       await patchRpgProfile(ctx, userId, { hpCurrent: newHp });
-      const currencyRes = await updateUserPaths(userId, { "currency.coins": balance - totalCost });
-      if (currencyRes.isErr()) throw currencyRes.error;
+      await adjustBalance(ctx, userId, "coins", -totalCost);
     } catch {
       await interaction.editReply({ content: "Failed to save healing. Please try again." });
       return;
@@ -236,10 +229,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
     try {
       await patchRpgProfile(ctx, userId, { stashSize: upgrade.nextMax });
-      const currencyRes = await updateUserPaths(userId, {
-        "currency.coins": balance - upgrade.cost,
-      });
-      if (currencyRes.isErr()) throw currencyRes.error;
+      await adjustBalance(ctx, userId, "coins", -upgrade.cost);
     } catch {
       await interaction.editReply({ content: "Failed to save stash upgrade. Please try again." });
       return;

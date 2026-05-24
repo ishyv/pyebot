@@ -65,7 +65,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   if (subcommand === "accept") {
     const questId = interaction.options.getString("quest_id", true);
-    const result = await acceptRpgQuest(userId, questId);
+    const result = await acceptRpgQuest(ctx, userId, questId);
 
     if (result.isErr()) {
       await interaction.editReply(

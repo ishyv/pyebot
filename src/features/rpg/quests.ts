@@ -15,7 +15,6 @@
  */
 
 import { ErrResult, type Result } from "@/core/result";
-import { getRpgProfile } from "@/db/repositories/rpg";
 import type { QuestProgressDoc } from "@/db/schemas/quest";
 import {
   acceptQuest,
@@ -25,6 +24,8 @@ import {
   type QuestDef,
   type QuestError,
 } from "@/features/economy/quests";
+import { getRpgProfile } from "@/features/rpg/profile";
+import type { Ctx } from "@/framework/types";
 
 export type { ClaimedQuestReward, QuestProgressDoc };
 // Re-export the shared functions so RPG callers only need one import.
@@ -146,6 +147,7 @@ export type RpgQuestError = QuestError | { code: "PROFESSION_REQUIRED"; message:
  * Delegates to economy acceptQuest for storage.
  */
 export async function acceptRpgQuest(
+  ctx: Ctx,
   userId: string,
   questId: string,
 ): Promise<Result<QuestProgressDoc, QuestError>> {
@@ -157,8 +159,7 @@ export async function acceptRpgQuest(
 
   // Check profession gate
   if (MINER_QUEST_IDS.has(questId) || LUMBER_QUEST_IDS.has(questId)) {
-    const profileRes = await getRpgProfile(userId);
-    const profession = profileRes.isOk() ? profileRes.unwrap()?.starterKitType : null;
+    const profession = (await getRpgProfile(ctx, userId))?.starterKitType ?? null;
 
     if (MINER_QUEST_IDS.has(questId) && profession !== "miner") {
       return ErrResult(

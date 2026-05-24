@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { initiateFight } from "@/features/rpg/combat/fight";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, section, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
@@ -16,7 +17,7 @@ const data = new SlashCommandBuilder()
     opt.setName("user").setDescription("The user to challenge").setRequired(true),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await interaction.deferReply();
 
   if (!interaction.guild) {
@@ -32,7 +33,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     return;
   }
 
-  const result = await initiateFight(userId, target.id);
+  const result = await initiateFight(ctx, userId, target.id);
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Error: ${result.error.message}` });

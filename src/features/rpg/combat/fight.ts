@@ -3,7 +3,7 @@
  *
  * Architecture: Plain exported async functions — no classes (except FightError).
  * Dependencies: engine (pure combat), sessions + locks from core/state,
- *   rpg repository (profile CRUD).
+ *   component-backed RPG profile helpers.
  *
  * Flow:
  *   initiateFight → session status = "pending"
@@ -18,7 +18,8 @@
 
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { locks, sessions } from "@/core/state";
-import { ensureRpgProfile, patchRpgProfile } from "@/db/repositories/rpg";
+import { ensureRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
+import type { Ctx } from "@/framework/types";
 import {
   type ActiveCombatSession,
   COMBAT_CONFIG,
@@ -118,6 +119,7 @@ function defaultStats(override?: Partial<FightStats>): FightStats {
 // ---------------------------------------------------------------------------
 
 export async function initiateFight(
+  ctx: Ctx,
   inviterId: string,
   targetId: string,
   options: InitiateFightOptions = {},
@@ -126,18 +128,16 @@ export async function initiateFight(
     return ErrResult(new FightError("SELF_COMBAT", "You cannot fight yourself"));
   }
 
-  const [p1Res, p2Res] = await Promise.all([
-    ensureRpgProfile(inviterId),
-    ensureRpgProfile(targetId),
-  ]);
-
-  if (p1Res.isErr())
-    return ErrResult(new FightError("PROFILE_NOT_FOUND", "Inviter profile not found"));
-  if (p2Res.isErr())
-    return ErrResult(new FightError("PROFILE_NOT_FOUND", "Target profile not found"));
-
-  const p1Profile = p1Res.unwrap();
-  const p2Profile = p2Res.unwrap();
+  let p1Profile: Awaited<ReturnType<typeof ensureRpgProfile>>;
+  let p2Profile: Awaited<ReturnType<typeof ensureRpgProfile>>;
+  try {
+    [p1Profile, p2Profile] = await Promise.all([
+      ensureRpgProfile(ctx, inviterId),
+      ensureRpgProfile(ctx, targetId),
+    ]);
+  } catch {
+    return ErrResult(new FightError("PROFILE_NOT_FOUND", "RPG profile not found"));
+  }
 
   if (p1Profile.isFighting)
     return ErrResult(new FightError("IN_COMBAT", "You are already in combat"));
@@ -186,6 +186,7 @@ export async function initiateFight(
 // ---------------------------------------------------------------------------
 
 export async function acceptFight(
+  ctx: Ctx,
   sessionId: string,
   accepterId: string,
 ): Promise<Result<AcceptFightResult, FightError>> {
@@ -210,8 +211,8 @@ export async function acceptFight(
 
   // Mark both players as fighting
   await Promise.all([
-    patchRpgProfile(session.p1Id, { isFighting: true, activeFightId: sessionId }),
-    patchRpgProfile(session.p2Id, { isFighting: true, activeFightId: sessionId }),
+    patchRpgProfile(ctx, session.p1Id, { isFighting: true, activeFightId: sessionId }),
+    patchRpgProfile(ctx, session.p2Id, { isFighting: true, activeFightId: sessionId }),
   ]);
 
   return OkResult({ sessionId, p1Id: session.p1Id, p2Id: session.p2Id });
@@ -222,6 +223,7 @@ export async function acceptFight(
 // ---------------------------------------------------------------------------
 
 export async function submitMove(
+  ctx: Ctx,
   sessionId: string,
   playerId: string,
   move: "attack" | "block",
@@ -277,8 +279,8 @@ export async function submitMove(
 
     // Update profiles: clear fighting state
     await Promise.all([
-      patchRpgProfile(combatResult.winnerId, { isFighting: false, activeFightId: null }),
-      patchRpgProfile(combatResult.loserId, { isFighting: false, activeFightId: null }),
+      patchRpgProfile(ctx, combatResult.winnerId, { isFighting: false, activeFightId: null }),
+      patchRpgProfile(ctx, combatResult.loserId, { isFighting: false, activeFightId: null }),
     ]);
 
     return OkResult({ roundResolved: true, combatEnded: true, round, combatResult });
@@ -292,6 +294,7 @@ export async function submitMove(
 // ---------------------------------------------------------------------------
 
 export async function forfeit(
+  ctx: Ctx,
   sessionId: string,
   playerId: string,
 ): Promise<Result<CombatResult, FightError>> {
@@ -325,8 +328,8 @@ export async function forfeit(
   };
 
   await Promise.all([
-    patchRpgProfile(winnerId, { isFighting: false, activeFightId: null }),
-    patchRpgProfile(loserId, { isFighting: false, activeFightId: null }),
+    patchRpgProfile(ctx, winnerId, { isFighting: false, activeFightId: null }),
+    patchRpgProfile(ctx, loserId, { isFighting: false, activeFightId: null }),
   ]);
 
   return OkResult(combatResult);

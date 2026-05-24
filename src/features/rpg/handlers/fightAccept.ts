@@ -7,6 +7,7 @@
 
 import { ActionRowBuilder, ButtonBuilder, type ButtonInteraction, ButtonStyle } from "discord.js";
 import { acceptFight, getFightSession } from "@/features/rpg/combat/fight";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
 export const FIGHT_ACCEPT_PREFIX = "fight_accept:";
@@ -15,13 +16,13 @@ export function isFightAcceptButton(customId: string): boolean {
   return customId.startsWith(FIGHT_ACCEPT_PREFIX);
 }
 
-export async function handleFightAccept(interaction: ButtonInteraction): Promise<void> {
+export async function handleFightAccept(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
   const sessionId = interaction.customId.slice(FIGHT_ACCEPT_PREFIX.length);
   const accepterId = interaction.user.id;
 
   await interaction.deferReply();
 
-  const result = await acceptFight(sessionId, accepterId);
+  const result = await acceptFight(ctx, sessionId, accepterId);
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Cannot accept fight: ${result.error.message}` });

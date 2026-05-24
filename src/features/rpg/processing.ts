@@ -10,13 +10,14 @@
  */
 
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { getUser, updateUserPaths } from "@/db/repositories/users";
+import { adjustBalance, getBalance } from "@/features/economy/mutations";
 import type { MaterialId } from "@/features/rpg/content/materials";
 import {
   PROCESSING_RECIPES,
   type ProcessingInputId,
   parseProcessingInputId,
 } from "@/features/rpg/content/recipes";
+import { addStackItems, getStackQuantity, removeStackItems } from "@/features/rpg/inventory";
 import { ensureRpgProfile } from "@/features/rpg/profile";
 import type { Ctx } from "@/framework/types";
 
@@ -117,16 +118,7 @@ export async function process(
 
   const requiredMaterials = recipe.materialsPerBatch * batches;
 
-  const userRes = await getUser(userId);
-  if (userRes.isErr()) {
-    return ErrResult(new ProcessingError("PROFILE_NOT_FOUND", "User not found"));
-  }
-  const user = userRes.unwrap();
-  if (!user) {
-    return ErrResult(new ProcessingError("PROFILE_NOT_FOUND", "User not found"));
-  }
-  const inventory = user.inventory ?? {};
-  const available = inventory[recipeId] ?? 0;
+  const available = await getStackQuantity(ctx, userId, recipeId);
 
   if (available < requiredMaterials) {
     return ErrResult(
@@ -138,7 +130,7 @@ export async function process(
   }
 
   const totalFee = calculateFee(recipe.tier, batches);
-  const oldBalance = (user.currency?.coins as number | undefined) ?? 0;
+  const oldBalance = await getBalance(ctx, userId, "coins");
   if (totalFee > oldBalance) {
     return ErrResult(
       new ProcessingError(
@@ -148,17 +140,17 @@ export async function process(
     );
   }
 
-  // Consume materials (+ fee in one update)
-  const consumePaths: Record<string, unknown> = {
-    [`inventory.${recipeId}`]: Math.max(0, available - requiredMaterials),
-  };
-  if (totalFee > 0) {
-    consumePaths["currency.coins"] = oldBalance - totalFee;
-  }
-
-  const consumeRes = await updateUserPaths(userId, consumePaths);
+  const consumeRes = await removeStackItems(ctx, userId, { [recipeId]: requiredMaterials });
   if (consumeRes.isErr()) {
     return ErrResult(new ProcessingError("UPDATE_FAILED", "Failed to consume materials"));
+  }
+  if (totalFee > 0) {
+    try {
+      await adjustBalance(ctx, userId, "coins", -totalFee);
+    } catch {
+      await addStackItems(ctx, userId, { [recipeId]: requiredMaterials }).catch(() => {});
+      return ErrResult(new ProcessingError("UPDATE_FAILED", "Failed to pay processing fee"));
+    }
   }
 
   // Roll
@@ -177,19 +169,13 @@ export async function process(
   // Grant output
   const outputGained = successes * recipe.outputPerBatch;
   if (outputGained > 0) {
-    const latestUserRes = await getUser(userId);
-    const latestInventory =
-      (latestUserRes.isOk() ? latestUserRes.unwrap()?.inventory : undefined) ?? {};
-    const currentOutput = latestInventory[recipe.output] ?? 0;
-    const grantRes = await updateUserPaths(userId, {
-      [`inventory.${recipe.output}`]: currentOutput + outputGained,
-    });
-    if (grantRes.isErr()) {
-      const rollbackPaths: Record<string, unknown> = {
-        [`inventory.${recipeId}`]: available,
-      };
-      if (totalFee > 0) rollbackPaths["currency.coins"] = oldBalance;
-      await updateUserPaths(userId, rollbackPaths);
+    try {
+      await addStackItems(ctx, userId, { [recipe.output]: outputGained });
+    } catch {
+      await addStackItems(ctx, userId, { [recipeId]: requiredMaterials }).catch(() => {});
+      if (totalFee > 0) {
+        await adjustBalance(ctx, userId, "coins", totalFee, { allowDebt: true }).catch(() => {});
+      }
       return ErrResult(new ProcessingError("UPDATE_FAILED", "Failed to grant processed output"));
     }
   }

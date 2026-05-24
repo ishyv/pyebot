@@ -1,5 +1,8 @@
 # Plan 08 — Split the 1017-line webapp bridge by feature
 
+> Superseded. The bot bridge is already split into focused modules under
+> `src/webapp/bot-bridge/`. Do not execute this stale plan as-is.
+
 ## Goal
 
 Break `bot-bridge.ts` into per-feature modules so a dashboard change for one feature stops forcing
