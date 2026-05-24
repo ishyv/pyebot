@@ -18,6 +18,7 @@ export interface FeatureCatalogEntry extends FeatureDescriptor {
 export type FeatureConfigRegistry = Readonly<Record<string, FeatureConfigDefinition | undefined>>;
 
 let loadedFeatures: readonly FeatureCatalogEntry[] = [];
+let loadedRuntimeFeatures: readonly LoadedFeature[] = [];
 
 /**
  * Snapshots the active framework features for web/admin surfaces.
@@ -28,6 +29,7 @@ export function setFeatureCatalog(
   features: readonly LoadedFeature[],
   configs: FeatureConfigRegistry = {},
 ): void {
+  loadedRuntimeFeatures = features;
   loadedFeatures = features.map((feature) => {
     const config = configs[feature.descriptor.id];
     return config ? { ...feature.descriptor, config } : feature.descriptor;
@@ -37,6 +39,11 @@ export function setFeatureCatalog(
 /** Returns loaded feature metadata in framework loader order. */
 export function listFeatureCatalog(): readonly FeatureCatalogEntry[] {
   return loadedFeatures;
+}
+
+/** Returns the boot-loaded feature objects for runtime-derived read-only projections. */
+export function listLoadedFeatures(): readonly LoadedFeature[] {
+  return loadedRuntimeFeatures;
 }
 
 /** Returns only features that declare dashboard-editable config metadata. */

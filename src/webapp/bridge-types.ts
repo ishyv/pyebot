@@ -72,6 +72,82 @@ export interface FeatureSummary {
   readonly hasConfig: boolean;
 }
 
+export type GuideBadge =
+  | "enabled"
+  | "disabled"
+  | "default_on"
+  | "default_off"
+  | "command"
+  | "hidden"
+  | "admin"
+  | "event"
+  | "component"
+  | "dashboard"
+  | "passive";
+
+export interface GuideCommandArg {
+  readonly name: string;
+  readonly description: string;
+  readonly required: boolean;
+}
+
+export interface GuideCommand {
+  readonly id: string;
+  readonly featureId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly hidden: boolean;
+  readonly requiresAdmin: boolean;
+  readonly badges: readonly GuideBadge[];
+  readonly args: readonly GuideCommandArg[];
+}
+
+export interface GuideRuntimeRoute {
+  readonly id: string;
+  readonly featureId: string;
+  readonly kind: "discord_event" | "framework_event" | "component";
+  readonly label: string;
+  readonly method: string;
+  readonly badges: readonly GuideBadge[];
+}
+
+export interface GuideDashboardPage {
+  readonly id: string;
+  readonly featureId: string;
+  readonly label: string;
+  readonly path: string;
+  readonly description: string;
+  readonly badges: readonly GuideBadge[];
+}
+
+export interface GuideFeature {
+  readonly id: string;
+  readonly capabilityId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly enabled: boolean;
+  readonly defaultEnabled: boolean;
+  readonly badges: readonly GuideBadge[];
+  readonly commandIds: readonly string[];
+  readonly runtimeRouteIds: readonly string[];
+  readonly dashboardPageIds: readonly string[];
+}
+
+export interface GuideCapability {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly featureIds: readonly string[];
+}
+
+export interface GuideGraphSnapshot {
+  readonly capabilities: readonly GuideCapability[];
+  readonly features: readonly GuideFeature[];
+  readonly commands: readonly GuideCommand[];
+  readonly runtimeRoutes: readonly GuideRuntimeRoute[];
+  readonly dashboardPages: readonly GuideDashboardPage[];
+}
+
 export interface EconomyDailyPatch {
   readonly dailyReward?: number;
   readonly dailyCooldownHours?: number;
@@ -395,6 +471,7 @@ export interface BotBridge {
   getGuildConfig(guildId: string): Promise<Result<Record<string, unknown>, Error>>;
   getAdminState(guildId: string): Promise<Result<Record<string, unknown>, Error>>;
   listFeatures(guildId: string): Promise<Result<readonly FeatureSummary[], Error>>;
+  getGuideGraph(guildId: string): Promise<Result<GuideGraphSnapshot, Error>>;
   saveChannels(
     guildId: string,
     slots: Record<string, string | null>,
