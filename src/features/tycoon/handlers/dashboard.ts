@@ -12,21 +12,58 @@
  * deferUpdate + editReply, mirroring the expedition handler.
  */
 
-import { type ButtonInteraction, MessageFlags, type StringSelectMenuInteraction } from "discord.js";
+import {
+  ActionRowBuilder,
+  type ButtonInteraction,
+  MessageFlags,
+  ModalBuilder,
+  type ModalSubmitInteraction,
+  type StringSelectMenuInteraction,
+  TextInputBuilder,
+  TextInputStyle,
+} from "discord.js";
 import { UserFactory } from "@/components/user-factory";
 import type { Ctx } from "@/framework/types";
 import { coins } from "@/utils/fmt";
 import { LINES, type LineId, parseLineId, type StageKind } from "../content/lines";
 import { renderDashboard } from "../dashboard";
-import { automate, charter, collect, getScrip, setMode, upgrade } from "../operations";
+import {
+  automate,
+  charter,
+  collect,
+  EXCHANGE_FEE,
+  exchange,
+  getScrip,
+  SCRIP_TO_COINS_RATE,
+  setMode,
+  upgrade,
+} from "../operations";
+
+type TycoonInteraction = ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction;
+
+/** Modal that collects how much scrip to convert at the Guild Exchange. */
+function buildExchangeModal(scrip: number): ModalBuilder {
+  const coinsEach = SCRIP_TO_COINS_RATE * (1 - EXCHANGE_FEE);
+  return new ModalBuilder()
+    .setCustomId("tycoon:exchange:submit")
+    .setTitle("Guild Exchange")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("amount")
+          .setLabel("Scrip to convert")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setPlaceholder(
+            `You have ${scrip.toLocaleString()} · ${coinsEach} coins each (−${Math.round(EXCHANGE_FEE * 100)}% fee)`,
+          ),
+      ),
+    );
+}
 
 const STAGES: readonly StageKind[] = ["extractor", "refinery", "assembler"];
 
-async function refresh(
-  interaction: ButtonInteraction | StringSelectMenuInteraction,
-  ctx: Ctx,
-  userId: string,
-): Promise<void> {
+async function refresh(interaction: TycoonInteraction, ctx: Ctx, userId: string): Promise<void> {
   const payload = await renderDashboard(ctx, userId);
   await interaction.editReply(payload);
 }
@@ -51,7 +88,7 @@ async function collectAll(ctx: Ctx, userId: string): Promise<string> {
 }
 
 export async function handleTycoonComponent(
-  interaction: ButtonInteraction | StringSelectMenuInteraction,
+  interaction: TycoonInteraction,
   ctx: Ctx,
 ): Promise<void> {
   const userId = interaction.user.id;
@@ -140,16 +177,39 @@ export async function handleTycoonComponent(
     return;
   }
 
-  if (cid === "tycoon:exchange") {
-    await interaction.deferUpdate();
+  if (cid === "tycoon:exchange" && interaction.isButton()) {
     const scrip = await getScrip(ctx, userId);
+    if (scrip <= 0) {
+      await interaction.reply({
+        content: "🏦 No scrip is ready for exchange yet.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    // Opening a modal must NOT be preceded by deferUpdate.
+    await interaction.showModal(buildExchangeModal(scrip));
+    return;
+  }
+
+  if (cid === "tycoon:exchange:submit" && interaction.isModalSubmit()) {
+    await interaction.deferUpdate();
+    const raw = interaction.fields.getTextInputValue("amount").trim();
+    const amount = Number.parseInt(raw, 10);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await interaction.followUp({
+        content: "❌ Enter a positive whole number of scrip.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const result = await exchange(ctx, userId, amount);
     await refresh(interaction, ctx, userId);
     await interaction.followUp({
-      content:
-        scrip > 0
-          ? `🏦 Use \`/tycoon exchange amount:${scrip}\` to convert all current scrip, or enter a smaller amount.`
-          : "🏦 No scrip is ready for exchange yet.",
+      content: result.isErr()
+        ? `❌ ${result.error.message}`
+        : `🏦 Converted ${coins(result.unwrap().scripSpent, "scrip")} → ${coins(result.unwrap().coinsGained)}.`,
       flags: MessageFlags.Ephemeral,
     });
+    return;
   }
 }

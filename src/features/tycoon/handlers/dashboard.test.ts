@@ -84,20 +84,30 @@ function factoryWithLumber(
   };
 }
 
-function interaction(customId: string, values: string[] = []) {
-  const calls = { editReply: 0, followUp: 0 };
+function interaction(customId: string, values: string[] = [], fields?: Record<string, string>) {
+  const calls = { editReply: 0, followUp: 0, showModal: 0, reply: 0 };
+  const isModal = fields !== undefined;
   return {
     user: { id: USER },
     customId,
     values,
     calls,
-    isStringSelectMenu: () => values.length > 0,
+    fields: { getTextInputValue: (key: string) => fields?.[key] ?? "" },
+    isStringSelectMenu: () => !isModal && values.length > 0,
+    isButton: () => !isModal && values.length === 0,
+    isModalSubmit: () => isModal,
     async deferUpdate() {},
     async editReply() {
       calls.editReply += 1;
     },
     async followUp() {
       calls.followUp += 1;
+    },
+    async reply() {
+      calls.reply += 1;
+    },
+    async showModal() {
+      calls.showModal += 1;
     },
   };
 }
@@ -146,5 +156,38 @@ describe("handleTycoonComponent()", () => {
     const factory = await ctx.get(USER, UserFactory);
     expect(factory?.lines.lumber_mill?.mode).toBe("stockpile");
     expect(i.calls.editReply).toBe(1);
+  });
+
+  test("exchange button opens a modal when scrip is available", async () => {
+    const ctx = makeCtx(wallet(0, 500));
+    const i = interaction("tycoon:exchange");
+
+    await handleTycoonComponent(i as never, ctx);
+
+    expect(i.calls.showModal).toBe(1);
+    expect(i.calls.editReply).toBe(0);
+  });
+
+  test("exchange button replies instead of opening a modal with no scrip", async () => {
+    const ctx = makeCtx(wallet(0, 0));
+    const i = interaction("tycoon:exchange");
+
+    await handleTycoonComponent(i as never, ctx);
+
+    expect(i.calls.showModal).toBe(0);
+    expect(i.calls.reply).toBe(1);
+  });
+
+  test("exchange modal submit converts scrip and refreshes the console", async () => {
+    const ctx = makeCtx(wallet(0, 500));
+    const i = interaction("tycoon:exchange:submit", [], { amount: "200" });
+
+    await handleTycoonComponent(i as never, ctx);
+
+    const walletDoc = await ctx.get(USER, UserCurrency);
+    expect(walletDoc?.balances.scrip).toBe(300);
+    expect(walletDoc?.balances.coins).toBeGreaterThan(0);
+    expect(i.calls.editReply).toBe(1);
+    expect(i.calls.followUp).toBe(1);
   });
 });
