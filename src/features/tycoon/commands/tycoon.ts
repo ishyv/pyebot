@@ -33,7 +33,7 @@ const STAGE_CHOICES = [
 const data = new SlashCommandBuilder()
   .setName("tycoon")
   .setDescription("Manage your automated production lines")
-  .addSubcommand((s) => s.setName("view").setDescription("Open your production dashboard"))
+  .addSubcommand((s) => s.setName("play").setDescription("Open the Guild Automated Works console"))
   .addSubcommand((s) =>
     s
       .setName("charter")
@@ -154,7 +154,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 
   const sub = interaction.options.getSubcommand();
-  if (sub === "view") await handleView(interaction, ctx);
+  if (sub === "play") await handlePlay(interaction, ctx);
   else if (sub === "charter") await handleCharter(interaction, ctx);
   else if (sub === "collect") await handleCollect(interaction, ctx);
   else if (sub === "upgrade") await handleUpgrade(interaction, ctx);
@@ -210,7 +210,7 @@ async function handleLeaderboard(
   );
 }
 
-async function handleView(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+async function handlePlay(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const payload = await renderDashboard(ctx, interaction.user.id);
   await ctx.respond.send(payload);
 }
@@ -403,7 +403,7 @@ async function handleCollect(interaction: ChatInputCommandInteraction, ctx: Ctx)
 
 export default defineCommand({
   data,
-  help: { hints: ["/tycoon charter", "/tycoon collect", "/tycoon upgrade"] },
+  help: { hints: ["/tycoon play", "/tycoon collect", "/tycoon upgrade"] },
   autocomplete,
   execute,
 });

@@ -1,5 +1,5 @@
 /**
- * Dashboard renderer — shared by the `/tycoon view` command and the button/select
+ * Dashboard renderer — shared by the `/tycoon play` command and the button/select
  * handlers so the screen is built in exactly one place.
  *
  * Returns a Components-V2 payload (`v2Message` output) whose top-level children
@@ -16,7 +16,14 @@ import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins, progressBar } from "@/utils/fmt";
 import { eventSeed, pendingOutput, rollEvent, upgradeCost } from "./accrual";
-import { LINES, type LineId, STAGE_ORDER, type StageKind } from "./content/lines";
+import {
+  activeStagesForMode,
+  LINES,
+  type LineId,
+  STAGE_ORDER,
+  type StageKind,
+} from "./content/lines";
+import { netWorth } from "./operations";
 
 const STAGE_EMOJI: Record<StageKind, string> = {
   extractor: "⛏️",
@@ -33,19 +40,54 @@ interface StashStatus {
   readonly max: number;
 }
 
-function lineBlock(
+interface SelectOption {
+  readonly label: string;
+  readonly description: string;
+  readonly value: string;
+}
+
+interface LineConsoleState {
+  readonly lineId: LineId;
+  readonly line: UserFactoryValue["lines"][string];
+  readonly bottleneck: StageKind;
+  readonly rate: number;
+  readonly pendingUnits: number;
+  readonly collectUnits: number;
+  readonly capped: boolean;
+  readonly status: string;
+  readonly stashBlocked: boolean;
+  readonly capUnits: number;
+  readonly fill: string;
+  readonly stageRates: Record<StageKind, number>;
+  readonly eventLabel: string | null;
+}
+
+interface ConsoleBriefing {
+  readonly line: string;
+  readonly upgradeOptions: readonly SelectOption[];
+  readonly expansionOptions: readonly SelectOption[];
+  readonly outputOptions: readonly SelectOption[];
+  readonly readyLines: readonly LineConsoleState[];
+  readonly readyLabel: string;
+}
+
+function levelsOf(line: UserFactoryValue["lines"][string]): Record<StageKind, number> {
+  return {
+    extractor: line.stages.extractor.level,
+    refinery: line.stages.refinery.level,
+    assembler: line.stages.assembler.level,
+  };
+}
+
+function lineState(
   userId: string,
   lineId: LineId,
   line: UserFactoryValue["lines"][string],
   now: number,
   stash: StashStatus,
-): string {
+): LineConsoleState {
   const def = LINES[lineId];
-  const levels = {
-    extractor: line.stages.extractor.level,
-    refinery: line.stages.refinery.level,
-    assembler: line.stages.assembler.level,
-  };
+  const levels = levelsOf(line);
   const pending = pendingOutput(
     def,
     { levels, mode: line.mode, automated: line.automated, lastCollectedAt: line.lastCollectedAt },
@@ -54,83 +96,226 @@ function lineBlock(
   const { stageRates, bottleneck, rate } = pending.throughput;
   const event = rollEvent(eventSeed(userId, lineId, line.lastCollectedAt));
   const collectUnits = Math.floor(pending.units * event.multiplier);
-
-  const modeTag = line.mode === "sell" ? "SELL → ⚜️" : "STOCKPILE → 📦";
-  const autoTag = line.automated ? "👷 Automated" : "⏳ Manual";
-
-  const stageLines = STAGE_ORDER.map((kind) => {
-    const idle = line.mode === "stockpile" && kind === "assembler";
-    const flag = !idle && kind === bottleneck ? "  🔴 bottleneck" : "";
-    const idleNote = idle ? "  *(idle)*" : "";
-    return `${STAGE_EMOJI[kind]} ${def.stages[kind].name} Lv${levels[kind]} — ${ratePerHour(stageRates[kind])}${flag}${idleNote}`;
-  }).join("\n");
-
-  const output =
-    line.mode === "sell"
-      ? `→ ${ratePerHour(rate)} × ${def.finishedGood.name} = ${coins(Math.round(rate) * def.finishedGood.scripValue, "scrip")}/h`
-      : `→ ${ratePerHour(rate)} ${def.refinedMaterialId}`;
-
   const cap = rate * def.capHours;
   const fill = line.automated
     ? `${pending.units.toLocaleString()} stored (no cap)`
     : `${progressBar(pending.units, cap)} ${pending.units.toLocaleString()}/${Math.round(cap).toLocaleString()}${pending.capped ? " ⚠️ full" : ""}`;
+  const stashBlocked =
+    line.mode === "stockpile" && collectUnits > Math.max(0, stash.max - stash.used);
+  const status = line.automated
+    ? "👷 Automated"
+    : pending.capped
+      ? "⚠️ Manual full"
+      : pending.units > 0
+        ? "📦 Ready"
+        : "⏳ Manual running";
 
-  const notes: string[] = [];
-  if (line.mode === "stockpile" && collectUnits > Math.max(0, stash.max - stash.used)) {
-    notes.push(
-      `⚠️ Stash blocked: ${collectUnits.toLocaleString()} ${def.refinedMaterialId} won't fit; clear stash or upgrade it before collecting.`,
-    );
-  }
-  if (pending.units > 0 && event.id !== "none") {
-    notes.push(`🎲 Event queued: ${event.label}`);
-  }
-
-  return `## 🏭 ${def.name}  [${modeTag}]  ${autoTag}\n${stageLines}\n${output}\n${fill}${notes.length ? `\n${notes.join("\n")}` : ""}`;
+  return {
+    lineId,
+    line,
+    bottleneck,
+    rate,
+    pendingUnits: pending.units,
+    collectUnits,
+    capped: pending.capped,
+    status,
+    stashBlocked,
+    capUnits: cap,
+    fill,
+    stageRates,
+    eventLabel: pending.units > 0 && event.id !== "none" ? event.label : null,
+  };
 }
 
-/** Builds the action rows: Collect All + Refresh, and an Upgrade select menu. */
-function dashboardRows(
-  factory: UserFactoryValue,
-): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] {
-  const ownedIds = Object.keys(factory.lines) as LineId[];
+function lineBlock(state: LineConsoleState): string {
+  const def = LINES[state.lineId];
+  const levels = levelsOf(state.line);
+  const modeTag = state.line.mode === "sell" ? "SELL → ⚜️" : "STOCKPILE → 📦";
+  const stageLines = STAGE_ORDER.map((kind) => {
+    const idle = state.line.mode === "stockpile" && kind === "assembler";
+    const flag = !idle && kind === state.bottleneck ? " 🔴" : "";
+    const idleNote = idle ? " idle" : "";
+    return `${STAGE_EMOJI[kind]} Lv${levels[kind]} ${ratePerHour(state.stageRates[kind])}${flag}${idleNote}`;
+  }).join("  ");
+  const output =
+    state.line.mode === "sell"
+      ? `${ratePerHour(state.rate)} ${def.finishedGood.name} (${coins(Math.round(state.rate) * def.finishedGood.scripValue, "scrip")}/h)`
+      : `${ratePerHour(state.rate)} ${def.refinedMaterialId}`;
+  const notes: string[] = [];
+  if (state.stashBlocked) {
+    notes.push(
+      `⚠️ Stash blocked: ${state.collectUnits.toLocaleString()} ${def.refinedMaterialId} won't fit; clear stash or upgrade it before collecting.`,
+    );
+  }
+  if (state.eventLabel) notes.push(`🎲 Event queued: ${state.eventLabel}`);
 
-  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("tycoon:collect:all")
-      .setLabel("Collect All")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(ownedIds.length === 0),
+  return `## 🏭 ${def.name}  [${modeTag}]  ${state.status}\n${stageLines}\n→ ${output}\nBottleneck: 🔴 ${def.stages[state.bottleneck].name} • Pending: ${state.fill}${notes.length ? `\n${notes.join("\n")}` : ""}`;
+}
+
+function optionUrgency(state: LineConsoleState): number {
+  if (state.stashBlocked) return 0;
+  if (state.capped) return 1;
+  if (state.collectUnits > 0) return 2;
+  return 3;
+}
+
+/**
+ * Builds the state-prioritized console controls and shift briefing.
+ * Assumes the caller has already loaded trusted component state for the user.
+ */
+export function buildConsoleBriefing(
+  userId: string,
+  factory: UserFactoryValue,
+  now: number,
+  stash: StashStatus,
+): ConsoleBriefing {
+  const ownedIds = Object.keys(factory.lines) as LineId[];
+  const states = ownedIds.map((id) => lineState(userId, id, factory.lines[id], now, stash));
+  const readyLines = states.filter((state) => state.collectUnits > 0);
+  const blocked = states.find((state) => state.stashBlocked);
+  const nextLine = (Object.keys(LINES) as LineId[]).find((id) => !factory.lines[id]);
+
+  const upgradeOptions = states
+    .flatMap((state) => {
+      const def = LINES[state.lineId];
+      const active = activeStagesForMode(state.line.mode);
+      return STAGE_ORDER.map((stage) => {
+        const level = state.line.stages[stage].level;
+        const cost = upgradeCost(def.stages[stage], level);
+        const isBottleneck = active.includes(stage) && stage === state.bottleneck;
+        return {
+          label: `${isBottleneck ? "Fix " : ""}${def.name} — ${def.stages[stage].name}`.slice(
+            0,
+            100,
+          ),
+          description:
+            `${isBottleneck ? "Bottleneck · " : ""}Lv ${level} → ${level + 1} · ${cost.toLocaleString()} coins`.slice(
+              0,
+              100,
+            ),
+          value: `${state.lineId}:${stage}`,
+          priority: (isBottleneck ? 0 : 10) + optionUrgency(state),
+        };
+      });
+    })
+    .sort((a, b) => a.priority - b.priority)
+    .slice(0, 25)
+    .map(({ priority: _priority, ...option }) => option);
+
+  const charterOptions = (Object.keys(LINES) as LineId[])
+    .filter((id) => !factory.lines[id])
+    .map((id) => ({
+      label: `Charter ${LINES[id].name}`.slice(0, 100),
+      description: `Tier ${LINES[id].tier} · ${LINES[id].charterCost.toLocaleString()} coins`.slice(
+        0,
+        100,
+      ),
+      value: `charter:${id}`,
+    }));
+  const automationOptions = ownedIds
+    .filter((id) => !factory.lines[id].automated)
+    .map((id) => ({
+      label: `Automate ${LINES[id].name}`.slice(0, 100),
+      description: `${LINES[id].automationCost.toLocaleString()} coins · removes offline cap`.slice(
+        0,
+        100,
+      ),
+      value: `automate:${id}`,
+    }));
+  const outputOptions = ownedIds.map((id) => {
+    const next = factory.lines[id].mode === "sell" ? "stockpile" : "sell";
+    return {
+      label: `${LINES[id].name} → ${next}`.slice(0, 100),
+      description: (next === "sell"
+        ? "Sell finished goods for scrip"
+        : "Stockpile refined material to stash"
+      ).slice(0, 100),
+      value: `${id}:${next}`,
+    };
+  });
+
+  const briefing = (() => {
+    if (ownedIds.length === 0) {
+      const first = (Object.keys(LINES) as LineId[])[0];
+      return `🎯 Charter ${LINES[first].name} to start. The loop: collect output, upgrade the slowest stage, expand into new lines.`;
+    }
+    if (blocked) {
+      return `⚠️ Stash blocked at ${LINES[blocked.lineId].name}. Clear stash, upgrade it, or switch output before collecting.`;
+    }
+    if (readyLines.length > 0) {
+      return `📦 Collect ready output from ${readyLines.length} line${readyLines.length === 1 ? "" : "s"}.`;
+    }
+    const capped = states.find((state) => state.capped && !state.line.automated);
+    if (capped) return `👷 Automate ${LINES[capped.lineId].name} soon; manual storage is full.`;
+    const fix = states[0];
+    if (fix) {
+      return `🔧 Fix bottleneck: upgrade ${LINES[fix.lineId].name} ${LINES[fix.lineId].stages[fix.bottleneck].name}.`;
+    }
+    if (nextLine) return `🏛️ Charter ${LINES[nextLine].name} when you want a new production chain.`;
+    return "⏳ All works are running. Come back when output is ready.";
+  })();
+
+  const readyScrip = readyLines.reduce((sum, state) => {
+    if (state.line.mode !== "sell") return sum;
+    return sum + state.collectUnits * LINES[state.lineId].finishedGood.scripValue;
+  }, 0);
+  const readyMaterials = readyLines.reduce(
+    (sum, state) => sum + (state.line.mode === "stockpile" ? state.collectUnits : 0),
+    0,
+  );
+
+  return {
+    line: briefing,
+    upgradeOptions,
+    expansionOptions: [...charterOptions, ...automationOptions].slice(0, 25),
+    outputOptions: outputOptions.slice(0, 25),
+    readyLines,
+    readyLabel:
+      readyScrip > 0
+        ? `${coins(readyScrip, "scrip")} ready`
+        : readyMaterials > 0
+          ? `${readyMaterials.toLocaleString()} materials ready`
+          : "No output ready",
+  };
+}
+
+function dashboardRows(
+  briefing: ConsoleBriefing,
+  scrip: number,
+): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] {
+  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [];
+
+  const buttons: ButtonBuilder[] = [];
+  if (briefing.readyLines.length > 0) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId("tycoon:collect:ready")
+        .setLabel("Collect Ready")
+        .setStyle(ButtonStyle.Success),
+    );
+  }
+  buttons.push(
     new ButtonBuilder()
       .setCustomId("tycoon:refresh")
       .setLabel("Refresh")
       .setStyle(ButtonStyle.Secondary),
   );
+  if (scrip > 0) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId("tycoon:exchange")
+        .setLabel("Exchange")
+        .setStyle(ButtonStyle.Primary),
+    );
+  }
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
+  rows.push(buttonRow as ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>);
 
-  const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [
-    buttonRow as ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>,
-  ];
-
-  const upgradeOptions = ownedIds
-    .flatMap((lineId) => {
-      const line = factory.lines[lineId];
-      const def = LINES[lineId];
-      return STAGE_ORDER.map((stage) => {
-        const level = line.stages[stage].level;
-        const cost = upgradeCost(def.stages[stage], level);
-        return {
-          label: `${def.name} — ${def.stages[stage].name}`.slice(0, 100),
-          description: `Lv ${level} → ${level + 1} · ${cost.toLocaleString()} coins`.slice(0, 100),
-          value: `${lineId}:${stage}`,
-        };
-      });
-    })
-    .slice(0, 25);
-
-  if (upgradeOptions.length > 0) {
+  if (briefing.upgradeOptions.length > 0) {
     const select = new StringSelectMenuBuilder()
       .setCustomId("tycoon:upgrade")
-      .setPlaceholder("🔧 Upgrade a stage…")
-      .addOptions(upgradeOptions);
+      .setPlaceholder("Fix bottleneck...")
+      .addOptions([...briefing.upgradeOptions]);
     rows.push(
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) as ActionRowBuilder<
         ButtonBuilder | StringSelectMenuBuilder
@@ -138,22 +323,11 @@ function dashboardRows(
     );
   }
 
-  const automatable = ownedIds.filter((id) => !factory.lines[id].automated);
-  if (automatable.length > 0) {
+  if (briefing.expansionOptions.length > 0) {
     const select = new StringSelectMenuBuilder()
-      .setCustomId("tycoon:automate")
-      .setPlaceholder("👷 Hire automation…")
-      .addOptions(
-        automatable.map((id) => ({
-          label: LINES[id].name.slice(0, 100),
-          description:
-            `${LINES[id].automationCost.toLocaleString()} coins · removes offline cap`.slice(
-              0,
-              100,
-            ),
-          value: id,
-        })),
-      );
+      .setCustomId("tycoon:expand")
+      .setPlaceholder("Expand or automate...")
+      .addOptions([...briefing.expansionOptions]);
     rows.push(
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) as ActionRowBuilder<
         ButtonBuilder | StringSelectMenuBuilder
@@ -161,23 +335,11 @@ function dashboardRows(
     );
   }
 
-  if (ownedIds.length > 0) {
+  if (briefing.outputOptions.length > 0) {
     const select = new StringSelectMenuBuilder()
       .setCustomId("tycoon:mode")
-      .setPlaceholder("🔁 Toggle sell / stockpile…")
-      .addOptions(
-        ownedIds.map((id) => {
-          const next = factory.lines[id].mode === "sell" ? "stockpile" : "sell";
-          return {
-            label: `${LINES[id].name} → ${next}`.slice(0, 100),
-            description: (next === "sell"
-              ? "Sell finished goods for scrip"
-              : "Stockpile refined material to stash"
-            ).slice(0, 100),
-            value: `${id}:${next}`,
-          };
-        }),
-      );
+      .setPlaceholder("Manage output...")
+      .addOptions([...briefing.outputOptions]);
     rows.push(
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) as ActionRowBuilder<
         ButtonBuilder | StringSelectMenuBuilder
@@ -190,10 +352,11 @@ function dashboardRows(
 
 /** Reads state and renders the full dashboard payload (container + rows). */
 export async function renderDashboard(ctx: Ctx, userId: string) {
-  const [factory, scrip, coinBalance, inventory, profile] = await Promise.all([
+  const [factory, scrip, coinBalance, worth, inventory, profile] = await Promise.all([
     ctx.ensure(userId, UserFactory),
     getBalance(ctx, userId, "scrip"),
     getBalance(ctx, userId, "coins"),
+    netWorth(ctx, userId),
     ctx.get(userId, UserInventory),
     ctx.get(userId, RpgProfile),
   ]);
@@ -204,22 +367,29 @@ export async function renderDashboard(ctx: Ctx, userId: string) {
     used: getStashUsage(inventory?.slots ?? {}),
     max: profile?.stashSize ?? RpgProfile.schema.parse({}).stashSize,
   };
+  const briefing = buildConsoleBriefing(userId, factory, now, stash);
 
-  const header = `# 🏛️ Guild Automated Works\n${coins(scrip, "scrip")}  •  ${coins(coinBalance)}`;
+  const header = `# 🏛️ Guild Automated Works\n${coins(scrip, "scrip")}  •  ${coins(coinBalance)}  •  Net worth: ${coins(worth)}\nLines: ${ownedIds.length}/${Object.keys(LINES).length}  •  Ready: ${briefing.readyLabel}`;
 
   const body =
     ownedIds.length === 0
-      ? "You have no production lines yet.\nUse `/tycoon charter` to found your first one."
-      : ownedIds.map((id) => lineBlock(userId, id, factory.lines[id], now, stash)).join("\n\n");
+      ? "No lines chartered yet."
+      : ownedIds
+          .map((id) => lineBlock(lineState(userId, id, factory.lines[id], now, stash)))
+          .join("\n\n");
 
   const payload = v2Message(
     container(
       "info",
       text(header),
       separator("sm"),
-      text(`${body}\n\n-# 💡 The 🔴 stage limits a line — upgrade it. /tycoon charter to expand.`),
+      text(`## Shift Briefing\n${briefing.line}`),
+      separator("sm"),
+      text(
+        `${body}\n\n-# Advanced: Fix bottleneck with the select, or use /tycoon collect, /tycoon upgrade, /tycoon exchange.`,
+      ),
     ),
-    ...dashboardRows(factory),
+    ...dashboardRows(briefing, scrip),
   );
   return payload;
 }

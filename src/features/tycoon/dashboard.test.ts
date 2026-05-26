@@ -29,6 +29,10 @@ function payloadText(payload: { readonly components: readonly unknown[] }): stri
   return payload.components.flatMap(collectText).join("\n");
 }
 
+function payloadJson(payload: { readonly components: readonly unknown[] }): string {
+  return JSON.stringify(payload.components);
+}
+
 /** Minimal dashboard Ctx for component reads. */
 function makeCtx(seed: Record<string, Record<string, unknown>>): Ctx {
   function bucket(coll: string): Record<string, unknown> {
@@ -83,12 +87,126 @@ function stockpileDashboardCtx(stashSize: number): Ctx {
 }
 
 describe("renderDashboard()", () => {
+  test("first run console offers the first charter path without a dead collect button", async () => {
+    const payload = await renderDashboard(
+      makeCtx({
+        [UserFactory.collection]: { [USER]: { lines: {}, lifetimeScrip: 0 } },
+        user_currencies: { [USER]: { balances: { coins: 500, scrip: 0 }, bankBalances: {} } },
+      }),
+      USER,
+    );
+
+    const body = payloadText(payload);
+    const json = payloadJson(payload);
+    expect(body).toContain("Shift Briefing");
+    expect(body).toContain("Charter Lumber Mill");
+    expect(body).toContain("collect output, upgrade the slowest stage, expand into new lines");
+    expect(json).not.toContain("Collect Ready");
+    expect(json).toContain("Expand or automate");
+    expect(json).toContain("charter:lumber_mill");
+  });
+
+  test("ready output promotes Collect Ready as the primary action", async () => {
+    const payload = await renderDashboard(
+      makeCtx({
+        [UserFactory.collection]: {
+          [USER]: {
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
+              },
+            },
+            lifetimeScrip: 0,
+          },
+        },
+        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
+      }),
+      USER,
+    );
+
+    const body = payloadText(payload);
+    const json = payloadJson(payload);
+    expect(body).toContain("Shift Briefing");
+    expect(body).toContain("Collect ready output");
+    expect(json).toContain("Collect Ready");
+    expect(json).toContain("tycoon:collect:ready");
+  });
+
   test("warns when stockpile output will not fit in the stash", async () => {
     const payload = await renderDashboard(stockpileDashboardCtx(10), USER);
 
     const body = payloadText(payload);
     expect(body).toContain("Stash blocked");
     expect(body).toContain("clear stash or upgrade it");
+    expect(body.indexOf("Stash blocked")).toBeLessThan(body.indexOf("Fix bottleneck"));
+  });
+
+  test("orders bottleneck upgrade options before non-limiting stages", async () => {
+    const payload = await renderDashboard(stockpileDashboardCtx(1_000_000), USER);
+
+    const json = payloadJson(payload);
+    expect(json.indexOf("lumber_mill:refinery")).toBeGreaterThanOrEqual(0);
+    expect(json.indexOf("lumber_mill:refinery")).toBeLessThan(
+      json.indexOf("lumber_mill:extractor"),
+    );
+  });
+
+  test("shows distinct automated, manual full, and manual running statuses", async () => {
+    const payload = await renderDashboard(
+      makeCtx({
+        [UserFactory.collection]: {
+          [USER]: {
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
+              },
+              copper_works: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: true,
+                lastCollectedAt: 0,
+              },
+              iron_works: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: Date.now(),
+              },
+            },
+            lifetimeScrip: 0,
+          },
+        },
+        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
+      }),
+      USER,
+    );
+
+    const body = payloadText(payload);
+    expect(body).toContain("Automated");
+    expect(body).toContain("Manual full");
+    expect(body).toContain("Manual running");
   });
 
   test("shows queued collect events without applying them", async () => {
