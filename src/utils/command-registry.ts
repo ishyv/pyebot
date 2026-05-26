@@ -1,5 +1,11 @@
-import { ApplicationCommandOptionType } from "discord.js";
-import type { CommandHelp, FeatureDescriptor, LoadedFeature } from "@/framework";
+import {
+  buildCapabilityGraph,
+  type CapabilityCommand,
+  type CapabilityGraphSnapshot,
+  getCapabilityGraph,
+  installCapabilityGraph,
+} from "@/core/capabilityGraph";
+import type { FeatureDescriptor, LoadedFeature } from "@/framework";
 
 export interface CommandArgMeta {
   readonly name: string;
@@ -25,185 +31,95 @@ export interface FeatureCommandGroup {
 export interface CommandCatalog {
   readonly features: readonly FeatureCommandGroup[];
   readonly commandsByName: ReadonlyMap<string, CommandMeta>;
+  readonly graph?: CapabilityGraphSnapshot;
 }
-
-type SlashCommandJson = {
-  readonly name?: unknown;
-  readonly description?: unknown;
-  readonly options?: readonly SlashCommandOptionJson[];
-};
-
-type SlashCommandOptionJson = {
-  readonly type?: unknown;
-  readonly name?: unknown;
-  readonly description?: unknown;
-  readonly required?: unknown;
-  readonly options?: readonly SlashCommandOptionJson[];
-};
-
-let installedCatalog: CommandCatalog = {
-  features: [],
-  commandsByName: new Map(),
-};
 
 /**
- * Builds the help catalog from the same loaded features used by dispatch.
+ * Builds the help catalog from the canonical capability graph.
  *
- * Command names, descriptions, and argument descriptions come from Discord's
- * slash-command JSON. `help` only carries curated guidance that Discord does
- * not know about, which keeps `/help` from becoming a second command registry.
+ * Kept as a compatibility export for older tests and callers; runtime installs
+ * the graph directly through `setFeatureCatalog`.
  */
 export function buildCommandCatalog(features: ReadonlyArray<LoadedFeature>): CommandCatalog {
-  const allCommandNames = new Set<string>();
-  for (const feature of features) {
-    for (const command of feature.commands) allCommandNames.add(command.data.name);
-  }
-
-  const commandsByName = new Map<string, CommandMeta>();
-  const groups: FeatureCommandGroup[] = [];
-
-  for (const feature of features) {
-    const commands: CommandMeta[] = [];
-
-    for (const command of feature.commands) {
-      const help = command.help;
-      if (help === false) continue;
-      if (!isCommandHelpObject(help)) {
-        throw new Error(
-          `Command "${command.data.name}" must declare help metadata or help: false.`,
-        );
-      }
-
-      validateHints(command.data.name, help.hints ?? [], allCommandNames);
-      const json = command.data.toJSON() as SlashCommandJson;
-      const name = stringValue(json.name) ?? command.data.name;
-      const description = stringValue(json.description) ?? "";
-      const meta: CommandMeta = {
-        featureId: feature.descriptor.id,
-        featureName: feature.descriptor.name,
-        name,
-        description,
-        hints: help.hints ?? [],
-        requires: help.requires,
-        args: collectArgs(json.options ?? []),
-      };
-      commands.push(meta);
-      commandsByName.set(name, meta);
-    }
-
-    if (commands.length > 0) {
-      groups.push({ feature: feature.descriptor, commands });
-    }
-  }
-
-  return { features: groups, commandsByName };
+  return commandCatalogFromGraph(buildCapabilityGraph({ features }));
 }
 
-/** Installs the boot-built catalog used by `/help` and footer hint helpers. */
+/** Installs a catalog by installing the graph it was derived from. */
 export function installCommandCatalog(catalog: CommandCatalog): void {
-  installedCatalog = catalog;
+  if (!catalog.graph) throw new Error("Command catalog was not built from a capability graph.");
+  installCapabilityGraph(catalog.graph);
 }
 
 /** Returns all feature groups with at least one command visible in `/help`. */
 export function getCommandFeatures(): readonly FeatureCommandGroup[] {
-  return installedCatalog.features;
+  return commandCatalogFromGraph(getCapabilityGraph()).features;
 }
 
 /** Returns a formatted footer hint string, e.g. "💡 /inventory • /process • /craft". */
 export function getHints(commandName: string): string {
-  const meta = installedCatalog.commandsByName.get(commandName);
+  const meta = getCommandMeta(commandName);
   if (!meta || meta.hints.length === 0) return "";
-  return "💡 " + meta.hints.join(" • ");
+  return `💡 ${meta.hints.join(" • ")}`;
 }
 
 /** Returns the full metadata for a command, or null if not registered. */
 export function getCommandMeta(commandName: string): CommandMeta | null {
-  return installedCatalog.commandsByName.get(commandName) ?? null;
+  return commandCatalogFromGraph(getCapabilityGraph()).commandsByName.get(commandName) ?? null;
 }
 
 /** Returns all visible command metadata owned by a feature. */
 export function getCommandsForFeature(
   featureId: string,
 ): Array<{ name: string; meta: CommandMeta }> {
-  const group = installedCatalog.features.find((entry) => entry.feature.id === featureId);
+  const group = commandCatalogFromGraph(getCapabilityGraph()).features.find(
+    (entry) => entry.feature.id === featureId,
+  );
   return group?.commands.map((meta) => ({ name: meta.name, meta })) ?? [];
 }
 
-function isCommandHelpObject(help: CommandHelp | undefined): help is Exclude<CommandHelp, false> {
-  return typeof help === "object" && help !== null;
-}
+function commandCatalogFromGraph(graph: CapabilityGraphSnapshot): CommandCatalog {
+  const commandsByName = new Map<string, CommandMeta>();
+  const groups: FeatureCommandGroup[] = [];
+  const featureById = new Map(graph.features.map((feature) => [feature.id, feature]));
 
-function validateHints(
-  commandName: string,
-  hints: readonly string[],
-  allCommandNames: ReadonlySet<string>,
-): void {
-  for (const hint of hints) {
-    const hintedCommand = slashCommandName(hint);
-    if (hintedCommand && !allCommandNames.has(hintedCommand)) {
-      throw new Error(`Command "${commandName}" has unknown command hint "${hint}".`);
+  for (const feature of graph.features) {
+    const commands = graph.commands
+      .filter((command) => command.featureId === feature.id && !command.hidden)
+      .map((command) => commandMeta(command, feature.name));
+
+    for (const command of commands) commandsByName.set(command.name, command);
+    if (commands.length > 0) {
+      groups.push({
+        feature: {
+          id: feature.id,
+          name: feature.name,
+          description: feature.description,
+          defaultEnabled: feature.defaultEnabled,
+        },
+        commands,
+      });
     }
   }
-}
 
-function slashCommandName(hint: string): string | null {
-  const match = /^\/([a-z0-9_-]+)/i.exec(hint.trim());
-  return match?.[1] ?? null;
-}
-
-function collectArgs(options: readonly SlashCommandOptionJson[]): CommandArgMeta[] {
-  const args: CommandArgMeta[] = [];
-  for (const option of options) {
-    const name = stringValue(option.name);
-    const description = stringValue(option.description);
-    if (!name || !description) continue;
-
-    if (option.type === ApplicationCommandOptionType.Subcommand) {
-      args.push({ name, description });
-      args.push(...collectNestedArgs(name, option.options ?? []));
-      continue;
-    }
-
-    if (option.type === ApplicationCommandOptionType.SubcommandGroup) {
-      args.push({ name, description });
-      for (const subcommand of option.options ?? []) {
-        const subName = stringValue(subcommand.name);
-        if (!subName) continue;
-        const prefix = `${name} ${subName}`;
-        const subDescription = stringValue(subcommand.description);
-        if (subDescription) args.push({ name: prefix, description: subDescription });
-        args.push(...collectNestedArgs(prefix, subcommand.options ?? []));
-      }
-      continue;
-    }
-
-    args.push({
-      name,
-      description,
-      required: option.required === true,
-    });
+  // Defensive: if a graph somehow contains a command for a missing feature, do
+  // not expose it through help selectors.
+  for (const command of graph.commands) {
+    if (command.hidden || commandsByName.has(command.name)) continue;
+    const feature = featureById.get(command.featureId);
+    if (feature) commandsByName.set(command.name, commandMeta(command, feature.name));
   }
-  return args;
+
+  return { features: groups, commandsByName, graph };
 }
 
-function collectNestedArgs(
-  prefix: string,
-  options: readonly SlashCommandOptionJson[],
-): CommandArgMeta[] {
-  return options.flatMap((option) => {
-    const name = stringValue(option.name);
-    const description = stringValue(option.description);
-    if (!name || !description) return [];
-    return [
-      {
-        name: `${prefix} ${name}`,
-        description,
-        required: option.required === true,
-      },
-    ];
-  });
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
+function commandMeta(command: CapabilityCommand, featureName: string): CommandMeta {
+  return {
+    featureId: command.featureId,
+    featureName,
+    name: command.name,
+    description: command.description,
+    hints: command.hints,
+    requires: command.requires,
+    args: command.args,
+  };
 }

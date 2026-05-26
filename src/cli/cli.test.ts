@@ -8,6 +8,13 @@ import {
   runTxCli,
   TxCliUsageError,
 } from "@/cli";
+import { Handle } from "@/framework/decorators";
+
+class DuplicateAuthoringHandlers {
+  @Handle("dup:")
+  @Handle("dup:")
+  async onDuplicate() {}
+}
 
 const memoryFs = (
   existing: readonly string[] = [],
@@ -250,5 +257,69 @@ describe("checkAuthoring", () => {
 
     expect(result.ok).toBe(true);
     expect(result.checks.every((check) => check.status === "pass")).toBe(true);
+    expect(result.checks.find((check) => check.id === "capability-graph")?.message).toContain(
+      "1 command(s)",
+    );
+  });
+
+  test("fails unknown feature configs and stale hints", async () => {
+    const result = await checkAuthoring({
+      loadFeatures: async () => [
+        {
+          descriptor: {
+            id: "utility",
+            name: "Utility",
+            description: "Useful commands.",
+            defaultEnabled: true,
+          },
+          commands: [
+            {
+              data: {
+                name: "ping",
+                toJSON: () => ({ name: "ping", description: "Check latency." }),
+              },
+              help: { hints: ["/missing"] },
+              execute: async () => {},
+            },
+          ],
+          handlers: new DuplicateAuthoringHandlers(),
+        },
+      ],
+      featureConfigs: { missing: { fields: {} } },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({
+        id: "feature-configs",
+        status: "fail",
+      }),
+    );
+    expect(result.checks.find((check) => check.id === "capability-graph")?.message).toContain(
+      "unknown command hint",
+    );
+  });
+
+  test("fails duplicate capability graph node ids", async () => {
+    const result = await checkAuthoring({
+      loadFeatures: async () => [
+        {
+          descriptor: {
+            id: "utility",
+            name: "Utility",
+            description: "Useful commands.",
+            defaultEnabled: true,
+          },
+          commands: [],
+          handlers: new DuplicateAuthoringHandlers(),
+        },
+      ],
+      featureConfigs: {},
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.checks.find((check) => check.id === "capability-graph")?.message).toContain(
+      "duplicate node id",
+    );
   });
 });

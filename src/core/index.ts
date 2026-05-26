@@ -1,4 +1,14 @@
 export { type BusEvent, bus } from "./bus";
+export {
+  buildCapabilityGraph,
+  type CapabilityCommand,
+  type CapabilityFeature,
+  type CapabilityGraphInput,
+  type CapabilityGraphSnapshot,
+  getCapabilityGraph,
+  installCapabilityGraph,
+  toGuideGraphSnapshot,
+} from "./capabilityGraph";
 export { createClient } from "./client";
 export { disconnectDb, getDb, getMongoClient } from "./db";
 export type { CommandContext, ComponentInteraction, MiddlewareFn } from "./feature";

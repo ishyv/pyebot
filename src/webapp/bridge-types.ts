@@ -98,6 +98,8 @@ export interface GuideCommand {
   readonly description: string;
   readonly hidden: boolean;
   readonly requiresAdmin: boolean;
+  readonly hints: readonly string[];
+  readonly requires?: string;
   readonly badges: readonly GuideBadge[];
   readonly args: readonly GuideCommandArg[];
 }

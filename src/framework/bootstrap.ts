@@ -36,7 +36,6 @@ import { MessageFlags } from "discord.js";
 import { setFeatureCatalog } from "@/core/featureCatalog";
 import { createLogger } from "@/core/logger";
 import { FEATURE_CONFIGS } from "@/features/config";
-import { buildCommandCatalog, installCommandCatalog } from "@/utils/command-registry";
 import { getListenMetadata, getOnMetadata } from "./decorators";
 import { loadFeatures } from "./loader";
 import { isAdmin, isFeatureEnabled, safeReply } from "./middleware";
@@ -102,8 +101,6 @@ export async function bootstrapFramework(
   const featuresCommand = buildFeaturesCommand(descriptors);
   commandMap.set(featuresCommand.data.name, featuresCommand);
   commandOwner.set(featuresCommand.data.name, null);
-
-  installCommandCatalog(buildCommandCatalog(features));
 
   // ─── Wire event listeners from @On metadata ──────────────────────────
   for (const feat of features) {

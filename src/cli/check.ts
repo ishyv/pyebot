@@ -1,9 +1,11 @@
-import type { FeatureConfigRegistry } from "@/core/featureCatalog";
+import {
+  buildCapabilityGraph,
+  type CapabilityGraphSnapshot,
+  type FeatureConfigRegistry,
+} from "@/core/capabilityGraph";
 import { FEATURE_CONFIGS } from "@/features/config";
 import { loadFeatures } from "@/framework/loader";
 import type { LoadedFeature } from "@/framework/types";
-import { buildCommandCatalog } from "@/utils/command-registry";
-import { buildGuideGraph } from "@/utils/feature-guide";
 
 export type AuthoringCheckStatus = "pass" | "fail";
 
@@ -56,21 +58,17 @@ export async function checkAuthoring(
   checks.push(validateConfigRegistry(features, dependencies.featureConfigs));
 
   try {
-    buildCommandCatalog(features);
+    const graph = buildCapabilityGraph({
+      features,
+      configs: dependencies.featureConfigs,
+    });
     checks.push({
-      id: "command-catalog",
+      id: "capability-graph",
       status: "pass",
-      message: "Command help metadata is valid.",
+      message: graphSummary(graph),
     });
   } catch (error) {
-    checks.push({ id: "command-catalog", status: "fail", message: messageOf(error) });
-  }
-
-  try {
-    buildGuideGraph({ features });
-    checks.push({ id: "guide-graph", status: "pass", message: "Runtime guide metadata is valid." });
-  } catch (error) {
-    checks.push({ id: "guide-graph", status: "fail", message: messageOf(error) });
+    checks.push({ id: "capability-graph", status: "fail", message: messageOf(error) });
   }
 
   return result(checks);
@@ -112,6 +110,18 @@ function validateConfigRegistry(
     status: "pass",
     message: "Feature config registry matches loaded features.",
   };
+}
+
+function graphSummary(graph: CapabilityGraphSnapshot): string {
+  const configurable = graph.features.filter((feature) => feature.hasConfig).length;
+  return [
+    `Capability graph is valid`,
+    `${graph.features.length} feature(s)`,
+    `${graph.commands.length} command(s)`,
+    `${graph.runtimeRoutes.length} runtime route(s)`,
+    `${graph.dashboardPages.length} dashboard page(s)`,
+    `${configurable} configurable feature(s)`,
+  ].join("; ");
 }
 
 function result(checks: readonly AuthoringCheck[]): AuthoringCheckResult {
