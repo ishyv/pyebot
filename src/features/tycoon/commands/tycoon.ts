@@ -111,19 +111,37 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand((s) => s.setName("leaderboard").setDescription("See the richest Guild magnates"));
 
+/**
+ * Autocomplete label for a line, annotated with the price relevant to the
+ * action so users see the cost before committing (Discord shows `name`, not
+ * `value`). Capped at Discord's 100-char choice-name limit.
+ */
+function lineChoiceLabel(id: LineId, sub: string): string {
+  const def = LINES[id];
+  if (sub === "charter") {
+    return `${def.name} (T${def.tier}) · 🪙 ${def.charterCost.toLocaleString()}`.slice(0, 100);
+  }
+  if (sub === "automate") {
+    return `${def.name} · 🪙 ${def.automationCost.toLocaleString()} automation`.slice(0, 100);
+  }
+  return def.name.slice(0, 100);
+}
+
 async function autocomplete(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
   const sub = interaction.options.getSubcommand();
 
   const owned = (await ctx.get(interaction.user.id, UserFactory))?.lines ?? {};
-  const ids = (Object.keys(LINES) as LineId[]).filter((id) =>
-    sub === "charter" ? !owned[id] : Boolean(owned[id]),
-  );
+  const ids = (Object.keys(LINES) as LineId[]).filter((id) => {
+    if (sub === "charter") return !owned[id];
+    if (sub === "automate") return Boolean(owned[id]) && !owned[id].automated;
+    return Boolean(owned[id]);
+  });
 
   const choices = ids
     .filter((id) => id.includes(focused) || LINES[id].name.toLowerCase().includes(focused))
     .slice(0, 25)
-    .map((id) => ({ name: LINES[id].name, value: id }));
+    .map((id) => ({ name: lineChoiceLabel(id, sub), value: id }));
   await interaction.respond(choices);
 }
 
