@@ -10,10 +10,12 @@ import { LINES } from "./content/lines";
 import {
   automate,
   charter,
+  coinsInvested,
   collect,
   EXCHANGE_FEE,
   exchange,
   getScrip,
+  netWorth,
   setMode,
   topMagnates,
   upgrade,
@@ -280,17 +282,89 @@ describe("exchange()", () => {
   });
 });
 
-describe("topMagnates()", () => {
-  test("ranks by lifetimeScrip desc and excludes zero-scrip players", async () => {
+describe("coinsInvested() and netWorth()", () => {
+  test("counts charter cost, completed upgrades, and automation", () => {
+    const invested = coinsInvested("lumber_mill", {
+      stages: { extractor: { level: 3 }, refinery: { level: 2 }, assembler: { level: 1 } },
+      mode: "sell",
+      automated: true,
+      lastCollectedAt: 0,
+    });
+
+    expect(invested).toBe(
+      LINES.lumber_mill.charterCost +
+        LINES.lumber_mill.stages.extractor.baseUpgradeCost +
+        Math.round(
+          LINES.lumber_mill.stages.extractor.baseUpgradeCost *
+            LINES.lumber_mill.stages.extractor.upgradeCostMult,
+        ) +
+        LINES.lumber_mill.stages.refinery.baseUpgradeCost +
+        LINES.lumber_mill.automationCost,
+    );
+  });
+
+  test("adds lifetime scrip, current scrip, and invested coins", async () => {
     const ctx = makeCtx({
+      ...wallet(0, 200),
+      user_factories: {
+        [USER]: {
+          lines: {
+            lumber_mill: {
+              stages: { extractor: { level: 2 }, refinery: { level: 1 }, assembler: { level: 1 } },
+              mode: "sell",
+              automated: false,
+              lastCollectedAt: 0,
+            },
+          },
+          lifetimeScrip: 1000,
+        },
+      },
+    });
+
+    expect(await netWorth(ctx, USER)).toBe(1000 + 200 + LINES.lumber_mill.charterCost + 120);
+  });
+
+  test("exchange spending leaves lifetime scrip intact but lowers current-scrip value", async () => {
+    const ctx = makeCtx({
+      ...wallet(0, 1000),
+      user_factories: { [USER]: { lines: {}, lifetimeScrip: 5000 } },
+    });
+
+    expect(await netWorth(ctx, USER)).toBe(6000);
+    await exchange(ctx, USER, 400);
+    expect(await netWorth(ctx, USER)).toBe(5600);
+  });
+});
+
+describe("topMagnates()", () => {
+  test("ranks by net worth and keeps lifetime scrip for display", async () => {
+    const ctx = makeCtx({
+      user_currencies: {
+        rich: { balances: { scrip: 0 }, bankBalances: {} },
+        investor: { balances: { scrip: 0 }, bankBalances: {} },
+        mid: { balances: { scrip: 50 }, bankBalances: {} },
+        broke: { balances: { scrip: 0 }, bankBalances: {} },
+      },
       user_factories: {
         rich: { lines: {}, lifetimeScrip: 9000 },
+        investor: {
+          lines: {
+            silver_forge: {
+              stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
+              mode: "sell",
+              automated: false,
+              lastCollectedAt: 0,
+            },
+          },
+          lifetimeScrip: 100,
+        },
         mid: { lines: {}, lifetimeScrip: 500 },
         broke: { lines: {}, lifetimeScrip: 0 },
       },
     });
     const top = await topMagnates(ctx, 10);
-    expect(top.map((e) => e.userId)).toEqual(["rich", "mid"]);
-    expect(top[0].lifetimeScrip).toBe(9000);
+    expect(top.map((e) => e.userId)).toEqual(["investor", "rich", "mid"]);
+    expect(top[0].netWorth).toBe(LINES.silver_forge.charterCost + 100);
+    expect(top[0].lifetimeScrip).toBe(100);
   });
 });

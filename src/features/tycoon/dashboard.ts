@@ -7,12 +7,15 @@
  */
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from "discord.js";
+import { RpgProfile } from "@/components/rpg-profile";
 import { UserFactory, type UserFactoryValue } from "@/components/user-factory";
+import { UserInventory } from "@/components/user-inventory";
 import { getBalance } from "@/features/economy/mutations";
+import { getStashUsage } from "@/features/rpg/inventory";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins, progressBar } from "@/utils/fmt";
-import { pendingOutput, upgradeCost } from "./accrual";
+import { eventSeed, pendingOutput, rollEvent, upgradeCost } from "./accrual";
 import { LINES, type LineId, STAGE_ORDER, type StageKind } from "./content/lines";
 
 const STAGE_EMOJI: Record<StageKind, string> = {
@@ -25,7 +28,18 @@ function ratePerHour(n: number): string {
   return `${Math.round(n)}/h`;
 }
 
-function lineBlock(lineId: LineId, line: UserFactoryValue["lines"][string], now: number): string {
+interface StashStatus {
+  readonly used: number;
+  readonly max: number;
+}
+
+function lineBlock(
+  userId: string,
+  lineId: LineId,
+  line: UserFactoryValue["lines"][string],
+  now: number,
+  stash: StashStatus,
+): string {
   const def = LINES[lineId];
   const levels = {
     extractor: line.stages.extractor.level,
@@ -38,6 +52,8 @@ function lineBlock(lineId: LineId, line: UserFactoryValue["lines"][string], now:
     now,
   );
   const { stageRates, bottleneck, rate } = pending.throughput;
+  const event = rollEvent(eventSeed(userId, lineId, line.lastCollectedAt));
+  const collectUnits = Math.floor(pending.units * event.multiplier);
 
   const modeTag = line.mode === "sell" ? "SELL → ⚜️" : "STOCKPILE → 📦";
   const autoTag = line.automated ? "👷 Automated" : "⏳ Manual";
@@ -59,7 +75,17 @@ function lineBlock(lineId: LineId, line: UserFactoryValue["lines"][string], now:
     ? `${pending.units.toLocaleString()} stored (no cap)`
     : `${progressBar(pending.units, cap)} ${pending.units.toLocaleString()}/${Math.round(cap).toLocaleString()}${pending.capped ? " ⚠️ full" : ""}`;
 
-  return `## 🏭 ${def.name}  [${modeTag}]  ${autoTag}\n${stageLines}\n${output}\n${fill}`;
+  const notes: string[] = [];
+  if (line.mode === "stockpile" && collectUnits > Math.max(0, stash.max - stash.used)) {
+    notes.push(
+      `⚠️ Stash blocked: ${collectUnits.toLocaleString()} ${def.refinedMaterialId} won't fit; clear stash or upgrade it before collecting.`,
+    );
+  }
+  if (pending.units > 0 && event.id !== "none") {
+    notes.push(`🎲 Event queued: ${event.label}`);
+  }
+
+  return `## 🏭 ${def.name}  [${modeTag}]  ${autoTag}\n${stageLines}\n${output}\n${fill}${notes.length ? `\n${notes.join("\n")}` : ""}`;
 }
 
 /** Builds the action rows: Collect All + Refresh, and an Upgrade select menu. */
@@ -164,21 +190,27 @@ function dashboardRows(
 
 /** Reads state and renders the full dashboard payload (container + rows). */
 export async function renderDashboard(ctx: Ctx, userId: string) {
-  const [factory, scrip, coinBalance] = await Promise.all([
+  const [factory, scrip, coinBalance, inventory, profile] = await Promise.all([
     ctx.ensure(userId, UserFactory),
     getBalance(ctx, userId, "scrip"),
     getBalance(ctx, userId, "coins"),
+    ctx.get(userId, UserInventory),
+    ctx.get(userId, RpgProfile),
   ]);
 
   const now = Date.now();
   const ownedIds = Object.keys(factory.lines) as LineId[];
+  const stash = {
+    used: getStashUsage(inventory?.slots ?? {}),
+    max: profile?.stashSize ?? RpgProfile.schema.parse({}).stashSize,
+  };
 
   const header = `# 🏛️ Guild Automated Works\n${coins(scrip, "scrip")}  •  ${coins(coinBalance)}`;
 
   const body =
     ownedIds.length === 0
       ? "You have no production lines yet.\nUse `/tycoon charter` to found your first one."
-      : ownedIds.map((id) => lineBlock(id, factory.lines[id], now)).join("\n\n");
+      : ownedIds.map((id) => lineBlock(userId, id, factory.lines[id], now, stash)).join("\n\n");
 
   const payload = v2Message(
     container(

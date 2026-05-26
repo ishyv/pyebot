@@ -10,7 +10,7 @@
  * is guarded by a per-(user, line) lock — the same pattern quest-claim uses.
  */
 
-import { UserFactory } from "@/components/user-factory";
+import { type LineState, UserFactory } from "@/components/user-factory";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { adjustBalance, getBalance, MutationError } from "@/features/economy/mutations";
 import { addItemsToStash } from "@/features/rpg/inventory";
@@ -23,7 +23,7 @@ import {
   type StageLevels,
   upgradeCost,
 } from "./accrual";
-import { LINES, type LineId, type StageKind } from "./content/lines";
+import { LINES, type LineId, parseLineId, type StageKind } from "./content/lines";
 
 export class TycoonError extends Error {
   constructor(
@@ -244,18 +244,55 @@ export function getScrip(ctx: Ctx, userId: string): Promise<number> {
 
 export interface MagnateEntry {
   readonly userId: string;
+  readonly netWorth: number;
   readonly lifetimeScrip: number;
 }
 
 /**
- * Top magnates by lifetime scrip (the monotonic wealth measure — never eroded
- * by the Exchange). Uses the cross-entity query escape hatch on UserFactory.
+ * Coin-equivalent value sunk into a line using the current catalog prices.
+ *
+ * This is intentionally derived instead of persisted: v1 can rank from live
+ * line state, while a future indexed `netWorth` cache can store this result if
+ * the leaderboard ever becomes too large for read-time calculation.
  */
+export function coinsInvested(lineId: LineId, line: LineState): number {
+  const def = LINES[lineId];
+  let total = def.charterCost + (line.automated ? def.automationCost : 0);
+  for (const stage of ["extractor", "refinery", "assembler"] as const) {
+    for (let level = 1; level < line.stages[stage].level; level++) {
+      total += upgradeCost(def.stages[stage], level);
+    }
+  }
+  return total;
+}
+
+/** Net worth for Magnates = lifetime scrip + current scrip value + invested coins. */
+export async function netWorth(ctx: Ctx, userId: string): Promise<number> {
+  const [factory, currentScrip] = await Promise.all([
+    ctx.get(userId, UserFactory),
+    getBalance(ctx, userId, "scrip"),
+  ]);
+  const invested = Object.entries(factory?.lines ?? {}).reduce((sum, [lineId, line]) => {
+    const parsed = parseLineId(lineId);
+    return parsed ? sum + coinsInvested(parsed, line) : sum;
+  }, 0);
+  return (factory?.lifetimeScrip ?? 0) + currentScrip * SCRIP_TO_COINS_RATE + invested;
+}
+
+/** Top magnates by read-time net worth, keeping lifetime scrip for display. */
 export async function topMagnates(ctx: Ctx, limit = 10): Promise<MagnateEntry[]> {
-  const rows = await ctx.query(UserFactory, { sort: { lifetimeScrip: -1 }, limit });
-  return rows
-    .filter((r) => r.lifetimeScrip > 0)
-    .map((r) => ({ userId: r._id, lifetimeScrip: r.lifetimeScrip }));
+  const rows = await ctx.query(UserFactory);
+  const ranked = await Promise.all(
+    rows.map(async (r) => ({
+      userId: r._id,
+      netWorth: await netWorth(ctx, r._id),
+      lifetimeScrip: r.lifetimeScrip,
+    })),
+  );
+  return ranked
+    .filter((r) => r.netWorth > 0)
+    .sort((a, b) => b.netWorth - a.netWorth)
+    .slice(0, limit);
 }
 
 /** A user's lifetime scrip earned (leaderboard metric). */

@@ -18,6 +18,7 @@ import {
   EXCHANGE_FEE,
   exchange,
   getLifetimeScrip,
+  netWorth,
   setMode,
   topMagnates,
   upgrade,
@@ -167,9 +168,10 @@ async function handleLeaderboard(
   interaction: ChatInputCommandInteraction,
   ctx: Ctx,
 ): Promise<void> {
-  const [top, own] = await Promise.all([
+  const [top, ownLifetime, ownNetWorth] = await Promise.all([
     topMagnates(ctx, 10),
     getLifetimeScrip(ctx, interaction.user.id),
+    netWorth(ctx, interaction.user.id),
   ]);
 
   if (top.length === 0) {
@@ -187,12 +189,14 @@ async function handleLeaderboard(
   const medals = ["🥇", "🥈", "🥉"];
   const rows = top.map((entry, i) => {
     const rank = medals[i] ?? `**${i + 1}.**`;
-    return `${rank} <@${entry.userId}> — ${coins(entry.lifetimeScrip, "scrip")}`;
+    return `${rank} <@${entry.userId}> — ${coins(entry.netWorth)} net worth · ${coins(entry.lifetimeScrip, "scrip")} lifetime`;
   });
 
   const ownRank = top.findIndex((e) => e.userId === interaction.user.id);
   const ownLine =
-    ownRank === -1 ? `\n\n-# You: ${coins(own, "scrip")} lifetime` : "\n\n-# That's you!";
+    ownRank === -1
+      ? `\n\n-# You: ${coins(ownNetWorth)} net worth · ${coins(ownLifetime, "scrip")} lifetime`
+      : "\n\n-# That's you!";
 
   await ctx.respond.send(
     v2Message(
