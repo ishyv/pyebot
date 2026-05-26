@@ -177,6 +177,11 @@ describe("renderDashboard()", () => {
     expect(payloadJson(payload)).toContain("tycoon:do:upgrade:lumber_mill");
   });
 
+  test("shows the next ×2 milestone goal on the bottleneck line", async () => {
+    const payload = await renderDashboard(stockpileDashboardCtx(1_000_000), USER);
+    expect(payloadText(payload)).toContain("Next ×2: Lv");
+  });
+
   test("warns when stockpile output will not fit in the stash", async () => {
     const payload = await renderDashboard(stockpileDashboardCtx(10), USER);
 

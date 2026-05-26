@@ -148,6 +148,14 @@ function lineBlock(state: LineConsoleState): string {
     state.line.mode === "sell"
       ? `${ratePerHour(state.rate)} ${def.finishedGood.name} (${coins(Math.round(state.rate) * def.finishedGood.scripValue, "scrip")}/h)`
       : `${ratePerHour(state.rate)} ${def.refinedMaterialId}`;
+  // Next milestone for the bottleneck stage — the "numbers go up soon" goal.
+  // Output doubles every `milestoneEvery` levels (see accrual.milestoneMult).
+  const me = def.milestoneEvery;
+  const blLevel = levels[state.bottleneck];
+  const nextMilestoneLevel = (Math.floor((blLevel - 1) / me) + 1) * me + 1;
+  const toNext = nextMilestoneLevel - blLevel;
+  const milestoneNote = ` • Next ×2: Lv${nextMilestoneLevel} (+${toNext})`;
+
   const notes: string[] = [];
   if (state.stashBlocked) {
     notes.push(
@@ -156,7 +164,7 @@ function lineBlock(state: LineConsoleState): string {
   }
   if (state.eventLabel) notes.push(`🎲 Event queued: ${state.eventLabel}`);
 
-  return `## 🏭 ${def.name}  [${modeTag}]  ${state.status}\n${stageLines}\n→ ${output}\nBottleneck: 🔴 ${def.stages[state.bottleneck].name} • Pending: ${state.fill}${notes.length ? `\n${notes.join("\n")}` : ""}`;
+  return `## 🏭 ${def.name}  [${modeTag}]  ${state.status}\n${stageLines}\n→ ${output}\nBottleneck: 🔴 ${def.stages[state.bottleneck].name} • Pending: ${state.fill}${milestoneNote}${notes.length ? `\n${notes.join("\n")}` : ""}`;
 }
 
 function optionUrgency(state: LineConsoleState): number {
