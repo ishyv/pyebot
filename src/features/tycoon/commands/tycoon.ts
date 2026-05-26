@@ -17,7 +17,9 @@ import {
   collect,
   EXCHANGE_FEE,
   exchange,
+  getLifetimeScrip,
   setMode,
+  topMagnates,
   upgrade,
 } from "../operations";
 
@@ -106,7 +108,8 @@ const data = new SlashCommandBuilder()
           .setRequired(true)
           .setMinValue(1),
       ),
-  );
+  )
+  .addSubcommand((s) => s.setName("leaderboard").setDescription("See the richest Guild magnates"));
 
 async function autocomplete(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
@@ -139,6 +142,50 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   else if (sub === "automate") await handleAutomate(interaction, ctx);
   else if (sub === "mode") await handleMode(interaction, ctx);
   else if (sub === "exchange") await handleExchange(interaction, ctx);
+  else if (sub === "leaderboard") await handleLeaderboard(interaction, ctx);
+}
+
+async function handleLeaderboard(
+  interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
+): Promise<void> {
+  const [top, own] = await Promise.all([
+    topMagnates(ctx, 10),
+    getLifetimeScrip(ctx, interaction.user.id),
+  ]);
+
+  if (top.length === 0) {
+    await ctx.respond.send(
+      v2Message(
+        container(
+          "info",
+          text("## 🏆 Guild Magnates\nNo magnates yet — be the first to build an empire."),
+        ),
+      ),
+    );
+    return;
+  }
+
+  const medals = ["🥇", "🥈", "🥉"];
+  const rows = top.map((entry, i) => {
+    const rank = medals[i] ?? `**${i + 1}.**`;
+    return `${rank} <@${entry.userId}> — ${coins(entry.lifetimeScrip, "scrip")}`;
+  });
+
+  const ownRank = top.findIndex((e) => e.userId === interaction.user.id);
+  const ownLine =
+    ownRank === -1 ? `\n\n-# You: ${coins(own, "scrip")} lifetime` : "\n\n-# That's you!";
+
+  await ctx.respond.send(
+    v2Message(
+      container(
+        "info",
+        text("# 🏆 Guild Magnates"),
+        separator("sm"),
+        text(`${rows.join("\n")}${ownLine}`),
+      ),
+    ),
+  );
 }
 
 async function handleView(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {

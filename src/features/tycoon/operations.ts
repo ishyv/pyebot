@@ -242,6 +242,28 @@ export function getScrip(ctx: Ctx, userId: string): Promise<number> {
   return getBalance(ctx, userId, "scrip");
 }
 
+export interface MagnateEntry {
+  readonly userId: string;
+  readonly lifetimeScrip: number;
+}
+
+/**
+ * Top magnates by lifetime scrip (the monotonic wealth measure — never eroded
+ * by the Exchange). Uses the cross-entity query escape hatch on UserFactory.
+ */
+export async function topMagnates(ctx: Ctx, limit = 10): Promise<MagnateEntry[]> {
+  const rows = await ctx.query(UserFactory, { sort: { lifetimeScrip: -1 }, limit });
+  return rows
+    .filter((r) => r.lifetimeScrip > 0)
+    .map((r) => ({ userId: r._id, lifetimeScrip: r.lifetimeScrip }));
+}
+
+/** A user's lifetime scrip earned (leaderboard metric). */
+export async function getLifetimeScrip(ctx: Ctx, userId: string): Promise<number> {
+  const factory = await ctx.get(userId, UserFactory);
+  return factory?.lifetimeScrip ?? 0;
+}
+
 /** Coins paid per scrip at the Guild Exchange, before the fee. */
 export const SCRIP_TO_COINS_RATE = 1;
 /** Fraction skimmed by the Exchange — the main scrip→coin inflation sink. */

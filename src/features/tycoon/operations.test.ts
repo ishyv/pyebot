@@ -15,6 +15,7 @@ import {
   exchange,
   getScrip,
   setMode,
+  topMagnates,
   upgrade,
 } from "./operations";
 
@@ -52,8 +53,24 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
       b[id] = { ...current, ...partial };
     },
     async delete() {},
-    async query() {
-      return [];
+    async query<T>(
+      component: Component<T>,
+      options?: { sort?: Record<string, 1 | -1>; limit?: number },
+    ) {
+      const entries = Object.entries(bucket(component.collection)).map(([id, value]) => ({
+        _id: id,
+        ...(value as Record<string, unknown>),
+      }));
+      const sort = options?.sort;
+      if (sort) {
+        const [key, dir] = Object.entries(sort)[0];
+        entries.sort((a, b) => {
+          const av = Number((a as Record<string, unknown>)[key] ?? 0);
+          const bv = Number((b as Record<string, unknown>)[key] ?? 0);
+          return dir === -1 ? bv - av : av - bv;
+        });
+      }
+      return (options?.limit ? entries.slice(0, options.limit) : entries) as never;
     },
     async emit() {},
     client: {},
@@ -260,5 +277,20 @@ describe("exchange()", () => {
     const res = await exchange(ctx, USER, 500);
     expect(res.isErr()).toBe(true);
     if (res.isErr()) expect(res.error.code).toBe("NO_SCRIP");
+  });
+});
+
+describe("topMagnates()", () => {
+  test("ranks by lifetimeScrip desc and excludes zero-scrip players", async () => {
+    const ctx = makeCtx({
+      user_factories: {
+        rich: { lines: {}, lifetimeScrip: 9000 },
+        mid: { lines: {}, lifetimeScrip: 500 },
+        broke: { lines: {}, lifetimeScrip: 0 },
+      },
+    });
+    const top = await topMagnates(ctx, 10);
+    expect(top.map((e) => e.userId)).toEqual(["rich", "mid"]);
+    expect(top[0].lifetimeScrip).toBe(9000);
   });
 });
