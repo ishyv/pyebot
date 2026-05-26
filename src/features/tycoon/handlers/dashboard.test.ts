@@ -158,6 +158,28 @@ describe("handleTycoonComponent()", () => {
     expect(i.calls.editReply).toBe(1);
   });
 
+  test("next-action button performs the charter in one tap", async () => {
+    const ctx = makeCtx(wallet(1000, 0));
+    const i = interaction("tycoon:do:charter:lumber_mill");
+
+    await handleTycoonComponent(i as never, ctx);
+
+    const factory = await ctx.get(USER, UserFactory);
+    expect(factory?.lines.lumber_mill).toBeDefined();
+    expect(i.calls.editReply).toBe(1);
+  });
+
+  test("next-action button upgrades a stage in one tap", async () => {
+    const ctx = makeCtx({ ...wallet(5000, 0), ...factoryWithLumber() });
+    const i = interaction("tycoon:do:upgrade:lumber_mill:refinery");
+
+    await handleTycoonComponent(i as never, ctx);
+
+    const factory = await ctx.get(USER, UserFactory);
+    expect(factory?.lines.lumber_mill?.stages.refinery.level).toBe(2);
+    expect(i.calls.editReply).toBe(1);
+  });
+
   test("exchange button opens a modal when scrip is available", async () => {
     const ctx = makeCtx(wallet(0, 500));
     const i = interaction("tycoon:exchange");

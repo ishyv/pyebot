@@ -62,8 +62,15 @@ interface LineConsoleState {
   readonly eventLabel: string | null;
 }
 
+interface PrimaryAction {
+  readonly label: string;
+  readonly customId: string;
+}
+
 interface ConsoleBriefing {
   readonly line: string;
+  /** The single best next action as a one-tap button, mirroring `line`. Null when the obvious action already has its own button (collect) or none applies. */
+  readonly primaryAction: PrimaryAction | null;
   readonly upgradeOptions: readonly SelectOption[];
   readonly expansionOptions: readonly SelectOption[];
   readonly outputOptions: readonly SelectOption[];
@@ -234,24 +241,51 @@ export function buildConsoleBriefing(
     };
   });
 
+  // The briefing string and the one-tap primaryAction are derived together so
+  // the screen says what to do AND lets the player do it in a single click.
+  let primaryAction: PrimaryAction | null = null;
   const briefing = (() => {
     if (ownedIds.length === 0) {
       const first = (Object.keys(LINES) as LineId[])[0];
+      primaryAction = {
+        label: `🏛️ Charter ${LINES[first].name} (${LINES[first].charterCost.toLocaleString()})`,
+        customId: `tycoon:do:charter:${first}`,
+      };
       return `🎯 Charter ${LINES[first].name} to start. The loop: collect output, upgrade the slowest stage, expand into new lines.`;
     }
     if (blocked) {
+      // Several valid fixes (clear/upgrade stash, switch output) — no single button.
       return `⚠️ Stash blocked at ${LINES[blocked.lineId].name}. Clear stash, upgrade it, or switch output before collecting.`;
     }
     if (readyLines.length > 0) {
+      // The dedicated "Collect Ready" button already covers this.
       return `📦 Collect ready output from ${readyLines.length} line${readyLines.length === 1 ? "" : "s"}.`;
     }
     const capped = states.find((state) => state.capped && !state.line.automated);
-    if (capped) return `👷 Automate ${LINES[capped.lineId].name} soon; manual storage is full.`;
+    if (capped) {
+      primaryAction = {
+        label: `👷 Automate ${LINES[capped.lineId].name} (${LINES[capped.lineId].automationCost.toLocaleString()})`,
+        customId: `tycoon:do:automate:${capped.lineId}`,
+      };
+      return `👷 Automate ${LINES[capped.lineId].name} soon; manual storage is full.`;
+    }
     const fix = states[0];
     if (fix) {
-      return `🔧 Fix bottleneck: upgrade ${LINES[fix.lineId].name} ${LINES[fix.lineId].stages[fix.bottleneck].name}.`;
+      const stageDef = LINES[fix.lineId].stages[fix.bottleneck];
+      const cost = upgradeCost(stageDef, fix.line.stages[fix.bottleneck].level);
+      primaryAction = {
+        label: `🔧 Fix ${stageDef.name} (${cost.toLocaleString()})`,
+        customId: `tycoon:do:upgrade:${fix.lineId}:${fix.bottleneck}`,
+      };
+      return `🔧 Fix bottleneck: upgrade ${LINES[fix.lineId].name} ${stageDef.name}.`;
     }
-    if (nextLine) return `🏛️ Charter ${LINES[nextLine].name} when you want a new production chain.`;
+    if (nextLine) {
+      primaryAction = {
+        label: `🏛️ Charter ${LINES[nextLine].name} (${LINES[nextLine].charterCost.toLocaleString()})`,
+        customId: `tycoon:do:charter:${nextLine}`,
+      };
+      return `🏛️ Charter ${LINES[nextLine].name} when you want a new production chain.`;
+    }
     return "⏳ All works are running. Come back when output is ready.";
   })();
 
@@ -266,6 +300,7 @@ export function buildConsoleBriefing(
 
   return {
     line: briefing,
+    primaryAction,
     upgradeOptions,
     expansionOptions: [...charterOptions, ...automationOptions].slice(0, 25),
     outputOptions: outputOptions.slice(0, 25),
@@ -286,6 +321,14 @@ function dashboardRows(
   const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [];
 
   const buttons: ButtonBuilder[] = [];
+  if (briefing.primaryAction) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(briefing.primaryAction.customId)
+        .setLabel(briefing.primaryAction.label.slice(0, 80))
+        .setStyle(ButtonStyle.Primary),
+    );
+  }
   if (briefing.readyLines.length > 0) {
     buttons.push(
       new ButtonBuilder()

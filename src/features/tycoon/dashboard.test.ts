@@ -139,6 +139,44 @@ describe("renderDashboard()", () => {
     expect(json).toContain("tycoon:collect:ready");
   });
 
+  test("first-run primary button charters the first line in one tap", async () => {
+    const payload = await renderDashboard(
+      makeCtx({
+        [UserFactory.collection]: { [USER]: { lines: {}, lifetimeScrip: 0 } },
+        user_currencies: { [USER]: { balances: { coins: 500, scrip: 0 }, bankBalances: {} } },
+      }),
+      USER,
+    );
+    expect(payloadJson(payload)).toContain("tycoon:do:charter:lumber_mill");
+  });
+
+  test("offers a one-tap fix-bottleneck button when no output is ready", async () => {
+    const payload = await renderDashboard(
+      makeCtx({
+        [UserFactory.collection]: {
+          [USER]: {
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: Date.now(),
+              },
+            },
+            lifetimeScrip: 0,
+          },
+        },
+        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
+      }),
+      USER,
+    );
+    expect(payloadJson(payload)).toContain("tycoon:do:upgrade:lumber_mill");
+  });
+
   test("warns when stockpile output will not fit in the stash", async () => {
     const payload = await renderDashboard(stockpileDashboardCtx(10), USER);
 

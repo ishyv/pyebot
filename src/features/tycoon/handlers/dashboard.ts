@@ -163,6 +163,29 @@ export async function handleTycoonComponent(
     return;
   }
 
+  // One-tap "next action" buttons mirroring the Shift Briefing's recommendation.
+  if (cid.startsWith("tycoon:do:") && interaction.isButton()) {
+    await interaction.deferUpdate();
+    const [action, lineRaw, stageRaw] = cid.slice("tycoon:do:".length).split(":");
+    const lineId = parseLineId(lineRaw);
+    let errMsg: string | null = null;
+    if (lineId && action === "upgrade" && STAGES.includes(stageRaw as StageKind)) {
+      const r = await upgrade(ctx, userId, lineId, stageRaw as StageKind);
+      if (r.isErr()) errMsg = r.error.message;
+    } else if (lineId && action === "automate") {
+      const r = await automate(ctx, userId, lineId);
+      if (r.isErr()) errMsg = r.error.message;
+    } else if (lineId && action === "charter") {
+      const r = await charter(ctx, userId, lineId);
+      if (r.isErr()) errMsg = r.error.message;
+    }
+    await refresh(interaction, ctx, userId);
+    if (errMsg) {
+      await interaction.followUp({ content: `❌ ${errMsg}`, flags: MessageFlags.Ephemeral });
+    }
+    return;
+  }
+
   if (cid === "tycoon:collect:ready" || cid === "tycoon:collect:all") {
     await interaction.deferUpdate();
     const summary = await collectAll(ctx, userId);
