@@ -6,6 +6,7 @@ export const CURRENCY_EMOJIS: Record<string, string> = {
   coins: "🪙",
   gems: "💎",
   tokens: "🎟️",
+  scrip: "⚜️",
 };
 
 /** Format a coin amount: `🪙 1,234 Coins` */

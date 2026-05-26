@@ -1,0 +1,218 @@
+import {
+  type AutocompleteInteraction,
+  type ChatInputCommandInteraction,
+  SlashCommandBuilder,
+} from "discord.js";
+import { UserFactory } from "@/components/user-factory";
+import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
+import { container, separator, text, v2Message } from "@/ui/v2";
+import { coins } from "@/utils/fmt";
+import { LINES, type LineId, parseLineId, type StageKind } from "../content/lines";
+import { type CollectSummary, charter, collect, upgrade } from "../operations";
+
+const STAGE_CHOICES = [
+  { name: "Extractor", value: "extractor" },
+  { name: "Refinery", value: "refinery" },
+  { name: "Assembler", value: "assembler" },
+];
+
+const data = new SlashCommandBuilder()
+  .setName("tycoon")
+  .setDescription("Manage your automated production lines")
+  .addSubcommand((s) =>
+    s
+      .setName("charter")
+      .setDescription("Charter (buy) a new production line")
+      .addStringOption((o) =>
+        o
+          .setName("line")
+          .setDescription("Which line to charter")
+          .setRequired(true)
+          .setAutocomplete(true),
+      ),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName("collect")
+      .setDescription("Collect pending output from your lines")
+      .addStringOption((o) =>
+        o
+          .setName("line")
+          .setDescription("A specific line (default: all lines)")
+          .setAutocomplete(true),
+      ),
+  )
+  .addSubcommand((s) =>
+    s
+      .setName("upgrade")
+      .setDescription("Upgrade one stage of a line by a level")
+      .addStringOption((o) =>
+        o.setName("line").setDescription("Which line").setRequired(true).setAutocomplete(true),
+      )
+      .addStringOption((o) =>
+        o
+          .setName("stage")
+          .setDescription("Which stage to upgrade")
+          .setRequired(true)
+          .addChoices(...STAGE_CHOICES),
+      ),
+  );
+
+async function autocomplete(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void> {
+  const focused = interaction.options.getFocused().toLowerCase();
+  const sub = interaction.options.getSubcommand();
+
+  const owned = (await ctx.get(interaction.user.id, UserFactory))?.lines ?? {};
+  const ids = (Object.keys(LINES) as LineId[]).filter((id) =>
+    sub === "charter" ? !owned[id] : Boolean(owned[id]),
+  );
+
+  const choices = ids
+    .filter((id) => id.includes(focused) || LINES[id].name.toLowerCase().includes(focused))
+    .slice(0, 25)
+    .map((id) => ({ name: LINES[id].name, value: id }));
+  await interaction.respond(choices);
+}
+
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
+  if (!interaction.guild) {
+    await ctx.respond.send({ content: "This command can only be used in a server." });
+    return;
+  }
+
+  const sub = interaction.options.getSubcommand();
+  if (sub === "charter") await handleCharter(interaction, ctx);
+  else if (sub === "collect") await handleCollect(interaction, ctx);
+  else if (sub === "upgrade") await handleUpgrade(interaction, ctx);
+}
+
+function fail(ctx: Ctx, body: string): Promise<unknown> {
+  return ctx.respond.send(v2Message(container("danger", text(body))));
+}
+
+async function handleCharter(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  const lineId = parseLineId(interaction.options.getString("line", true));
+  if (!lineId) {
+    await fail(ctx, "## ❌ Unknown line\nPick one from the list.");
+    return;
+  }
+  const def = LINES[lineId];
+  const result = await charter(ctx, interaction.user.id, lineId);
+  if (result.isErr()) {
+    await fail(ctx, `## ❌ Couldn't charter ${def.name}\n${result.error.message}`);
+    return;
+  }
+  await ctx.respond.send(
+    v2Message(
+      container(
+        "ok",
+        text(
+          `## 🏛️ Chartered ${def.name}!\nCost: ${coins(result.unwrap().charterCost)}\n\nIt's running in **sell** mode. Use \`/tycoon collect\` to gather scrip, and \`/tycoon upgrade\` to grow it.\n-# 💡 The slowest stage is your bottleneck — upgrade that one.`,
+        ),
+      ),
+    ),
+  );
+}
+
+async function handleUpgrade(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  const lineId = parseLineId(interaction.options.getString("line", true));
+  const stage = interaction.options.getString("stage", true) as StageKind;
+  if (!lineId) {
+    await fail(ctx, "## ❌ Unknown line\nPick one you own.");
+    return;
+  }
+  const def = LINES[lineId];
+  const result = await upgrade(ctx, interaction.user.id, lineId, stage);
+  if (result.isErr()) {
+    await fail(ctx, `## ❌ Upgrade failed\n${result.error.message}`);
+    return;
+  }
+  const { cost, newLevel } = result.unwrap();
+  await ctx.respond.send(
+    v2Message(
+      container(
+        "ok",
+        text(
+          `## 🔧 Upgraded ${def.name}\n**${def.stages[stage].name}** → Level ${newLevel}\nCost: ${coins(cost)}`,
+        ),
+      ),
+    ),
+  );
+}
+
+function summaryLine(summary: CollectSummary): string {
+  const def = LINES[summary.lineId];
+  const reward =
+    summary.mode === "sell"
+      ? coins(summary.scripGained, "scrip")
+      : `${summary.materialsGained}× ${summary.materialId}`;
+  const eventNote = summary.event.label ? `  ${summary.event.label}` : "";
+  return `**${def.name}** → ${reward}${eventNote}`;
+}
+
+async function handleCollect(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  const userId = interaction.user.id;
+  const requested = interaction.options.getString("line");
+
+  let targets: LineId[];
+  if (requested) {
+    const lineId = parseLineId(requested);
+    if (!lineId) {
+      await fail(ctx, "## ❌ Unknown line\nPick one you own.");
+      return;
+    }
+    targets = [lineId];
+  } else {
+    const factory = await ctx.get(userId, UserFactory);
+    targets = Object.keys(factory?.lines ?? {}) as LineId[];
+  }
+
+  if (targets.length === 0) {
+    await fail(ctx, "## 🏭 No production lines yet\nCharter one with `/tycoon charter`.");
+    return;
+  }
+
+  const collected: CollectSummary[] = [];
+  const skipped: string[] = [];
+  for (const lineId of targets) {
+    const result = await collect(ctx, userId, lineId);
+    if (result.isErr()) {
+      if (result.error.code !== "NOTHING_TO_COLLECT") {
+        skipped.push(`${LINES[lineId].name}: ${result.error.message}`);
+      }
+    } else {
+      collected.push(result.unwrap());
+    }
+  }
+
+  if (collected.length === 0) {
+    const note = skipped.length ? `\n${skipped.join("\n")}` : "";
+    await fail(ctx, `## 🏭 Nothing to collect\nYour lines are still producing.${note}`);
+    return;
+  }
+
+  const totalScrip = collected.reduce((sum, c) => sum + c.scripGained, 0);
+  const body = collected.map(summaryLine).join("\n");
+  const footer = skipped.length ? `\n\n-# ${skipped.join(" • ")}` : "";
+  await ctx.respond.send(
+    v2Message(
+      container(
+        "ok",
+        text(`## 📦 Collected`),
+        separator("sm"),
+        text(
+          `${body}\n\n**Total scrip:** ${coins(totalScrip, "scrip")}${footer}\n-# 💡 /tycoon upgrade to clear bottlenecks`,
+        ),
+      ),
+    ),
+  );
+}
+
+export default defineCommand({
+  data,
+  help: { hints: ["/tycoon charter", "/tycoon collect", "/tycoon upgrade"] },
+  autocomplete,
+  execute,
+});

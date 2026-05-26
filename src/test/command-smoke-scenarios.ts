@@ -74,6 +74,7 @@ export const commandSmokeScenarios: Readonly<Record<string, CommandScenario>> = 
   process: ctxNoGuild("process"),
   "rpg-profile": ctxNoGuild("rpg-profile"),
   "rpg-quest": ctxNoGuild("rpg-quest", "list"),
+  tycoon: ctxNoGuild("tycoon", "collect"),
   ticket: ctxNoGuild("ticket", "open"),
   help: {
     ...ctxNoGuild("help"),
