@@ -57,7 +57,7 @@ export function coinflipErrorCopy(error: Error): CoinflipErrorCopy {
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
@@ -69,14 +69,14 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   if (amount < DEFAULT_COINFLIP_CONFIG.minBet) {
     const copy = coinflipErrorCopy(new MinigameError("BET_TOO_LOW", ""));
-    await interaction.reply({
+    await ctx.respond.send({
       ...v2Message(container(copy.accent, text(`## ${copy.title}\n${copy.description}`))),
       flags: MessageFlags.Ephemeral,
     } as any);
     return;
   }
 
-  await interaction.deferReply();
+  await ctx.respond.defer();
 
   try {
     const { won, betAmount, winnings, outcome } = await coinflip(
@@ -97,10 +97,10 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
           ),
         );
 
-    await interaction.editReply(payload);
+    await ctx.respond.send(payload);
   } catch (err) {
     const copy = coinflipErrorCopy(err instanceof Error ? err : new Error(String(err)));
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container(copy.accent, text(`## ${copy.title}\n${copy.description}`))),
     );
   }

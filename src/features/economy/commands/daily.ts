@@ -8,10 +8,10 @@ import { coins, relativeTs } from "@/utils/fmt";
 const data = new SlashCommandBuilder().setName("daily").setDescription("Claim your daily reward");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply();
+  await ctx.respond.defer();
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -34,10 +34,10 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     }
     body += `\n📊 **Total:** +${coins(total, currencyId)}\n💳 **New Balance:** ${coins(newBalance, currencyId)}\n\n-# 💡 Keep your streak going! Come back tomorrow`;
 
-    await interaction.editReply(v2Message(container("ok", text(body))));
+    await ctx.respond.send(v2Message(container("ok", text(body))));
   } catch (err) {
     if (err instanceof DailyError && err.code === "ON_COOLDOWN" && err.expiresAt) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "warn",
@@ -49,7 +49,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       );
       return;
     }
-    await interaction.editReply({
+    await ctx.respond.send({
       content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
     });
   }

@@ -31,6 +31,14 @@ describe("/eco-profile", () => {
         calls.push("get:wallet");
         return null;
       },
+      respond: {
+        async defer() {
+          calls.push("defer");
+        },
+        async send(payload: unknown) {
+          editedReply = payload;
+        },
+      },
     } as unknown as Ctx;
 
     const interaction = {

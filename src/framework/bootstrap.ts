@@ -54,13 +54,30 @@ export interface BootstrapResult {
   dispatch(interaction: Interaction): Promise<void>;
 }
 
+type BootstrapDependencies = {
+  loadFeatures(): Promise<LoadedFeature[]>;
+  createWorld(client: Client): Promise<World>;
+};
+
+const defaultBootstrapDependencies: BootstrapDependencies = {
+  loadFeatures,
+  createWorld: (client) => World.create(client),
+};
+
 /** Map a command name back to the feature it came from (or null for framework commands). */
 type CommandOwner = Map<string, FeatureDescriptor | null>;
 
-export async function bootstrapFramework(client: Client): Promise<BootstrapResult> {
-  const features = await loadFeatures();
+/**
+ * Assemble the framework dispatcher with production dependencies by default.
+ * Tests may pass explicit dependencies to avoid process-wide module mocks.
+ */
+export async function bootstrapFramework(
+  client: Client,
+  dependencies: BootstrapDependencies = defaultBootstrapDependencies,
+): Promise<BootstrapResult> {
+  const features = await dependencies.loadFeatures();
   setFeatureCatalog(features, FEATURE_CONFIGS);
-  const world = await World.create(client);
+  const world = await dependencies.createWorld(client);
   const router = new ComponentRouter();
 
   const descriptors = features.map((f) => f.descriptor);

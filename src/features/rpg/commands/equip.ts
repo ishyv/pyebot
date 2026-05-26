@@ -18,10 +18,10 @@ const data = new SlashCommandBuilder()
   .setDescription("Equip a tool from your inventory");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -34,7 +34,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 
   if (availableTools.length === 0) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "warn",
@@ -78,7 +78,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     ? `## 🗡️ Equip a Tool\nCurrently equipped: \`${currentItemId}\`\n\nSelect a tool from the dropdown to equip it.\n-# ${getHints("equip")}`
     : `## 🗡️ Equip a Tool\nSelect a tool from the dropdown to equip it.\n-# ${getHints("equip")}`;
 
-  await interaction.editReply({
+  await ctx.respond.send({
     ...v2Message(container("info", text(bodyText))),
     components: [selectRow],
   });

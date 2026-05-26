@@ -9,6 +9,7 @@ import { dmUser } from "@/features/moderation/notifications";
 import { mute } from "@/features/moderation/service";
 import { renderModlogCase } from "@/features/moderation/views";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { parseDuration } from "@/utils/duration";
 import { msToHuman } from "@/utils/time";
@@ -29,9 +30,9 @@ const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setDMPermission(false);
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
@@ -42,11 +43,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const durationStr = interaction.options.getString("duration", true);
   const reason = interaction.options.getString("reason", true);
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const durationMs = parseDuration(durationStr);
   if (durationMs === null) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "danger",
@@ -65,14 +66,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   ]);
 
   if (!targetMember) {
-    await interaction.editReply({ content: "That user is not a member of this server." });
+    await ctx.respond.send({ content: "That user is not a member of this server." });
     return;
   }
 
   const result = await mute(interaction.guild, moderator, targetMember, durationMs, reason);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Failed: ${result.error.message}` });
+    await ctx.respond.send({ content: `Failed: ${result.error.message}` });
     return;
   }
 
@@ -84,7 +85,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     sendModLog(interaction.guild, modResult, { duration: humanDuration }),
   ]);
 
-  await interaction.editReply(
+  await ctx.respond.send(
     renderModlogCase({ result: modResult, extras: { duration: humanDuration } }),
   );
 }

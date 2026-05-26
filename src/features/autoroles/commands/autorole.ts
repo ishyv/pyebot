@@ -170,11 +170,11 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 }
 
 async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = requireGuild(interaction);
+  await ctx.respond.defer({ visibility: "ephemeral" });
+  const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
-  const role = await requireManageableRole(interaction);
+  const role = await requireManageableRole(interaction, ctx);
   if (!role) return;
 
   let trigger: AutoroleTriggerValue;
@@ -185,21 +185,21 @@ async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx):
     const messageId = interaction.options.getString("message_id");
     const emoji = interaction.options.getString("emoji");
     if (!messageId || !emoji) {
-      await interaction.editReply({ content: "Reaction rules require `message_id` and `emoji`." });
+      await ctx.respond.send({ content: "Reaction rules require `message_id` and `emoji`." });
       return;
     }
     trigger = { type: "onReact", messageId, emoji: normalizeEmoji(emoji) };
   } else {
     const keywords = parseKeywords(interaction.options.getString("keywords"));
     if (keywords.length === 0) {
-      await interaction.editReply({ content: "Message rules require at least one keyword." });
+      await ctx.respond.send({ content: "Message rules require at least one keyword." });
       return;
     }
     trigger = { type: "messageContains", keywords };
   }
 
   const name = interaction.options.getString("name", true);
-  const durationMs = parseDurationForReply(interaction);
+  const durationMs = parseDurationForReply(interaction, ctx);
   if (durationMs === undefined) return;
   await saveRule(ctx, guildId, name, trigger, role.id, durationMs);
   const summary = [
@@ -208,9 +208,7 @@ async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx):
     `**Role:** <@&${role.id}>`,
     `**Duration:** ${durationMs ? formatDuration(durationMs) : "Permanent"}`,
   ].join("\n");
-  await interaction.editReply(
-    v2Message(container("ok", text(`## Autorole Rule Created\n${summary}`))),
-  );
+  await ctx.respond.send(v2Message(container("ok", text(`## Autorole Rule Created\n${summary}`))));
 }
 
 async function handlePrompt(
@@ -218,23 +216,23 @@ async function handlePrompt(
   ctx: Ctx,
   sub: string,
 ): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = requireGuild(interaction);
+  await ctx.respond.defer({ visibility: "ephemeral" });
+  const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
-  const role = await requireManageableRole(interaction);
+  const role = await requireManageableRole(interaction, ctx);
   if (!role) return;
 
   const channel = interaction.options.getChannel("channel", true);
   if (!canSend(channel)) {
-    await interaction.editReply({ content: "Choose a text channel I can post in." });
+    await ctx.respond.send({ content: "Choose a text channel I can post in." });
     return;
   }
 
   const title = interaction.options.getString("title") ?? `Choose ${role.name}`;
   const description =
     interaction.options.getString("description") ?? `Use this prompt to manage <@&${role.id}>.`;
-  const durationMs = parseDurationForReply(interaction);
+  const durationMs = parseDurationForReply(interaction, ctx);
   if (durationMs === undefined) return;
 
   /**
@@ -259,7 +257,7 @@ async function handlePrompt(
       role.id,
       durationMs,
     );
-    await interaction.editReply({ content: `Reaction role prompt posted: ${message.url}` });
+    await ctx.respond.send({ content: `Reaction role prompt posted: ${message.url}` });
     return;
   }
 
@@ -282,7 +280,7 @@ async function handlePrompt(
     role.id,
     durationMs,
   );
-  await interaction.editReply({ content: `Button role prompt posted: ${message.url}` });
+  await ctx.respond.send({ content: `Button role prompt posted: ${message.url}` });
 }
 
 async function handleAttach(
@@ -290,15 +288,15 @@ async function handleAttach(
   ctx: Ctx,
   sub: string,
 ): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = requireGuild(interaction);
+  await ctx.respond.defer({ visibility: "ephemeral" });
+  const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
-  const role = await requireManageableRole(interaction);
+  const role = await requireManageableRole(interaction, ctx);
   if (!role) return;
 
   const messageId = interaction.options.getString("message_id", true);
-  const durationMs = parseDurationForReply(interaction);
+  const durationMs = parseDurationForReply(interaction, ctx);
   if (durationMs === undefined) return;
   const label = interaction.options.getString("label") ?? role.name;
   const name = interaction.options.getString("name") ?? `${sub}-${messageId}-${role.id}`;
@@ -312,7 +310,7 @@ async function handleAttach(
       : { type: "onButton", messageId, label };
 
   await saveRule(ctx, guildId, name, trigger, role.id, durationMs);
-  await interaction.editReply({
+  await ctx.respond.send({
     content:
       sub === "button"
         ? `Rule saved. Add a button with custom ID \`${autoroleButtonId(messageId, role.id)}\` to that message.`
@@ -321,29 +319,29 @@ async function handleAttach(
 }
 
 async function handleDelete(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = requireGuild(interaction);
+  await ctx.respond.defer({ visibility: "ephemeral" });
+  const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
   const name = interaction.options.getString("name", true);
   const id = autoroleRuleId(guildId, name);
   const existing = await ctx.get(id, AutoroleRule);
   if (!existing) {
-    await interaction.editReply({ content: `No rule named **${name}** found.` });
+    await ctx.respond.send({ content: `No rule named **${name}** found.` });
     return;
   }
   await ctx.delete(id, AutoroleRule);
-  await interaction.editReply({ content: `Rule **${name}** has been deleted.` });
+  await ctx.respond.send({ content: `Rule **${name}** has been deleted.` });
 }
 
 async function handleList(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = requireGuild(interaction);
+  await ctx.respond.defer({ visibility: "ephemeral" });
+  const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
   const rules = await listRules(ctx, guildId);
   if (rules.length === 0) {
-    await interaction.editReply({ content: "No autorole rules configured." });
+    await ctx.respond.send({ content: "No autorole rules configured." });
     return;
   }
 
@@ -360,7 +358,7 @@ async function handleList(interaction: ChatInputCommandInteraction, ctx: Ctx): P
     return `${rule.enabled ? "On" : "Off"} **${rule.name}** -> <@&${rule.roleId}> (${trigger}${duration})`;
   });
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(container("info", text(`## Autorole Rules\n${lines.join("\n")}`))),
   );
 }
@@ -370,19 +368,19 @@ async function handleToggle(
   ctx: Ctx,
   enabled: boolean,
 ): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = requireGuild(interaction);
+  await ctx.respond.defer({ visibility: "ephemeral" });
+  const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
   const name = interaction.options.getString("name", true);
   const id = autoroleRuleId(guildId, name);
   const existing = await ctx.get(id, AutoroleRule);
   if (!existing) {
-    await interaction.editReply({ content: `No rule named **${name}** found.` });
+    await ctx.respond.send({ content: `No rule named **${name}** found.` });
     return;
   }
   await ctx.patch(id, AutoroleRule, { enabled });
-  await interaction.editReply({
+  await ctx.respond.send({
     content: `Rule **${name}** is now ${enabled ? "enabled" : "disabled"}.`,
   });
 }
@@ -410,35 +408,36 @@ async function listRules(ctx: Ctx, guildId: string) {
   return ctx.query(AutoroleRule, { filter: { guildId } });
 }
 
-function requireGuild(interaction: ChatInputCommandInteraction): string | null {
+function requireGuild(interaction: ChatInputCommandInteraction, ctx: Ctx): string | null {
   if (interaction.guildId && interaction.guild) return interaction.guildId;
-  void interaction.editReply({ content: "This command can only be used in a server." });
+  void ctx.respond.send({ content: "This command can only be used in a server." });
   return null;
 }
 
 async function requireManageableRole(
   interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
 ): Promise<Role | null> {
   const selected = interaction.options.getRole("role", true);
   const role = await interaction.guild?.roles.fetch(selected.id);
   const me =
     interaction.guild?.members.me ?? (await interaction.guild?.members.fetchMe().catch(() => null));
   if (!role || !me) {
-    await interaction.editReply({ content: "I could not resolve that role or my member record." });
+    await ctx.respond.send({ content: "I could not resolve that role or my member record." });
     return null;
   }
   if (role.managed) {
-    await interaction.editReply({
+    await ctx.respond.send({
       content: "Managed integration roles cannot be assigned by autoroles.",
     });
     return null;
   }
   if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    await interaction.editReply({ content: "I need Manage Roles to assign autoroles." });
+    await ctx.respond.send({ content: "I need Manage Roles to assign autoroles." });
     return null;
   }
   if (me.roles.highest.comparePositionTo(role) <= 0) {
-    await interaction.editReply({ content: `Move my highest role above <@&${role.id}> first.` });
+    await ctx.respond.send({ content: `Move my highest role above <@&${role.id}> first.` });
     return null;
   }
   return role;
@@ -471,12 +470,13 @@ function parseKeywords(value: string | null): string[] {
 
 function parseDurationForReply(
   interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
 ): number | null | undefined {
   try {
     return parseDurationMs(interaction.options.getString("duration"));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid duration.";
-    void interaction.editReply({ content: message });
+    void ctx.respond.send({ content: message });
     return undefined;
   }
 }

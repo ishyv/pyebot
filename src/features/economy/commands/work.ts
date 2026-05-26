@@ -9,10 +9,10 @@ import { coins, relativeTs } from "@/utils/fmt";
 const data = new SlashCommandBuilder().setName("work").setDescription("Work to earn coins");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply();
+  await ctx.respond.defer();
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -24,7 +24,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       workConfigFromGuildEconomy(guildEconomy),
     );
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",
@@ -36,7 +36,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     );
   } catch (err) {
     if (err instanceof WorkError && err.code === "ON_COOLDOWN") {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "warn",
@@ -56,7 +56,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
           new Date().getUTCDate() + 1,
         ),
       );
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "warn",
@@ -68,7 +68,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       );
       return;
     }
-    await interaction.editReply({
+    await ctx.respond.send({
       content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
     });
   }

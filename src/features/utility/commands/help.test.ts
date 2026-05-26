@@ -67,13 +67,16 @@ describe("/help command", () => {
 
     await helpCommand.execute(
       {
-        deferReply: async () => {},
-        editReply: async (payload: unknown) => {
-          edits.push(payload);
-        },
         options: { getString: () => null },
       } as never,
-      {} as never,
+      {
+        respond: {
+          defer: async () => {},
+          send: async (payload: unknown) => {
+            edits.push(payload);
+          },
+        },
+      } as never,
     );
 
     const text = payloadText(edits[0]);
@@ -97,13 +100,16 @@ describe("/help command", () => {
 
     await helpCommand.execute(
       {
-        deferReply: async () => {},
-        editReply: async (payload: unknown) => {
-          edits.push(payload);
-        },
         options: { getString: () => "rpg-profile" },
       } as never,
-      {} as never,
+      {
+        respond: {
+          defer: async () => {},
+          send: async (payload: unknown) => {
+            edits.push(payload);
+          },
+        },
+      } as never,
     );
 
     const text = payloadText(edits[0]);

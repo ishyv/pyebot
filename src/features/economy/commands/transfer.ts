@@ -20,10 +20,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply();
+  await ctx.respond.defer();
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -43,7 +43,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       amount,
     );
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",
@@ -55,9 +55,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     );
   } catch (err) {
     const msg = err instanceof MutationError ? err.message : "An error occurred.";
-    await interaction.editReply(
-      v2Message(container("danger", text(`## ❌ Transfer Failed\n${msg}`))),
-    );
+    await ctx.respond.send(v2Message(container("danger", text(`## ❌ Transfer Failed\n${msg}`))));
   }
 }
 

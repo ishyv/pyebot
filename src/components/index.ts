@@ -24,4 +24,3 @@ export * from "./user-currency";
 export * from "./user-inventory";
 export * from "./user-sanctions";
 export * from "./user-tickets";
-export * from "./user-warns";

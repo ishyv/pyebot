@@ -1,4 +1,4 @@
-import type { ButtonInteraction } from "discord.js";
+import { type ButtonInteraction, MessageFlags } from "discord.js";
 import type { EquippedItemValue, StarterKitTypeValue } from "@/components/rpg-profile";
 import { TOOLS } from "@/features/rpg/content/tools";
 import { patchRpgProfile } from "@/features/rpg/profile";
@@ -28,11 +28,11 @@ export async function handleOnboard(interaction: ButtonInteraction, ctx: Ctx): P
   const profession = interaction.customId.slice(ONBOARD_PREFIX.length) as StarterKitTypeValue;
 
   if (profession !== "miner" && profession !== "lumber") {
-    await interaction.reply({ content: "Unknown profession.", ephemeral: true });
+    await interaction.reply({ content: "Unknown profession.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const starterTool = STARTER_TOOLS[profession];
 

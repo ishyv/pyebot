@@ -8,6 +8,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
 const data = new SlashCommandBuilder()
@@ -47,23 +48,23 @@ const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName("reason").setDescription("Reason")),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "Server only.", flags: MessageFlags.Ephemeral });
+    await ctx.respond.send({ content: "Server only.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
   const sub = interaction.options.getSubcommand();
 
   if (sub === "on") {
     const reason = interaction.options.getString("reason") ?? "Server lockdown";
-    await setEveryoneSendMessages(interaction, false, reason);
+    await setEveryoneSendMessages(interaction, ctx, false, reason);
     return;
   }
 
   if (sub === "off") {
-    await setEveryoneSendMessages(interaction, null, "Lockdown lifted");
+    await setEveryoneSendMessages(interaction, ctx, null, "Lockdown lifted");
     return;
   }
 
@@ -84,12 +85,12 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         { reason: `${reason} — by ${interaction.user.tag}` },
       );
     } catch {
-      await interaction.editReply({ content: "Failed to update channel permissions." });
+      await ctx.respond.send({ content: "Failed to update channel permissions." });
       return;
     }
 
     const isLocking = action === "lock";
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           isLocking ? "danger" : "ok",
@@ -104,6 +105,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
 async function setEveryoneSendMessages(
   interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
   value: boolean | null,
   reason: string,
 ): Promise<void> {
@@ -132,7 +134,7 @@ async function setEveryoneSendMessages(
 
   const isLocking = value === false;
   const failedNote = failed > 0 ? `\n**Failed:** ${failed}` : "";
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         isLocking ? "danger" : "ok",

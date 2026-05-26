@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { clearWarns, getCases, removeWarn, warn } from "@/features/moderation/service";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { hasPermission } from "@/middleware/permissions";
 import { sendModLog } from "../modlog";
 import { dmUser } from "../notifications";
@@ -55,9 +56,9 @@ const data = new SlashCommandBuilder()
       ),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild || !interaction.member) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
@@ -67,7 +68,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const subcommand = interaction.options.getSubcommand();
   const targetUser = interaction.options.getUser("user", true);
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const callerMember = await interaction.guild.members.fetch(interaction.user.id);
 
@@ -79,14 +80,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
     const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember) {
-      await interaction.editReply({ content: "That user is not a member of this server." });
+      await ctx.respond.send({ content: "That user is not a member of this server." });
       return;
     }
 
     const result = await warn(interaction.guild, callerMember, targetMember, reason);
 
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
 
@@ -95,7 +96,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     await dmUser(targetMember.user, "WARN", interaction.guild.name, reason, sanctionResult.caseId);
     await sendModLog(interaction.guild, sanctionResult);
 
-    await interaction.editReply(renderModlogCase({ result: sanctionResult }));
+    await ctx.respond.send(renderModlogCase({ result: sanctionResult }));
     return;
   }
 
@@ -106,7 +107,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const casesResult = await getCases(targetUser.id, interaction.guild.id);
 
     if (casesResult.isErr()) {
-      await interaction.editReply({
+      await ctx.respond.send({
         content: `Failed to fetch cases: ${casesResult.error.message}`,
       });
       return;
@@ -118,11 +119,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       .slice(0, 15);
 
     if (warns.length === 0) {
-      await interaction.editReply({ content: "No warnings on record." });
+      await ctx.respond.send({ content: "No warnings on record." });
       return;
     }
 
-    await interaction.editReply(renderSanctionHistory(targetUser.tag, warns));
+    await ctx.respond.send(renderSanctionHistory(targetUser.tag, warns));
     return;
   }
 
@@ -131,7 +132,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   // ---------------------------------------------------------------------------
   if (subcommand === "remove") {
     if (!hasPermission(callerMember, PermissionFlagsBits.KickMembers)) {
-      await interaction.editReply({
+      await ctx.respond.send({
         content: "You need the **Kick Members** permission to remove warnings.",
       });
       return;
@@ -142,16 +143,16 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const result = await removeWarn(targetUser.id, interaction.guild.id, warnId);
 
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
 
     if (!result.unwrap()) {
-      await interaction.editReply({ content: "No warning found with that ID." });
+      await ctx.respond.send({ content: "No warning found with that ID." });
       return;
     }
 
-    await interaction.editReply({ content: `Warning #${warnId} removed.` });
+    await ctx.respond.send({ content: `Warning #${warnId} removed.` });
     return;
   }
 
@@ -160,7 +161,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   // ---------------------------------------------------------------------------
   if (subcommand === "clear") {
     if (!hasPermission(callerMember, PermissionFlagsBits.KickMembers)) {
-      await interaction.editReply({
+      await ctx.respond.send({
         content: "You need the **Kick Members** permission to clear warnings.",
       });
       return;
@@ -169,12 +170,12 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const result = await clearWarns(targetUser.id, interaction.guild.id);
 
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
 
     const count = result.unwrap();
-    await interaction.editReply({
+    await ctx.respond.send({
       content: `Cleared ${count} warning(s) for <@${targetUser.id}>.`,
     });
     return;

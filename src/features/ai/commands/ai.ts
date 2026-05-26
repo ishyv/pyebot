@@ -1,4 +1,5 @@
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 /**
  * /ai set-provider <provider> — Set the AI provider for this guild.
  * /ai set-model <model>       — Set the AI model for this guild.
@@ -61,22 +62,25 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) => sub.setName("panel").setDescription("Open the AI configuration panel"));
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
   if (sub === "set-provider") {
-    await handleSetProvider(interaction);
+    await handleSetProvider(interaction, ctx);
   } else if (sub === "set-model") {
-    await handleSetModel(interaction);
+    await handleSetModel(interaction, ctx);
   } else if (sub === "clear-memory") {
-    await handleClearMemory(interaction);
+    await handleClearMemory(interaction, ctx);
   } else if (sub === "panel") {
     if (!(await assertPanelPermission(interaction))) return;
     await openAdminPanel(interaction, "ai");
   }
 }
 
-async function handleSetProvider(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleSetProvider(
+  interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
+): Promise<void> {
   const member = interaction.member;
   const isAdmin =
     member &&
@@ -84,7 +88,7 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
     member.permissions.has(PermissionFlagsBits.ManageGuild);
 
   if (!isAdmin) {
-    await interaction.reply({
+    await ctx.respond.send({
       ...v2Message(
         container("danger", text("## Permission Denied\nOnly admins can change the AI provider.")),
       ),
@@ -93,7 +97,7 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const provider = interaction.options.getString("provider", true);
   const defaultModel = provider === "openai" ? DEFAULT_OPENAI_MODEL : DEFAULT_GEMINI_MODEL;
@@ -104,13 +108,13 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
   });
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text("## Failed\nCould not update AI provider."))),
     );
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "info",
@@ -122,7 +126,7 @@ async function handleSetProvider(interaction: ChatInputCommandInteraction): Prom
   );
 }
 
-async function handleSetModel(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleSetModel(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const member = interaction.member;
   const isAdmin =
     member &&
@@ -130,7 +134,7 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
     member.permissions.has(PermissionFlagsBits.ManageGuild);
 
   if (!isAdmin) {
-    await interaction.reply({
+    await ctx.respond.send({
       ...v2Message(
         container("danger", text("## Permission Denied\nOnly admins can change the AI model.")),
       ),
@@ -139,20 +143,20 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const model = interaction.options.getString("model", true);
 
   const result = await updateGuildPaths(interaction.guildId!, { "ai.model": model });
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text("## Failed\nCould not update AI model."))),
     );
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "info",
@@ -164,9 +168,12 @@ async function handleSetModel(interaction: ChatInputCommandInteraction): Promise
   );
 }
 
-async function handleClearMemory(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleClearMemory(
+  interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
+): Promise<void> {
   clearMemory(interaction.user.id);
-  await interaction.reply({
+  await ctx.respond.send({
     ...v2Message(
       container(
         "ok",

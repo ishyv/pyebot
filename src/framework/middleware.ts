@@ -13,6 +13,7 @@
 import {
   type ChatInputCommandInteraction,
   type Interaction,
+  MessageFlags,
   PermissionFlagsBits,
 } from "discord.js";
 import { GuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
@@ -45,9 +46,9 @@ export async function safeReply(interaction: Interaction, content: string): Prom
   try {
     const ix = interaction as ChatInputCommandInteraction;
     if (ix.replied || ix.deferred) {
-      await ix.followUp({ content, ephemeral: true });
+      await ix.followUp({ content, flags: MessageFlags.Ephemeral });
     } else {
-      await ix.reply({ content, ephemeral: true });
+      await ix.reply({ content, flags: MessageFlags.Ephemeral });
     }
   } catch {
     // best-effort

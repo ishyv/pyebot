@@ -12,7 +12,13 @@
  * rather than a thread of messages.
  */
 
-import { ActionRowBuilder, ButtonBuilder, type ButtonInteraction, ButtonStyle } from "discord.js";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  type ButtonInteraction,
+  ButtonStyle,
+  MessageFlags,
+} from "discord.js";
 import {
   advance,
   type ExpeditionState,
@@ -128,7 +134,7 @@ export async function handleExpeditionButton(
     if (!state) {
       await interaction.followUp({
         content: "Your expedition has expired. Use `/expedition` to start a new one.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -137,7 +143,7 @@ export async function handleExpeditionButton(
     if (!node) {
       await interaction.followUp({
         content: "That resource has shifted. The area looks different now.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -159,7 +165,7 @@ export async function handleExpeditionButton(
       } else {
         msg = err.message;
       }
-      await interaction.followUp({ content: msg, ephemeral: true });
+      await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -185,7 +191,7 @@ export async function handleExpeditionButton(
     if (!newState) {
       await interaction.followUp({
         content: "You've reached the deepest point, or your session has expired.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

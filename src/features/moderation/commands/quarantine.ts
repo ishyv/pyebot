@@ -7,6 +7,7 @@ import {
 import { quarantine, release } from "@/features/moderation/service";
 import { renderModlogCase } from "@/features/moderation/views";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
 const data = new SlashCommandBuilder()
@@ -32,13 +33,13 @@ const data = new SlashCommandBuilder()
       ),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({ content: "Server only.", flags: MessageFlags.Ephemeral });
+    await ctx.respond.send({ content: "Server only.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
   const sub = interaction.options.getSubcommand();
   const targetUser = interaction.options.getUser("user", true);
 
@@ -48,7 +49,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   ]);
 
   if (!targetMember) {
-    await interaction.editReply({ content: "That user is not a member of this server." });
+    await ctx.respond.send({ content: "That user is not a member of this server." });
     return;
   }
 
@@ -57,11 +58,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const result = await quarantine(interaction.guild, moderator, targetMember, reason);
 
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
 
-    await interaction.editReply(renderModlogCase({ result: result.unwrap() }));
+    await ctx.respond.send(renderModlogCase({ result: result.unwrap() }));
     return;
   }
 
@@ -69,12 +70,12 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const result = await release(interaction.guild, moderator, targetMember);
 
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
 
     const { restoredRoles } = result.unwrap();
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",

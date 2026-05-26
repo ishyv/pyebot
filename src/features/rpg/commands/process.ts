@@ -1,4 +1,4 @@
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { process } from "@/features/rpg/processing";
 import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -20,10 +20,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -35,7 +35,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   if (result.isErr()) {
     const err = result.error;
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text(`${err.message}\n-# ${getHints("process")}`))),
     );
     return;
@@ -56,7 +56,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   const feeText = feePaid > 0 ? `\n**Fee Paid:** ${feePaid} coins` : "";
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         allSucceeded ? "ok" : "warn",

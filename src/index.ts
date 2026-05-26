@@ -20,6 +20,7 @@ import "dotenv/config";
 import { Events, REST, Routes } from "discord.js";
 import { createClient } from "@/core/client";
 import { disconnectDb } from "@/core/db";
+import { getEnv, loadEnv } from "@/core/env";
 import { registerMessageDeleteListener } from "@/core/importantMessages";
 import { createLogger } from "@/core/logger";
 import { MemberJoined } from "@/events/member-joined";
@@ -30,6 +31,10 @@ const log = createLogger("bootstrap");
 
 async function bootstrap(): Promise<void> {
   log.info("Starting tx-v2...");
+
+  // Validate configuration up front so a misconfigured deploy fails here, with
+  // a clear message, rather than deep in a later request path.
+  loadEnv();
 
   const client = createClient();
   registerMessageDeleteListener(client);
@@ -79,7 +84,7 @@ async function bootstrap(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const token = process.env.DISCORD_TOKEN;
+  const token = getEnv().DISCORD_TOKEN;
   if (!token) throw new Error("DISCORD_TOKEN environment variable is not set.");
   await client.login(token);
 
@@ -91,13 +96,13 @@ async function bootstrap(): Promise<void> {
       reregisterQueueMessage(guild).catch(() => null);
     }
 
-    if (process.env.WEBAPP === "true") {
+    if (getEnv().WEBAPP) {
       const { startWebApp } = await import("@/webapp/server");
       await startWebApp(c);
     }
 
-    const clientId = process.env.CLIENT_ID ?? c.user.id;
-    const guildId = process.env.GUILD_ID;
+    const clientId = getEnv().CLIENT_ID ?? c.user.id;
+    const guildId = getEnv().GUILD_ID;
 
     try {
       const rest = new REST().setToken(token);

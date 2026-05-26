@@ -15,7 +15,7 @@ export const TempRoleMessageRuleKindSchema = z.enum([
 export const TempRoleMessageRuleActionSchema = z.enum(["report", "delete", "timeout"]);
 
 export const TempRoleMessageRuleSchema = z.object({
-  id: z.string().catch(() => `rule-${Date.now().toString(36)}`),
+  id: z.string().min(1),
   enabled: z.boolean().catch(true),
   kind: TempRoleMessageRuleKindSchema.catch("links"),
   action: TempRoleMessageRuleActionSchema.catch("report"),
@@ -28,9 +28,9 @@ export const TempRoleMessageRuleSchema = z.object({
 });
 
 export const TempRoleAccessRuleSchema = z.object({
-  id: z.string().catch(() => `access-${Date.now().toString(36)}`),
+  id: z.string().min(1),
   enabled: z.boolean().catch(true),
-  targetId: z.string().catch(""),
+  targetId: z.string().min(1),
   targetType: z.enum(["channel", "category"]).catch("channel"),
   mode: z.enum(["view", "send"]).catch("send"),
 });
@@ -58,8 +58,8 @@ export const TempRolePolicySchema = z
     maxAccountAgeDays: z.number().int().min(0).max(365).catch(14),
     skipRoleIds: z.array(z.string()).catch(() => []),
     reportChannelId: z.string().nullable().catch(null),
-    messageRules: z.array(TempRoleMessageRuleSchema).catch(() => []),
-    accessRules: z.array(TempRoleAccessRuleSchema).catch(() => []),
+    messageRules: z.array(TempRoleMessageRuleSchema).default([]),
+    accessRules: z.array(TempRoleAccessRuleSchema).default([]),
   })
   .catch(() => defaultRecentlyJoinedPolicy());
 

@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { MessageFlags } from "discord.js";
+import { bootstrapFramework } from "./bootstrap";
+import type { CommandModule } from "./types";
 
 let commandExecutions = 0;
 let isAdminInteraction = false;
@@ -12,9 +14,9 @@ const adminCommand = {
   execute: async () => {
     commandExecutions += 1;
   },
-};
+} satisfies CommandModule;
 
-mock.module("./loader", () => ({
+const bootstrapDependencies = {
   loadFeatures: async () => [
     {
       descriptor: {
@@ -26,17 +28,14 @@ mock.module("./loader", () => ({
       handlers: null,
     },
   ],
-}));
-
-mock.module("./world", () => ({
-  World: {
-    create: async () => ({
-      forInteraction: () => ({
-        get: async () => ({ overrides: featureOverrides }),
-      }),
-    }),
-  },
-}));
+  createWorld: async () =>
+    ({
+      forInteraction: () =>
+        ({
+          get: async () => ({ overrides: featureOverrides }),
+        }) as never,
+    }) as never,
+};
 
 function fakeClient() {
   return { on: () => undefined };
@@ -77,8 +76,7 @@ beforeEach(() => {
 
 describe("bootstrap admin command gate", () => {
   it("rejects requiresAdmin commands for non-admin members", async () => {
-    const { bootstrapFramework } = await import("./bootstrap");
-    const app = await bootstrapFramework(fakeClient() as never);
+    const app = await bootstrapFramework(fakeClient() as never, bootstrapDependencies);
     const { interaction, replies } = chatInput("secure");
 
     await app.dispatch(interaction as never);
@@ -94,8 +92,7 @@ describe("bootstrap admin command gate", () => {
 
   it("allows requiresAdmin commands for admins", async () => {
     isAdminInteraction = true;
-    const { bootstrapFramework } = await import("./bootstrap");
-    const app = await bootstrapFramework(fakeClient() as never);
+    const app = await bootstrapFramework(fakeClient() as never, bootstrapDependencies);
     const { interaction, replies } = chatInput("secure");
 
     await app.dispatch(interaction as never);
@@ -105,8 +102,7 @@ describe("bootstrap admin command gate", () => {
   });
 
   it("uses MessageFlags.Ephemeral for unknown commands", async () => {
-    const { bootstrapFramework } = await import("./bootstrap");
-    const app = await bootstrapFramework(fakeClient() as never);
+    const app = await bootstrapFramework(fakeClient() as never, bootstrapDependencies);
     const { interaction, replies } = chatInput("missing");
 
     await app.dispatch(interaction as never);
@@ -116,8 +112,7 @@ describe("bootstrap admin command gate", () => {
 
   it("uses MessageFlags.Ephemeral for disabled feature replies", async () => {
     featureOverrides = { "secure-feature": false };
-    const { bootstrapFramework } = await import("./bootstrap");
-    const app = await bootstrapFramework(fakeClient() as never);
+    const app = await bootstrapFramework(fakeClient() as never, bootstrapDependencies);
     const { interaction, replies } = chatInput("secure");
 
     await app.dispatch(interaction as never);

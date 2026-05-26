@@ -3,7 +3,6 @@ import {
   ButtonBuilder,
   ButtonStyle,
   type ChatInputCommandInteraction,
-  MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
 import { getRpgProfile } from "@/features/rpg/profile";
@@ -16,17 +15,17 @@ const data = new SlashCommandBuilder()
   .setDescription("Enter an expedition — explore a biome, gather resources, and venture deeper");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
   const userId = interaction.user.id;
   const profile = await getRpgProfile(ctx, userId).catch(() => null);
   if (!profile) {
-    await interaction.editReply({
+    await ctx.respond.send({
       content: "You need to set up your RPG profile first. Use `/rpg-profile` to get started.",
     });
     return;
@@ -44,7 +43,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(mineButton, forestButton);
 
-  await interaction.editReply({
+  await ctx.respond.send({
     ...v2Message(
       container(
         "info",

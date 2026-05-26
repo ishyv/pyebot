@@ -5,6 +5,18 @@ The active runtime scans those folders at startup and compiles one loaded
 feature list for dispatch, command registration, component routing, and admin
 feature summaries.
 
+The local CLI can scaffold the boring parts without becoming a second registry:
+
+```bash
+bun run tx -- new feature --id polls --name Polls --description "Create and manage polls."
+bun run tx -- new command --feature polls --name poll --description "Create a poll"
+bun run tx -- check authoring
+```
+
+Scaffolds refuse existing files by default. Add `--dry-run` to preview planned
+writes. `tx check authoring` uses the same loader/catalog metadata as runtime
+startup, but does not log into Discord or connect to Mongo.
+
 ## Feature Descriptor
 
 Every feature folder needs an `index.ts` default export:
@@ -43,10 +55,27 @@ export default defineCommand({
   help: { hints: ["Use the generated buttons to vote."] },
   async execute(interaction, ctx) {
     ctx.logger.info("Creating poll");
-    await interaction.reply("Poll created.");
+    await ctx.respond.send({ content: "Poll created." });
   },
 });
 ```
+
+## Responding
+
+Reply to commands through `ctx.respond`, not the raw `interaction` methods:
+
+- `ctx.respond.defer({ visibility: "ephemeral" })` — acknowledge early for slow work
+  (omit `visibility` for a public reply).
+- `ctx.respond.send(payload)` — reply, edit the deferred reply, or follow up, chosen
+  automatically from the interaction's current state.
+- `ctx.respond.fail(payload)` — like `send` but forces the message ephemeral; use for errors.
+
+`ctx.respond` tracks the deferred/replied lifecycle, returns a `Result` instead of throwing,
+and pre-validates the payload (content length, embed/component limits, Components V2 ceiling).
+Reach for the raw `interaction` API only when the responder can't express the intent —
+e.g. a component handler editing its own message via `interaction.update()` /
+`interaction.deferUpdate()`, or posting a *public* `interaction.followUp()` while keeping an
+ephemeral deferred reply.
 
 ## Components
 

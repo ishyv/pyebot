@@ -7,6 +7,7 @@ import {
 import { addNote, deleteNote, getNotes } from "@/features/moderation/service";
 import { renderNoteList } from "@/features/moderation/views";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 
 const data = new SlashCommandBuilder()
   .setName("note")
@@ -36,16 +37,16 @@ const data = new SlashCommandBuilder()
       ),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
   const sub = interaction.options.getSubcommand();
   const targetUser = interaction.options.getUser("user", true);
   const guildId = interaction.guild.id;
@@ -54,25 +55,25 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const note = interaction.options.getString("note", true);
     const result = await addNote(targetUser.id, guildId, note, interaction.user.id);
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
-    await interaction.editReply({ content: `Note added for ${targetUser.tag}.` });
+    await ctx.respond.send({ content: `Note added for ${targetUser.tag}.` });
     return;
   }
 
   if (sub === "list") {
     const result = await getNotes(targetUser.id, guildId);
     if (result.isErr()) {
-      await interaction.editReply({ content: "Failed to fetch notes." });
+      await ctx.respond.send({ content: "Failed to fetch notes." });
       return;
     }
     const notes = result.unwrap();
     if (notes.length === 0) {
-      await interaction.editReply({ content: `No notes on **${targetUser.tag}**.` });
+      await ctx.respond.send({ content: `No notes on **${targetUser.tag}**.` });
       return;
     }
-    await interaction.editReply(renderNoteList(targetUser.tag, notes));
+    await ctx.respond.send(renderNoteList(targetUser.tag, notes));
     return;
   }
 
@@ -80,10 +81,10 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const index = interaction.options.getInteger("index", true) - 1; // convert to 0-based
     const result = await deleteNote(targetUser.id, guildId, index);
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
-    await interaction.editReply({ content: `Note ${index + 1} deleted.` });
+    await ctx.respond.send({ content: `Note ${index + 1} deleted.` });
   }
 }
 

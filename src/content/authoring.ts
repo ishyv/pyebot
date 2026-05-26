@@ -4,8 +4,7 @@
  * These helpers intentionally duplicate some runtime schema concepts so the
  * default pack can fail during TypeScript checking when object keys, nested
  * IDs, or intra-pack references drift. The active RPG runtime uses
- * `src/features/rpg/content/**`; this module remains for catalog authoring and
- * item-manager checks.
+ * `src/features/rpg/content/**`; this module remains for seed catalog checks.
  */
 
 import type { DropTableDef, ItemDef, LocationDef, RecipeDef } from "@/content/schemas";

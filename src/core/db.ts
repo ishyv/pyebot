@@ -4,18 +4,19 @@
  * Call `disconnectDb()` in tests and on graceful shutdown.
  */
 import { type Db, MongoClient } from "mongodb";
+import { getEnv } from "@/core/env";
 
 let client: MongoClient | null = null;
 let dbInstance: Db | null = null;
 
 function getUri(): string {
-  const uri = process.env.MONGO_URI?.trim();
+  const uri = getEnv().MONGO_URI;
   if (!uri) throw new Error("MONGO_URI environment variable is not set.");
   return uri;
 }
 
 function getDbName(): string {
-  return process.env.DB_NAME?.trim() || "txbot";
+  return getEnv().DB_NAME;
 }
 
 export async function getDb(): Promise<Db> {

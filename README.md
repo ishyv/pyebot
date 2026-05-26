@@ -80,19 +80,30 @@ tx is latest-only: old feature module objects, old env aliases, old JSON content
 - `src/core/**` — shared infrastructure used by the bot and bundled features: DB, logging, result/state helpers, feature config metadata, and legacy middleware context.
 - `src/features/**` — bundled moderation, economy, RPG, AI, tickets, offers, automod, autoroles, admin panels, and counting features.
 - `src/features/rpg/content/**` — active RPG runtime content for gathering, processing, crafting, tools, and expeditions.
-- `src/content/**` — item-manager/catalog authoring helpers and the extended default content pack.
+- `src/content/**` — seed/catalog authoring helpers and the extended default content pack.
 - `templates/starter/**` — starter project shape for new bots.
-- `docs/**` — feature authoring, content authoring, storage, and latest-only policy notes.
+- `docs/**` — feature authoring, content/dashboard authoring, storage, and latest-only policy notes.
 
 ## Commands
 
 ```bash
 bun run doctor       # Check local runtime/env before startup
+bun run tx -- check authoring
+bun run tx -- new feature --id hello --name Hello --description "Hello commands"
 bun run dev          # Start with watch mode
 bun run start        # Start once
 bun test             # Run tests
 bun run typecheck    # TypeScript compile check
 bun run check        # Biome lint + format check (read-only)
+```
+
+CI runs the same root gates plus the embedded dashboard gates:
+
+```bash
+bun run check
+bun run typecheck
+bun test ./src
+cd webapp && bun run check && bun run test && bun run build
 ```
 
 This repository currently uses Bun as the supported runtime. Node support is not a promise yet, because pretending two runtimes are supported before one path is boringly reliable is how frameworks get cursed.

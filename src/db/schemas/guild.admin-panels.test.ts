@@ -330,6 +330,26 @@ describe("guild schema admin panel defaults", () => {
     expect(policy.accessRules[0]?.mode).toBe("view");
   });
 
+  it("does not generate IDs for malformed recently joined rules", () => {
+    const guild = GuildSchema.parse({
+      _id: "guild-1",
+      automod: {
+        tempRolePolicies: {
+          recentlyJoined: {
+            enabled: true,
+            messageRules: [{ enabled: true, kind: "links", action: "report" }],
+          },
+        },
+      },
+    });
+
+    expect(guild.automod.tempRolePolicies.recentlyJoined).toMatchObject({
+      enabled: false,
+      messageRules: [],
+      accessRules: [],
+    });
+  });
+
   it("falls back to a safe recently joined policy when config is malformed", () => {
     const guild = GuildSchema.parse({
       _id: "guild-1",

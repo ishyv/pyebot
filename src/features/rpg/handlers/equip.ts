@@ -5,7 +5,7 @@
  * Called when a user picks a tool from the dropdown shown by /equip.
  */
 
-import type { StringSelectMenuInteraction } from "discord.js";
+import { MessageFlags, type StringSelectMenuInteraction } from "discord.js";
 import type { RpgProfileValue } from "@/components/rpg-profile";
 import { TOOLS } from "@/features/rpg/content/tools";
 import { getStackQuantity } from "@/features/rpg/inventory";
@@ -27,7 +27,7 @@ export async function handleEquipSelect(
   interaction: StringSelectMenuInteraction,
   ctx: Ctx,
 ): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const itemId = interaction.values[0];
   if (!itemId) return;

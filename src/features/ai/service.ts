@@ -18,6 +18,7 @@ import {
 } from "ai";
 
 import { getDb } from "@/core/db";
+import { getEnv } from "@/core/env";
 import { createLogger } from "@/core/logger";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { sessions } from "@/core/state";
@@ -32,11 +33,12 @@ const BOT_PROMPT =
   "You are a helpful, friendly Discord bot assistant. Keep responses concise and appropriate for chat.";
 
 // Initialize custom providers to map user `.env` variables
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const env = getEnv();
+const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
 const google = createGoogleGenerativeAI({
-  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  apiKey: env.GEMINI_API_KEY ?? env.GOOGLE_GENERATIVE_AI_API_KEY,
 });
-const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
 // ─── Memory ───────────────────────────────────────────────────────────────────
 

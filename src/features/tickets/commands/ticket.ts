@@ -7,7 +7,6 @@ import { defineCommand } from "@/framework";
 import {
   ChannelType,
   type ChatInputCommandInteraction,
-  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
@@ -67,7 +66,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   } else if (sub === "close") {
     await handleClose(interaction, ctx);
   } else if (sub === "setup") {
-    await handleSetup(interaction);
+    await handleSetup(interaction, ctx);
   } else if (sub === "panel") {
     if (!(await assertPanelPermission(interaction))) return;
     await openAdminPanel(interaction, "tickets");
@@ -75,31 +74,31 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 }
 
 async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
   const typeId = interaction.options.getString("type", true);
   const category = TICKET_CATEGORIES.find((c) => c.id === typeId);
   if (!category) {
-    await interaction.editReply({ content: "Invalid ticket type." });
+    await ctx.respond.send({ content: "Invalid ticket type." });
     return;
   }
 
   const guildResult = await getGuild(guild.id);
   if (guildResult.isErr()) {
-    await interaction.editReply({ content: "Failed to load guild configuration." });
+    await ctx.respond.send({ content: "Failed to load guild configuration." });
     return;
   }
 
   const guildDoc = guildResult.unwrap();
   const categoryId = guildDoc?.channels?.ticketCategoryId ?? null;
   if (!categoryId) {
-    await interaction.editReply({
+    await ctx.respond.send({
       content: "No ticket category is configured. Please ask an administrator to set it up.",
     });
     return;
@@ -118,7 +117,7 @@ async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): P
       err.code === "LIMIT_REACHED"
         ? "You already have an open ticket. Please close it before opening a new one."
         : "Failed to open ticket. Please try again later.";
-    await interaction.editReply({ content: msg });
+    await ctx.respond.send({ content: msg });
     return;
   }
 
@@ -144,16 +143,16 @@ async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): P
     // Non-fatal — channel created but couldn't send welcome message
   }
 
-  await interaction.editReply({ content: `✅ Ticket opened! <#${channelId}>` });
+  await ctx.respond.send({ content: `✅ Ticket opened! <#${channelId}>` });
 }
 
 async function handleClose(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guild = interaction.guild;
   const channel = interaction.channel;
   if (!guild || !channel) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -168,21 +167,21 @@ async function handleClose(interaction: ChatInputCommandInteraction, ctx: Ctx): 
   const isTicketChannel = channelName.startsWith("ticket-");
 
   if (!isTicketChannel) {
-    await interaction.editReply({ content: "This command must be used inside a ticket channel." });
+    await ctx.respond.send({ content: "This command must be used inside a ticket channel." });
     return;
   }
 
   if (!isStaff) {
     // Allow if user is the ticket opener — session lookup
     // Best-effort: if we can't confirm ownership, block non-staff
-    await interaction.editReply({
+    await ctx.respond.send({
       content:
         "Only staff can close tickets from this command. Use the Close Ticket button instead.",
     });
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "warn",
@@ -196,12 +195,12 @@ async function handleClose(interaction: ChatInputCommandInteraction, ctx: Ctx): 
   await closeTicket(ctx, guild, channel.id);
 }
 
-async function handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleSetup(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -212,7 +211,7 @@ async function handleSetup(interaction: ChatInputCommandInteraction): Promise<vo
     member.permissions.has(PermissionFlagsBits.Administrator);
 
   if (!isAdmin) {
-    await interaction.editReply({ content: "Only administrators can setup the ticket system." });
+    await ctx.respond.send({ content: "Only administrators can setup the ticket system." });
     return;
   }
 
@@ -225,13 +224,13 @@ async function handleSetup(interaction: ChatInputCommandInteraction): Promise<vo
   );
 
   if (updateResult.isErr()) {
-    await interaction.editReply({
+    await ctx.respond.send({
       content: `Failed to save configuration: ${updateResult.error.message}`,
     });
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "ok",

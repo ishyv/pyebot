@@ -39,10 +39,10 @@ async function autocomplete(interaction: AutocompleteInteraction): Promise<void>
 }
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -66,7 +66,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       description = err.message;
     }
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text(`${description}\n-# ${getHints("craft")}`))),
     );
     return;
@@ -78,7 +78,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     .map(([material, amount]) => `${amount}x ${material}`)
     .join("\n");
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "ok",

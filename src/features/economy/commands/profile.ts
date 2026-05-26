@@ -1,4 +1,4 @@
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { UserCurrency } from "@/components/user-currency";
 import { ensureAccount } from "@/features/economy/account";
 import { defineCommand } from "@/framework";
@@ -15,10 +15,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -44,7 +44,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   const memberSince = `<t:${Math.floor(account.createdAt.getTime() / 1000)}:D>`;
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         statusAccent,

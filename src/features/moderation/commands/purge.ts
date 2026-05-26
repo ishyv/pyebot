@@ -7,6 +7,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
 const data = new SlashCommandBuilder()
@@ -34,16 +35,16 @@ const data = new SlashCommandBuilder()
     o.setName("attachments").setDescription("Only delete messages with attachments"),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild || !interaction.channel?.isTextBased()) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server text channel.",
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const count = interaction.options.getInteger("count", true);
   const filterUser = interaction.options.getUser("user");
@@ -59,7 +60,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const fetched = await channel.messages.fetch({ limit: 100 });
     messages = [...fetched.values()];
   } catch {
-    await interaction.editReply({ content: "Failed to fetch messages." });
+    await ctx.respond.send({ content: "Failed to fetch messages." });
     return;
   }
 
@@ -81,7 +82,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     .slice(0, count);
 
   if (deletable.length === 0) {
-    await interaction.editReply({
+    await ctx.respond.send({
       content: "No messages matched the filters (or all are older than 14 days).",
     });
     return;
@@ -92,13 +93,13 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const result = await channel.bulkDelete(deletable, true);
     deleted = result.size;
   } catch {
-    await interaction.editReply({
+    await ctx.respond.send({
       content: "Failed to delete messages. The bot may lack Manage Messages permission.",
     });
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "warn",

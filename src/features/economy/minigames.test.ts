@@ -37,6 +37,7 @@ function makeCtx(
     client: {} as never,
     logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
     interaction: null,
+    respond: {} as never,
     emit: async () => {},
     get: async (id, component) => {
       if (component.collection === "user_currencies") {

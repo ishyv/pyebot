@@ -71,19 +71,19 @@ function hpBarStr(current: number, max: number, length = 10): string {
 }
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply();
+  await ctx.respond.defer();
 
   const sub = interaction.options.getSubcommand();
   const userId = interaction.user.id;
 
   if (sub === "help") {
-    await interaction.editReply(hideoutHelpV2());
+    await ctx.respond.send(hideoutHelpV2());
     return;
   }
 
   const profile = await getRpgProfile(ctx, userId).catch(() => null);
   if (!profile) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "mute",
@@ -117,7 +117,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
           ? "*You cannot afford any healing.*"
           : `Healing ${healable} HP would cost **${coins(healCost)}**.`;
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",
@@ -137,7 +137,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   // ── HEAL ───────────────────────────────────────────────────────────────
   if (sub === "heal") {
     if (profile.hpCurrent >= 100) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "ok",
@@ -154,7 +154,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     const maxAffordable = Math.floor(balance / HEAL_COST_PER_HP);
 
     if (maxAffordable <= 0) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "danger",
@@ -176,7 +176,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       await patchRpgProfile(ctx, userId, { hpCurrent: newHp });
       await adjustBalance(ctx, userId, "coins", -totalCost);
     } catch {
-      await interaction.editReply({ content: "Failed to save healing. Please try again." });
+      await ctx.respond.send({ content: "Failed to save healing. Please try again." });
       return;
     }
 
@@ -184,7 +184,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     const quote =
       HEAL_QUOTES[Math.floor(Math.random() * HEAL_QUOTES.length)] ?? HEAL_QUOTES[0] ?? "";
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",
@@ -200,7 +200,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   // ── STASH UPGRADE ──────────────────────────────────────────────────────
   if (sub === "stash_upgrade") {
     if (!upgrade) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "mute",
@@ -214,7 +214,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     }
 
     if (balance < upgrade.cost) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "danger",
@@ -231,14 +231,14 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       await patchRpgProfile(ctx, userId, { stashSize: upgrade.nextMax });
       await adjustBalance(ctx, userId, "coins", -upgrade.cost);
     } catch {
-      await interaction.editReply({ content: "Failed to save stash upgrade. Please try again." });
+      await ctx.respond.send({ content: "Failed to save stash upgrade. Please try again." });
       return;
     }
 
     const quote =
       STASH_QUOTES[Math.floor(Math.random() * STASH_QUOTES.length)] ?? STASH_QUOTES[0] ?? "";
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",

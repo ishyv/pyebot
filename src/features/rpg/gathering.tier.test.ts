@@ -52,6 +52,7 @@ function makeCtx(): Ctx {
     locks: {} as Ctx["locks"],
     sessions: {} as Ctx["sessions"],
     interaction: null,
+    respond: {} as Ctx["respond"],
   };
 }
 

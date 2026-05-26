@@ -28,6 +28,7 @@ import type {
 } from "discord.js";
 import type { Collection, Document, Filter, FindOptions } from "mongodb";
 import type { ZodType } from "zod";
+import type { InteractionResponder } from "@/core/interactionResponder";
 import type { Logger } from "@/core/logger";
 import type { CooldownManager, LockSet, SessionManager } from "@/core/state";
 
@@ -254,6 +255,13 @@ export interface Ctx {
   readonly sessions: SessionManager<unknown>;
   /** The originating interaction (if this Ctx was made for one). May be null for offline jobs. */
   readonly interaction: Interaction | null;
+  /**
+   * Discord response lifecycle for the originating interaction — `defer`,
+   * `send`, `fail`. Prefer this over calling `interaction.reply`/`editReply`
+   * directly: it tracks the deferred/replied state and returns `Result` instead
+   * of throwing. Accessing it on an offline (no-interaction) Ctx throws.
+   */
+  readonly respond: InteractionResponder;
 }
 
 // ─── Raw MongoDB access (escape hatch for World/internals only) ────────────

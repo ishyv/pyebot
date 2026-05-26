@@ -20,9 +20,21 @@ jobs:
         with:
           bun-version: 1.2.20
       - run: bun install --frozen-lockfile
-      - name: Biome check (src)
-        run: bunx biome check src
+      - name: Biome check
+        run: bun run check
       - name: TypeScript
         run: bun run typecheck
       - name: Tests (src)
         run: bun test ./src
+      - name: Webapp install
+        working-directory: webapp
+        run: bun install --frozen-lockfile
+      - name: Webapp check
+        working-directory: webapp
+        run: bun run check
+      - name: Webapp tests
+        working-directory: webapp
+        run: bun run test
+      - name: Webapp build
+        working-directory: webapp
+        run: bun run build

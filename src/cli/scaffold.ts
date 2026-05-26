@@ -1,0 +1,257 @@
+import { join } from "node:path";
+import type {
+  CliFileSystem,
+  FilePlan,
+  NewCommandCommand,
+  NewConfigCommand,
+  NewFeatureCommand,
+  NewHandlerCommand,
+  PlannedFile,
+  TxCliCommand,
+} from "./types";
+
+type ScaffoldCommand = Extract<TxCliCommand, { readonly dryRun: boolean }>;
+
+/** Builds a dry file plan for an authoring scaffold command. */
+export async function planScaffold(command: ScaffoldCommand, fs: CliFileSystem): Promise<FilePlan> {
+  validateId("feature", "feature" in command ? command.feature : command.id);
+
+  const featureRoot = featureDir(fs.cwd, "feature" in command ? command.feature : command.id);
+  if (command.kind !== "new-feature") await requireFeature(featureRoot, fs, command.feature);
+
+  const plan =
+    command.kind === "new-feature"
+      ? planFeature(command, fs.cwd)
+      : command.kind === "new-command"
+        ? planCommand(command, fs.cwd)
+        : command.kind === "new-handler"
+          ? planHandler(command, fs.cwd)
+          : planConfig(command, fs.cwd);
+
+  for (const file of plan.files) await assertNewFile(file, fs);
+  return plan;
+}
+
+function planFeature(command: NewFeatureCommand, cwd: string): FilePlan {
+  const defaultEnabled =
+    command.defaultEnabled === undefined ? "" : `\n  defaultEnabled: ${command.defaultEnabled},`;
+  return {
+    files: [
+      {
+        path: join(featureDir(cwd, command.id), "index.ts"),
+        content: [
+          'import { defineFeature } from "@/framework";',
+          "",
+          "export default defineFeature({",
+          `  id: ${quote(command.id)},`,
+          `  name: ${quote(command.name)},`,
+          `  description: ${quote(command.description)},${defaultEnabled}`,
+          "});",
+          "",
+        ].join("\n"),
+      },
+    ],
+    notes: [],
+  };
+}
+
+function planCommand(command: NewCommandCommand, cwd: string): FilePlan {
+  validateId("command", command.name);
+  const hiddenHelp = command.hidden ? "false" : "{ hints: [] }";
+  const requiresAdmin = command.requiresAdmin ? "\n  requiresAdmin: true," : "";
+  return {
+    files: [
+      {
+        path: join(featureDir(cwd, command.feature), "commands", `${command.name}.ts`),
+        content: [
+          'import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";',
+          'import { defineCommand, type Ctx } from "@/framework";',
+          "",
+          "const data = new SlashCommandBuilder()",
+          `  .setName(${quote(command.name)})`,
+          `  .setDescription(${quote(command.description)});`,
+          "",
+          "async function execute(",
+          "  _interaction: ChatInputCommandInteraction,",
+          "  ctx: Ctx,",
+          "): Promise<void> {",
+          `  await ctx.respond.send({ content: ${quote(command.description)} });`,
+          "}",
+          "",
+          "export default defineCommand({",
+          "  data,",
+          `  help: ${hiddenHelp},${requiresAdmin}`,
+          "  execute,",
+          "});",
+          "",
+        ].join("\n"),
+      },
+    ],
+    notes: [],
+  };
+}
+
+function planHandler(command: NewHandlerCommand, cwd: string): FilePlan {
+  const className = `${toPascal(command.feature)}Handlers`;
+  return {
+    files: [
+      {
+        path: join(featureDir(cwd, command.feature), "handlers.ts"),
+        content:
+          command.handlerKind === "listen"
+            ? listenHandler(command, className)
+            : command.handlerKind === "handle"
+              ? componentHandler(command, className)
+              : eventHandler(command, className),
+      },
+    ],
+    notes: [],
+  };
+}
+
+function listenHandler(command: NewHandlerCommand, className: string): string {
+  const event = command.event ?? "messageCreate";
+  const method = command.method ?? `on${toPascal(event)}`;
+  return [
+    'import { type Ctx, Listen } from "@/framework";',
+    "",
+    `export default class ${className} {`,
+    `  @Listen(${quote(event)})`,
+    `  async ${method}(_event: unknown, _ctx: Ctx): Promise<void> {`,
+    "    // Add feature-owned event handling here.",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+}
+
+function componentHandler(command: NewHandlerCommand, className: string): string {
+  const prefix = command.prefix ?? `${command.feature}:`;
+  const method = command.method ?? "onComponent";
+  return [
+    'import { type ButtonInteraction } from "discord.js";',
+    'import { type Ctx, Handle } from "@/framework";',
+    "",
+    `export default class ${className} {`,
+    `  @Handle(${quote(prefix)})`,
+    `  async ${method}(_interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {`,
+    "    // Add feature-owned component handling here.",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+}
+
+function eventHandler(command: NewHandlerCommand, className: string): string {
+  const event = command.event ?? `${toPascal(command.feature)}Event`;
+  const method = command.method ?? `on${toPascal(event)}`;
+  return [
+    'import { type Ctx, On } from "@/framework";',
+    "",
+    `class ${event} {}`,
+    "",
+    `export default class ${className} {`,
+    `  @On(${event})`,
+    `  async ${method}(_event: ${event}, _ctx: Ctx): Promise<void> {`,
+    "    // Replace the local event token with a shared event class when another feature emits it.",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+}
+
+function planConfig(command: NewConfigCommand, cwd: string): FilePlan {
+  validateId("field", command.field);
+  const configName = `${toCamel(command.feature)}FeatureConfig`;
+  const fieldFactory = `${command.fieldKind}ConfigField`;
+  const fieldBody = configFieldBody(command);
+  return {
+    files: [
+      {
+        path: join(featureDir(cwd, command.feature), "config.ts"),
+        content: [
+          ...(command.fieldKind === "channel" ? ['import { ChannelType } from "discord.js";'] : []),
+          `import { ${fieldFactory}, defineFeatureConfig } from "@/core/featureConfig";`,
+          "",
+          `export const ${configName} = defineFeatureConfig({`,
+          "  fields: {",
+          `    ${command.field}: ${fieldFactory}({`,
+          fieldBody,
+          "    }),",
+          "  },",
+          "});",
+          "",
+        ].join("\n"),
+      },
+    ],
+    notes: [
+      "Wire this config into src/features/config.ts:",
+      `  import { ${configName} } from "./${command.feature}/config";`,
+      `  ${command.feature}: ${configName},`,
+    ],
+  };
+}
+
+function configFieldBody(command: NewConfigCommand): string {
+  const common = [
+    `      key: ${quote(command.field)},`,
+    `      label: ${quote(command.label)},`,
+    `      path: ${quote(command.path)},`,
+    `      required: ${command.required},`,
+  ];
+  if (command.fieldKind === "channel") {
+    return [...common, "      channelTypes: [ChannelType.GuildText],"].join("\n");
+  }
+  if (command.fieldKind === "select") {
+    const options = command.options ?? [];
+    const rendered = options.map((entry) => {
+      const [value, label = value] = entry.split(":", 2);
+      return `        { label: ${quote(label)}, value: ${quote(value)} },`;
+    });
+    return [...common, "      options: [", ...rendered, "      ],"].join("\n");
+  }
+  return common.join("\n");
+}
+
+async function requireFeature(
+  featureRoot: string,
+  fs: CliFileSystem,
+  feature: string,
+): Promise<void> {
+  const indexPath = join(featureRoot, "index.ts");
+  if (!(await fs.exists(indexPath))) {
+    throw new Error(`Feature "${feature}" does not exist at ${indexPath}.`);
+  }
+}
+
+async function assertNewFile(file: PlannedFile, fs: CliFileSystem): Promise<void> {
+  if (await fs.exists(file.path)) {
+    throw new Error(`Refusing to overwrite existing file: ${file.path}`);
+  }
+}
+
+function featureDir(cwd: string, feature: string): string {
+  return join(cwd, "src", "features", feature);
+}
+
+function validateId(label: string, value: string): void {
+  if (/^[a-z][a-z0-9-]*$/.test(value)) return;
+  throw new Error(`Invalid ${label} id "${value}". Use lowercase letters, numbers, and hyphens.`);
+}
+
+function toPascal(value: string): string {
+  return value
+    .split(/[-_:]/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join("");
+}
+
+function toCamel(value: string): string {
+  const pascal = toPascal(value);
+  return pascal[0]?.toLowerCase() + pascal.slice(1);
+}
+
+function quote(value: string): string {
+  return JSON.stringify(value);
+}

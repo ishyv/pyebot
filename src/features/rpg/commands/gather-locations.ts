@@ -20,10 +20,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -31,7 +31,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   const rpgProfile = await ctx.get(userId, RpgProfile);
 
   if (!rpgProfile?.starterKitType) {
-    await interaction.editReply({ content: "Use `/rpg-profile` to pick your profession first." });
+    await ctx.respond.send({ content: "Use `/rpg-profile` to pick your profession first." });
     return;
   }
 
@@ -58,7 +58,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   const bodyText = lines.length > 0 ? lines.join("\n") : "No locations found for this type.";
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "info",

@@ -25,6 +25,7 @@ import {
   type ButtonInteraction,
   ButtonStyle,
   type ChatInputCommandInteraction,
+  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
@@ -124,7 +125,10 @@ export function buildFeaturesCommand(features: ReadonlyArray<FeatureDescriptor>)
 
   async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
     if (!isAdmin(interaction)) {
-      await interaction.reply({ content: "You need Manage Server permission.", ephemeral: true });
+      await interaction.reply({
+        content: "You need Manage Server permission.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
     const sub = interaction.options.getSubcommand(false);
@@ -132,7 +136,7 @@ export function buildFeaturesCommand(features: ReadonlyArray<FeatureDescriptor>)
     if (!guildId) {
       await interaction.reply({
         content: "This command must be used in a server.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -140,7 +144,10 @@ export function buildFeaturesCommand(features: ReadonlyArray<FeatureDescriptor>)
     if (sub === "enable" || sub === "disable") {
       const id = interaction.options.getString("feature", true);
       if (!byId.has(id)) {
-        await interaction.reply({ content: `Unknown feature: ${id}`, ephemeral: true });
+        await interaction.reply({
+          content: `Unknown feature: ${id}`,
+          flags: MessageFlags.Ephemeral,
+        });
         return;
       }
       await ctx.patch(guildId, GuildFeatures, (cur) => ({
@@ -149,14 +156,17 @@ export function buildFeaturesCommand(features: ReadonlyArray<FeatureDescriptor>)
       const feat = byId.get(id);
       await interaction.reply({
         content: `${sub === "enable" ? "Enabled" : "Disabled"} **${feat?.name ?? id}** in this server.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     // Default = panel
     const panelPayload = await renderPanel(ctx, guildId, features);
-    await interaction.reply({ ...panelPayload, ephemeral: true });
+    await interaction.reply({
+      ...panelPayload,
+      flags: panelPayload.flags | MessageFlags.Ephemeral,
+    });
   }
 
   return { data, help: false, execute };
@@ -171,17 +181,20 @@ export function buildToggleHandler(features: ReadonlyArray<FeatureDescriptor>) {
   const byId = new Map(features.map((f) => [f.id, f]));
   return async (interaction: ButtonInteraction, ctx: Ctx): Promise<void> => {
     if (!interaction.guildId) {
-      await interaction.reply({ content: "Use in a server.", ephemeral: true });
+      await interaction.reply({ content: "Use in a server.", flags: MessageFlags.Ephemeral });
       return;
     }
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({ content: "You need Manage Server permission.", ephemeral: true });
+      await interaction.reply({
+        content: "You need Manage Server permission.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
     const id = interaction.customId.slice(TOGGLE_PREFIX.length);
     const feat = byId.get(id);
     if (!feat) {
-      await interaction.reply({ content: `Unknown feature: ${id}`, ephemeral: true });
+      await interaction.reply({ content: `Unknown feature: ${id}`, flags: MessageFlags.Ephemeral });
       return;
     }
     const current = await isFeatureEnabled(ctx, interaction.guildId, feat);

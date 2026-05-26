@@ -7,6 +7,7 @@ import {
 import { deleteCase, editCase, getCaseById } from "@/features/moderation/service";
 import { renderCaseView } from "@/features/moderation/views";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 
 const data = new SlashCommandBuilder()
   .setName("case")
@@ -33,31 +34,31 @@ const data = new SlashCommandBuilder()
       .addIntegerOption((o) => o.setName("id").setDescription("Case ID").setRequired(true)),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
   const sub = interaction.options.getSubcommand();
   const caseId = interaction.options.getInteger("id", true);
 
   if (sub === "view") {
     const result = await getCaseById(interaction.guild.id, caseId);
     if (result.isErr()) {
-      await interaction.editReply({ content: "Failed to look up case." });
+      await ctx.respond.send({ content: "Failed to look up case." });
       return;
     }
     const found = result.unwrap();
     if (!found) {
-      await interaction.editReply({ content: `Case #${caseId} not found.` });
+      await ctx.respond.send({ content: `Case #${caseId} not found.` });
       return;
     }
-    await interaction.editReply(renderCaseView(found.entry, found.userId, caseId));
+    await ctx.respond.send(renderCaseView(found.entry, found.userId, caseId));
     return;
   }
 
@@ -65,30 +66,30 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     const newReason = interaction.options.getString("reason", true);
     const found = await getCaseById(interaction.guild.id, caseId);
     if (found.isErr() || !found.unwrap()) {
-      await interaction.editReply({ content: `Case #${caseId} not found.` });
+      await ctx.respond.send({ content: `Case #${caseId} not found.` });
       return;
     }
     const result = await editCase(found.unwrap()!.userId, interaction.guild.id, caseId, newReason);
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
-    await interaction.editReply({ content: `Case #${caseId} reason updated.` });
+    await ctx.respond.send({ content: `Case #${caseId} reason updated.` });
     return;
   }
 
   if (sub === "delete") {
     const found = await getCaseById(interaction.guild.id, caseId);
     if (found.isErr() || !found.unwrap()) {
-      await interaction.editReply({ content: `Case #${caseId} not found.` });
+      await ctx.respond.send({ content: `Case #${caseId} not found.` });
       return;
     }
     const result = await deleteCase(found.unwrap()!.userId, interaction.guild.id, caseId);
     if (result.isErr()) {
-      await interaction.editReply({ content: `Failed: ${result.error.message}` });
+      await ctx.respond.send({ content: `Failed: ${result.error.message}` });
       return;
     }
-    await interaction.editReply({ content: `Case #${caseId} deleted.` });
+    await ctx.respond.send({ content: `Case #${caseId} deleted.` });
   }
 }
 

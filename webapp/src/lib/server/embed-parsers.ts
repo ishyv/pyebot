@@ -7,7 +7,11 @@
  * `EmbedDraftInputSchema` and runs again inside the bridge, so the dashboard
  * and bot never disagree on what is valid.
  */
-import type { EmbedDraftDTO, EmbedFieldDTO, EmbedScheduleIntervalHours } from "$shared/bridge-types";
+import type {
+  EmbedDraftDTO,
+  EmbedFieldDTO,
+  EmbedScheduleIntervalHours,
+} from "$shared/bridge-types";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 

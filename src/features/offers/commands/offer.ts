@@ -1,11 +1,12 @@
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 /**
  * /offer create <title> <description> [requirements] [salary] [contact]
  * /offer withdraw
  * /offer edit <field> <value>
  */
 
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 import { createOffer, type OfferError, withdrawOffer } from "@/features/offers/service";
 import { container, text, v2Message } from "@/ui/v2";
@@ -42,23 +43,23 @@ const data = new SlashCommandBuilder()
     sub.setName("panel").setDescription("Open the offers configuration panel"),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
-  if (sub === "create") await handleCreate(interaction);
-  else if (sub === "withdraw") await handleWithdraw(interaction);
+  if (sub === "create") await handleCreate(interaction, ctx);
+  else if (sub === "withdraw") await handleWithdraw(interaction, ctx);
   else if (sub === "panel") {
     if (!(await assertPanelPermission(interaction))) return;
     await openAdminPanel(interaction, "offers");
   }
 }
 
-async function handleCreate(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -80,12 +81,12 @@ async function handleCreate(interaction: ChatInputCommandInteraction): Promise<v
         : err.code === "NO_REVIEW_CHANNEL"
           ? "The offers review channel is not configured. Contact an administrator."
           : `Failed to submit offer: ${err.message}`;
-    await interaction.editReply({ content: msg });
+    await ctx.respond.send({ content: msg });
     return;
   }
 
   const offer = result.unwrap();
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "warn",
@@ -97,19 +98,19 @@ async function handleCreate(interaction: ChatInputCommandInteraction): Promise<v
   );
 }
 
-async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const guildId = interaction.guildId;
   if (!guildId) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
   const result = await withdrawOffer(guildId, interaction.user.id);
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container("danger", text(`## Failed\nCould not withdraw offer: ${result.error.message}`)),
       ),
@@ -118,7 +119,7 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise
   }
 
   if (!result.unwrap()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "warn",
@@ -129,7 +130,7 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container("ok", text("## Offer Withdrawn\nYour offer has been removed from review.")),
     ),

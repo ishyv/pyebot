@@ -19,10 +19,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -31,7 +31,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
 
   if (!profile) {
     if (target.id !== interaction.user.id) {
-      await interaction.editReply({ content: "That user hasn't started their RPG journey yet." });
+      await ctx.respond.send({ content: "That user hasn't started their RPG journey yet." });
       return;
     }
 
@@ -50,7 +50,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       lumberButton,
     );
 
-    await interaction.editReply({
+    await ctx.respond.send({
       ...v2Message(
         container(
           "info",
@@ -78,7 +78,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     `**Losses:** ${profile.losses}` +
     professionLine;
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(container("info", section(statsText, thumb(avatarUrl, "avatar")))),
   );
 }

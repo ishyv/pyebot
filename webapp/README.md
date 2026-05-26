@@ -23,7 +23,7 @@ in-memory bridge.
   and feature toggles. All writes go through the bridge into the bot's MongoDB
   layer; the bot's services validate before persisting.
 - **RPG content editor** at `/rpg` (opt-in, see below) for editing the bot's
-  typed content pack via a Discord-flavoured UI.
+  active Mongo-backed RPG content snapshot via the live bridge.
 - **Live event feed** at `/api/events` (SSE) that mirrors bot events to the
   dashboard, e.g. config changes propagate immediately to all open tabs.
 
@@ -138,24 +138,13 @@ the bridge, every `/guilds/**` loader throws "Bot bridge not registered."
 
 ### The `/rpg` route specifically
 
-`/rpg` is a content editor for the bot's RPG item catalog. It reads and writes
-[`../src/content/packs/default.ts`](../src/content/packs/default.ts) in the
-bot repo directly, via the TypeScript compiler API
-([`src/lib/server/rpg-registry.ts`](src/lib/server/rpg-registry.ts)). It
-**only works when this repo is checked out next to the bot repo** with the
-expected directory layout:
+`/rpg` edits the bot's active RPG content snapshot through the same in-process
+bridge as the rest of the dashboard. The bot validates and persists that
+snapshot to Mongo as `rpg_content.active`, then refreshes the live runtime maps.
 
-```
-some-parent/
-  bot-repo/
-    src/content/packs/default.ts   ← read+written
-  webapp-repo/                     ← this repo
-    src/lib/server/rpg-registry.ts ← reaches into ../src/...
-```
-
-If you publish this repo without that layout, `/rpg` will throw at runtime.
-That's an acceptable failure mode for a self-hosted tool, but be aware. Gate
-the route with `BOT_OWNER_IDS` (empty → 403 for all) to keep it out of view.
+The source pack at `src/content/packs/default.ts` is seed/catalog authoring
+data. It is not edited by this dashboard route. Gate `/rpg` with
+`BOT_OWNER_IDS` (empty → 403 for all) to keep it out of view.
 
 ---
 
@@ -188,7 +177,7 @@ src/
       discord.ts           — Discord REST helpers (OAuth flow only)
       oauth.ts             — OAuth state signing + URL builder
       rpg-access.ts        — BOT_OWNER_IDS allowlist for /rpg
-      rpg-registry.ts      — TS-AST read/write of the bot's content pack
+      rpg-registry.ts      — item validation boundary for live RPG snapshot edits
       session.ts           — session create/read/refresh
   routes/
     +layout.svelte         — bare slot; per-section layouts add chrome

@@ -1,4 +1,5 @@
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 /**
  * /modconfig — Admin configuration for moderation settings.
  *
@@ -79,19 +80,19 @@ const data = new SlashCommandBuilder()
       ),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   const sub = interaction.options.getSubcommand();
 
-  if (sub === "modlog") await handleModlog(interaction);
-  else if (sub === "restrict-roles") await handleRestrictRoles(interaction);
-  else if (sub === "escalation") await handleEscalation(interaction);
+  if (sub === "modlog") await handleModlog(interaction, ctx);
+  else if (sub === "restrict-roles") await handleRestrictRoles(interaction, ctx);
+  else if (sub === "escalation") await handleEscalation(interaction, ctx);
 }
 
-async function handleModlog(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+async function handleModlog(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -99,7 +100,7 @@ async function handleModlog(interaction: ChatInputCommandInteraction): Promise<v
 
   // Verify it's a text channel
   if (channel.type !== ChannelType.GuildText) {
-    await interaction.editReply({ content: "The channel must be a text channel." });
+    await ctx.respond.send({ content: "The channel must be a text channel." });
     return;
   }
 
@@ -108,24 +109,27 @@ async function handleModlog(interaction: ChatInputCommandInteraction): Promise<v
   });
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text("## Failed\nCould not update mod log channel."))),
     );
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container("ok", text(`## Mod Log Channel Set\nMod log channel set to <#${channel.id}>.`)),
     ),
   );
 }
 
-async function handleRestrictRoles(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+async function handleRestrictRoles(
+  interaction: ChatInputCommandInteraction,
+  ctx: Ctx,
+): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -137,13 +141,13 @@ async function handleRestrictRoles(interaction: ChatInputCommandInteraction): Pr
   });
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text("## Failed\nCould not update restriction role."))),
     );
     return;
   }
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "ok",
@@ -153,11 +157,11 @@ async function handleRestrictRoles(interaction: ChatInputCommandInteraction): Pr
   );
 }
 
-async function handleEscalation(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+async function handleEscalation(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -171,7 +175,7 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
   if (durationStr !== null) {
     durationMs = parseDuration(durationStr);
     if (durationMs === null) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "danger",
@@ -200,7 +204,7 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
   const result = await updateGuildPaths(interaction.guild.id, paths);
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text("## Failed\nCould not update escalation settings."))),
     );
     return;
@@ -213,7 +217,7 @@ async function handleEscalation(interaction: ChatInputCommandInteraction): Promi
     .filter(Boolean)
     .join("\n");
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         enabled ? "ok" : "mute",

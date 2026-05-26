@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import { unban } from "@/features/moderation/service";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { sendModLog } from "../modlog";
 import { renderModlogCase } from "../views";
@@ -21,11 +22,11 @@ const data = new SlashCommandBuilder()
     opt.setName("reason").setDescription("Reason for unbanning").setRequired(false),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild || !interaction.member) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -33,7 +34,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const reason = interaction.options.getString("reason") ?? "No reason provided";
 
   if (!/^\d{17,19}$/.test(userId)) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "danger",
@@ -47,7 +48,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   try {
     await interaction.guild.bans.fetch(userId);
   } catch {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text("That user is not currently banned."))),
     );
     return;
@@ -59,7 +60,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const result = await unban(interaction.guild, moderator, userId, reason, targetUser?.tag);
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text(`**Failed:** ${result.error.message}`))),
     );
     return;
@@ -69,7 +70,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
   await sendModLog(interaction.guild, sanctionResult);
 
-  await interaction.editReply(renderModlogCase({ result: sanctionResult }));
+  await ctx.respond.send(renderModlogCase({ result: sanctionResult }));
 }
 
 export default defineCommand({

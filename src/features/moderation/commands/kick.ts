@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { kick } from "@/features/moderation/service";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { sendModLog } from "../modlog";
 import { dmUser } from "../notifications";
 import { renderModlogCase } from "../views";
@@ -20,9 +21,9 @@ const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
   .setDMPermission(false);
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
@@ -32,7 +33,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const targetUser = interaction.options.getUser("user", true);
   const reason = interaction.options.getString("reason", true);
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const [moderator, targetMember] = await Promise.all([
     interaction.guild.members.fetch(interaction.user.id),
@@ -40,14 +41,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   ]);
 
   if (!targetMember) {
-    await interaction.editReply({ content: "That user is not a member of this server." });
+    await ctx.respond.send({ content: "That user is not a member of this server." });
     return;
   }
 
   const result = await kick(interaction.guild, moderator, targetMember, reason);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Failed: ${result.error.message}` });
+    await ctx.respond.send({ content: `Failed: ${result.error.message}` });
     return;
   }
 
@@ -56,7 +57,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   await dmUser(targetMember.user, "KICK", interaction.guild.name, reason, sanctionResult.caseId);
   await sendModLog(interaction.guild, sanctionResult);
 
-  await interaction.editReply(renderModlogCase({ result: sanctionResult }));
+  await ctx.respond.send(renderModlogCase({ result: sanctionResult }));
 }
 
 export default defineCommand({

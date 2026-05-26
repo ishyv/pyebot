@@ -57,6 +57,7 @@ function fakeCtx(state: ComponentState, failOnSet = false): Ctx {
     cooldowns: {} as never,
     locks: {} as never,
     interaction: null,
+    respond: {} as never,
   };
 }
 

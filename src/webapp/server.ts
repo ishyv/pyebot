@@ -10,6 +10,7 @@
 
 import { createServer } from "node:http";
 import type { Client } from "discord.js";
+import { getEnv } from "@/core/env";
 import { createLogger } from "@/core/logger";
 import { reloadRpgContent } from "@/features/rpg/content/runtime";
 import { createBridgeFromClient } from "./bot-bridge";
@@ -24,7 +25,7 @@ export async function startWebApp(client: Client): Promise<void> {
   }
   registerBridge(createBridgeFromClient(client));
 
-  const port = Number(process.env.WEBAPP_PORT ?? 4000);
+  const port = getEnv().WEBAPP_PORT;
 
   // The SvelteKit Node adapter defaults the request protocol to `https` when
   // neither ORIGIN nor PROTOCOL_HEADER is set (see get_origin in the built
@@ -35,10 +36,9 @@ export async function startWebApp(client: Client): Promise<void> {
   // at module load) so form submissions work out of the box. An explicitly set
   // ORIGIN — e.g. a production https domain — is always respected.
   if (!process.env.ORIGIN) {
+    const redirectUri = getEnv().DISCORD_REDIRECT_URI;
     try {
-      process.env.ORIGIN = process.env.DISCORD_REDIRECT_URI
-        ? new URL(process.env.DISCORD_REDIRECT_URI).origin
-        : `http://localhost:${port}`;
+      process.env.ORIGIN = redirectUri ? new URL(redirectUri).origin : `http://localhost:${port}`;
     } catch {
       process.env.ORIGIN = `http://localhost:${port}`;
     }

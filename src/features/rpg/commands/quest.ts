@@ -1,4 +1,4 @@
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { acceptRpgQuest, claimRewards, listRpgQuests } from "@/features/rpg/quests";
 import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -30,10 +30,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -57,7 +57,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       bodyText = lines.join("\n\n");
     }
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("info", text(`## RPG Quests\n${bodyText}\n-# ${getHints("rpg-quest")}`))),
     );
     return;
@@ -68,7 +68,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     const result = await acceptRpgQuest(ctx, userId, questId);
 
     if (result.isErr()) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(container("danger", text(`## ❌ Quest Not Accepted\n${result.error.message}`))),
       );
       return;
@@ -96,7 +96,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       const rewardsText =
         rewardLines.length > 0 ? `\n\n**🎁 Rewards**\n${rewardLines.join("\n")}` : "";
 
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "ok",
@@ -109,7 +109,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
         ),
       );
     } else {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "ok",
@@ -128,14 +128,14 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     const result = await claimRewards(ctx, userId, questId);
 
     if (result.isErr()) {
-      await interaction.editReply({ content: `Error: ${result.error.message}` });
+      await ctx.respond.send({ content: `Error: ${result.error.message}` });
       return;
     }
 
     const { rewards } = result.unwrap();
 
     if (rewards.length === 0) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "ok",
@@ -160,7 +160,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
       })
       .filter(Boolean);
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",

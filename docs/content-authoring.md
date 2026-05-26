@@ -1,13 +1,13 @@
 # RPG Content Authoring
 
 The extended RPG catalog is defined in `src/content/packs/default.ts`. That
-file is currently used by the item-manager and catalog validation tools.
+file is seed/catalog data for authoring and validation, not the live dashboard
+editing path.
 
-The item-manager edits that TypeScript file through a small AST-based content
-I/O boundary. It reads the literal `items`, `locations`, `dropTables`, and
-`recipes` sections, validates the full pack, and writes only the `items`
-initializer back to disk. Recipes, locations, and drop tables are read-only in
-the item-manager for now.
+The embedded dashboard edits the active RPG runtime snapshot through the bot
+bridge and persists it to Mongo as `rpg_content.active`. Keep dashboard changes
+on that live bridge path. Source-pack edits belong in normal TypeScript changes
+against this file.
 
 The active bot runtime does not load a content registry. Commands for
 gathering, processing, crafting, tools, and expeditions read the small typed
@@ -183,7 +183,8 @@ bun run typecheck
 - Using display text as an ID, like `Iron Ore`.
 - Setting `maxQty` lower than `minQty`.
 - Adding a mining location with a forest drop table.
-- Assuming `src/content/packs/default.ts` changes active RPG bot behavior. For
-  now, update `src/features/rpg/content/**` for runtime gameplay.
+- Assuming `src/content/packs/default.ts` changes active RPG bot behavior by
+  itself. Runtime gameplay reads `src/features/rpg/content/**` and may be
+  replaced at boot by the Mongo-backed dashboard snapshot.
 - Trying to load external JSON/JSON5 content packs. tx supports the current
   typed content pack only.

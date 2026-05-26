@@ -7,6 +7,7 @@ import {
 import { ban, TEMP_BAN_DURATION_CHOICES } from "@/features/moderation/service";
 import { renderModlogCase } from "@/features/moderation/views";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 
 const data = new SlashCommandBuilder()
   .setName("ban")
@@ -24,9 +25,9 @@ const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .setDMPermission(false);
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild || !interaction.member) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
@@ -38,17 +39,17 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const duration = interaction.options.getString("duration") ?? undefined;
   const moderator = await interaction.guild.members.fetch(interaction.user.id);
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const result = await ban(interaction.guild, moderator, target, reason, duration);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Failed: ${result.error.message}` });
+    await ctx.respond.send({ content: `Failed: ${result.error.message}` });
     return;
   }
 
   const modResult = result.unwrap();
-  await interaction.editReply(
+  await ctx.respond.send(
     renderModlogCase({ result: modResult, extras: duration ? { duration } : undefined }),
   );
 }

@@ -140,16 +140,30 @@ export function validateInteractionPayload(
     );
   }
 
-  if (Array.isArray(payload.components) && payload.components.length > 5) {
-    return ErrResult(
-      new InteractionResponseError(
-        "invalid_payload",
-        "Interaction response must contain 5 component rows or fewer.",
-      ),
-    );
+  // Components V2 messages allow up to 10 top-level components (containers,
+  // sections, rows, …); legacy messages allow at most 5 action rows. Apply the
+  // right ceiling so a valid V2 payload isn't rejected as if it were legacy.
+  if (Array.isArray(payload.components)) {
+    const v2 = hasComponentsV2(payload.flags);
+    const max = v2 ? 10 : 5;
+    if (payload.components.length > max) {
+      return ErrResult(
+        new InteractionResponseError(
+          "invalid_payload",
+          v2
+            ? "Components V2 response must contain 10 top-level components or fewer."
+            : "Interaction response must contain 5 component rows or fewer.",
+        ),
+      );
+    }
   }
 
   return OkResult(undefined);
+}
+
+function hasComponentsV2(flags: InteractionReplyOptions["flags"]): boolean {
+  if (flags === undefined) return false;
+  return (MessageFlagsBitField.resolve(flags as never) & MessageFlags.IsComponentsV2) !== 0;
 }
 
 export function classifyDiscordInteractionError(error: unknown): InteractionResponseErrorKind {

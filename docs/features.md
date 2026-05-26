@@ -7,8 +7,8 @@ filesystem scan, then loads `commands/*.ts` modules and an optional
 
 Active RPG bot behavior reads the typed runtime maps in
 `src/features/rpg/content/**`. The larger typed content pack documented in
-[RPG Content Authoring](./content-authoring.md) is kept for item-manager and
-extended catalog work.
+[RPG Content Authoring](./content-authoring.md) is seed/catalog authoring data;
+the embedded dashboard edits the active Mongo-backed runtime snapshot.
 
 ## Adding A Feature
 

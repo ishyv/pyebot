@@ -10,10 +10,10 @@ const data = new SlashCommandBuilder()
   .addUserOption((opt) => opt.setName("user").setDescription("User to rob").setRequired(true));
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply();
+  await ctx.respond.defer();
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -39,10 +39,10 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
             ),
           );
 
-    await interaction.editReply(payload);
+    await ctx.respond.send(payload);
   } catch (err) {
     const msg = err instanceof MinigameError ? err.message : "An error occurred.";
-    await interaction.editReply({ content: `Error: ${msg}` });
+    await ctx.respond.send({ content: `Error: ${msg}` });
   }
 }
 

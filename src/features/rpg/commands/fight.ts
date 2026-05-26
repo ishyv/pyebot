@@ -18,10 +18,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply();
+  await ctx.respond.defer();
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -29,14 +29,14 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   const userId = interaction.user.id;
 
   if (target.id === userId) {
-    await interaction.editReply({ content: "You cannot challenge yourself to a fight." });
+    await ctx.respond.send({ content: "You cannot challenge yourself to a fight." });
     return;
   }
 
   const result = await initiateFight(ctx, userId, target.id);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    await ctx.respond.send({ content: `Error: ${result.error.message}` });
     return;
   }
 
@@ -48,7 +48,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     .setLabel("Accept")
     .setStyle(ButtonStyle.Success);
 
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "danger",

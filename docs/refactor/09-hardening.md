@@ -1,5 +1,11 @@
 # Plan 09 — Robustness hardening (small, independent fixes)
 
+> **Status (2026-05-25):** 9a, 9c, 9d, 9e are **implemented**. 9b is **closed as not-applicable** —
+> a data-model review showed every `expiresAt` drives a role-removal sweep (a TTL index would
+> delete the record first and orphan the Discord role) and there is no user-deletion path, so the
+> orphan rows it targets never accumulate. See the 2026-05-25 decision-log entry. The items below
+> are kept as the original record of intent.
+
 ## Goal
 
 Close a handful of low-surface robustness gaps. Each item is independent; do them à la carte.

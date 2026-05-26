@@ -7,6 +7,7 @@ import {
 import { getCases } from "@/features/moderation/service";
 import { renderSanctionHistory } from "@/features/moderation/views";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { hasPermission } from "@/middleware/permissions";
 import { container, text, v2Message } from "@/ui/v2";
 
@@ -18,9 +19,9 @@ const data = new SlashCommandBuilder()
   )
   .setDMPermission(false);
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   if (!interaction.guild) {
-    await interaction.reply({
+    await ctx.respond.send({
       content: "This command can only be used in a server.",
       flags: MessageFlags.Ephemeral,
     });
@@ -29,7 +30,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
   const targetUser = interaction.options.getUser("user") ?? interaction.user;
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   // Privacy gate: only allow viewing other users' history if caller has ModerateMembers
   const isSelf = targetUser.id === interaction.user.id;
@@ -38,7 +39,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       .fetch(interaction.user.id)
       .catch(() => null);
     if (!callerMember || !hasPermission(callerMember, PermissionFlagsBits.ModerateMembers)) {
-      await interaction.editReply(
+      await ctx.respond.send(
         v2Message(
           container(
             "danger",
@@ -53,14 +54,14 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const result = await getCases(targetUser.id, interaction.guild.id);
 
   if (result.isErr()) {
-    await interaction.editReply({ content: "Failed to fetch case history." });
+    await ctx.respond.send({ content: "Failed to fetch case history." });
     return;
   }
 
   const history = result.unwrap();
 
   if (history.length === 0) {
-    await interaction.editReply({
+    await ctx.respond.send({
       content: `**${targetUser.tag}** has no cases recorded on this server.`,
     });
     return;
@@ -69,7 +70,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   // Most recent first, cap at 15
   const entries = [...history].reverse().slice(0, 15);
 
-  await interaction.editReply(renderSanctionHistory(targetUser.tag, entries));
+  await ctx.respond.send(renderSanctionHistory(targetUser.tag, entries));
 }
 
 export default defineCommand({

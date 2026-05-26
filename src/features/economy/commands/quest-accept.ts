@@ -1,6 +1,7 @@
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { acceptQuest, QUEST_DEFINITIONS } from "@/features/economy/quests";
 import { defineCommand } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
@@ -20,11 +21,11 @@ const data = new SlashCommandBuilder()
       ),
   );
 
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -34,7 +35,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const result = await acceptQuest(userId, questId);
 
   if (result.isErr()) {
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text(`## ❌ Quest Not Accepted\n${result.error.message}`))),
     );
     return;
@@ -72,7 +73,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
   body += "\n\n-# 💡 Use /quest-claim when all steps are complete";
 
-  await interaction.editReply(v2Message(container("info", text(body))));
+  await ctx.respond.send(v2Message(container("info", text(body))));
 }
 
 export default defineCommand({

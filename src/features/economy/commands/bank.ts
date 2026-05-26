@@ -1,4 +1,4 @@
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { UserCurrency } from "@/components/user-currency";
 import { ensureAccount } from "@/features/economy/account";
 import {
@@ -37,10 +37,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -74,7 +74,7 @@ async function handleBalance(interaction: ChatInputCommandInteraction, ctx: Ctx)
     bodyText = `## 🏦 Bank Account\n${lines.join("\n\n")}\n\n-# 💡 Bank funds are safe from /rob`;
   }
 
-  await interaction.editReply(v2Message(container("info", text(bodyText))));
+  await ctx.respond.send(v2Message(container("info", text(bodyText))));
 }
 
 async function handleDeposit(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
@@ -90,7 +90,7 @@ async function handleDeposit(interaction: ChatInputCommandInteraction, ctx: Ctx)
   try {
     const { handBalance, bankBalance } = await deposit(ctx, userId, currencyId, amount);
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",
@@ -107,9 +107,7 @@ async function handleDeposit(interaction: ChatInputCommandInteraction, ctx: Ctx)
         : err instanceof Error
           ? err.message
           : "An error occurred.";
-    await interaction.editReply(
-      v2Message(container("danger", text(`## ❌ Deposit Failed\n${desc}`))),
-    );
+    await ctx.respond.send(v2Message(container("danger", text(`## ❌ Deposit Failed\n${desc}`))));
   }
 }
 
@@ -126,7 +124,7 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx
   try {
     const { handBalance, bankBalance } = await withdraw(ctx, userId, currencyId, amount);
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "ok",
@@ -143,7 +141,7 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx
         : err instanceof Error
           ? err.message
           : "An error occurred.";
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(container("danger", text(`## ❌ Withdrawal Failed\n${desc}`))),
     );
   }

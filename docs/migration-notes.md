@@ -11,7 +11,7 @@ Current boundaries:
 - Feature toggles live in `guild_features.overrides`; old embedded
   guild-document feature data is unsupported and ignored.
 - Active RPG runtime content lives in `src/features/rpg/content/**`.
-- `src/content/packs/default.ts` is item-manager/extended catalog data only.
+- `src/content/packs/default.ts` is seed/extended catalog data only.
 - `DISCORD_TOKEN` is the only Discord token env key.
 - MongoDB reads use the current driver result shape.
 - Existing persisted data from older shapes should be reset or migrated outside

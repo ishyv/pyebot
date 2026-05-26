@@ -47,6 +47,7 @@
 import type { Client, Interaction } from "discord.js";
 import type { Collection, Db, Document, Filter as MongoFilter } from "mongodb";
 import { getDb } from "@/core/db";
+import { createInteractionResponder, type InteractionResponder } from "@/core/interactionResponder";
 import { createLogger, type Logger } from "@/core/logger";
 import { cooldowns, locks, sessions } from "@/core/state";
 import { EventBus } from "./event-bus";
@@ -189,6 +190,7 @@ export class World {
  */
 class InteractionCtx implements Ctx {
   private readonly cache = new Map<string, unknown>();
+  private responder: InteractionResponder | null = null;
   readonly logger: Logger;
 
   constructor(
@@ -201,6 +203,16 @@ class InteractionCtx implements Ctx {
 
   get client(): Client {
     return this.world.client;
+  }
+
+  /** Lazily-built response lifecycle for this interaction. Built once and reused
+   * so the deferred/replied state stays coherent across calls within a handler. */
+  get respond(): InteractionResponder {
+    if (!this.interaction) {
+      throw new Error("ctx.respond is unavailable: this Ctx was created without an interaction.");
+    }
+    this.responder ??= createInteractionResponder(this.interaction);
+    return this.responder;
   }
   get cooldowns() {
     return cooldowns;

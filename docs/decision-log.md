@@ -1,5 +1,149 @@
 # Decision Log
 
+## 2026-05-25 - Single-community scope: global per-user keying is intentional
+
+**Cambio:** tx-v2 es un bot **single-community** (un servidor principal / federación que comparte
+estado a propósito). Por tanto el modelo de datos actual es correcto y deliberado:
+
+- **Economía y RPG son globales por usuario** — `UserCurrency`, `UserInventory`, `RpgProfile`,
+  `EconomyAccount` (racha diaria), `QuestProgress`, logros: todos con `_id = userId` (sin `guildId`).
+  Un usuario tiene **una** identidad de economía/RPG compartida entre servidores. Es intencional, no
+  un bug.
+- **La moderación es guild-scoped** — sanciones y warns viven en `users.sanction_history.<guildId>[]`
+  y el contador de casos es por guild. Esto es forward-compatible si algún día entra un segundo
+  servidor.
+- Se eliminó el componente **muerto `UserWarns`** (`src/components/user-warns.ts` + su export en el
+  barrel): definido pero sin referencias en runtime; los warns persisten vía `service.warn()` en
+  `sanction_history`.
+
+**Motivo:** El dueño confirmó el modelo single-community. Cierra la pregunta abierta de alcance
+multi-guild (índice de refactors, #2). Evita una migración innecesaria de re-keying.
+
+**Alternativas (rechazadas ahora):** (a) Multi-tenant aislado — re-keyear economía/RPG por
+`(guildId, userId)`; sería una migración real y no aplica al despliegue actual. (b) Aplanar
+`sanction_history.<guildId>` a un array plano — posible, pero es un cambio de forma persistida y el
+mapa por-guild no está roto (es forward-compatible), así que se deja como está. Si en el futuro el
+bot se vuelve multi-tenant-aislado, reabrir con la migración de (a).
+
+**Cómo verificar:** `rg "UserWarns|user_warns" src` → vacío; `bun run typecheck`; `bun test`
+(691 pass / 0 fail). El keying global se ve en `economy/mutations.ts` (`ctx.get(userId,
+UserCurrency)`) y el guild-scoping en `moderation/service.ts` (`sanction_history.${guildId}`).
+
+## 2026-05-25 - Plan 09b (orphan cleanup / TTL indexes) closed as not-applicable
+
+**Cambio:** El plan 09b se cierra sin implementar TTL indexes ni un limpiador de huérfanos en
+borrado de usuario. Se documenta aquí la razón tras verificar el modelo de datos real.
+
+**Motivo (evidencia):**
+- **TTL no encaja.** Cada campo `expiresAt` persistido alimenta un *barrido con efectos
+  secundarios*, no un borrado puro: `automod/handlers.ts:237` y `autoroles/handlers.ts:216`
+  consultan `expiresAt <= now` para **quitar el rol de Discord** antes de eliminar el registro. Un
+  índice TTL borraría el registro antes de que el barrido corra, dejando el rol asignado para
+  siempre (huérfano peor que el que pretendía resolver). Las listings de mercado guardan
+  `expiresAt: null` (`market.ts:195`), así que ni siquiera expiran por fecha.
+- **El limpiador en borrado de usuario es inaplicable.** No existe ninguna ruta que borre usuarios
+  ni sus datos: `purge` borra *mensajes*, y el único `guildMemberRemove` (`webapp/bot-bridge.ts`)
+  es un puente SSE para el dashboard, no limpieza de datos. Sin borrado de usuario, las filas
+  huérfanas en `questProgress`/`achievementUnlocks`/`marketListings` no se acumulan.
+
+**Alternativas:** Añadir índices TTL "porque el campo existe" se rechazó: es destructivo y rompería
+la retirada de roles. Implementar limpieza especulativa se rechazó: resuelve un disparador que no
+ocurre y reabre la pregunta de alcance multi-guild sin necesidad.
+
+**Riesgos:** Ninguno por no actuar. Si en el futuro se añade una ruta de borrado de usuario o datos
+con historial que crezca sin límite, reabrir con un barrido que respete los efectos secundarios
+(no TTL crudo). La pregunta de alcance multi-guild (índice 00, #2) deja de bloquear 09b.
+
+**Cómo verificar:** `rg "createIndex|expireAfterSeconds" src` → vacío (sin índices); `rg
+"deleteUser|removeUser" src` → sin ruta de borrado de usuario; los barridos de expiración viven en
+`automod/handlers.ts` y `autoroles/handlers.ts`.
+
+## 2026-05-25 - Commands respond through ctx.respond (plan 06 migration completed)
+
+**Cambio:** Todos los `execute` de slash commands (economy, rpg, moderation, ai, autoroles,
+offers, tickets, utility) pasaron de `interaction.deferReply/editReply/reply/followUp` crudos a
+`ctx.respond.defer/send`. Donde un comando delegaba en helpers (`modset` con 16 handlers,
+`modconfig`, `lockdown`, `autorole` con `requireGuild`/`requireManageableRole`), se enhebró `ctx`
+por la firma. Los escenarios de `command-smoke-scenarios.ts` se actualizaron de `raw` a `ctx`.
+
+**Excepción deliberada:** `ai/commands/context.ts` se queda en la API cruda. Usa
+`interaction.followUp(payload)` para publicar el resumen **público** mientras mantiene el defer
+**efímero**; `ctx.respond.send` hace `editReply` cuando está deferred, así que migrarlo cambiaría el
+resumen de mensaje público a edición efímera. Además es `executeWithDeps` (exportado e inyectado en
+tests). Las ramas `panel` que llaman `openAdminPanel(interaction, …)` también siguen crudas.
+
+**Motivo:** Una sola ruta de respuesta (`ctx.respond`) que rastrea el estado deferred/replied,
+devuelve `Result` en vez de lanzar, y valida el payload. Completa el plan 06 tras arreglar el
+`Ctx.respond` que faltaba.
+
+**Riesgos:** Medio. `ctx.respond.send` valida el payload (≤5 filas de componentes, ≤2000 chars) y
+devuelve `Result` en vez de lanzar — distinto de `editReply` crudo en los bordes. La equivalencia de
+comportamiento (efímero/público, orden defer→edit) se preservó con mapeos exactos, pero el render
+real en Discord no se pudo verificar localmente (sin UI).
+
+**Cómo verificar:** `bun run typecheck`, `bun test` (677 pass / 0 fail), biome sobre los comandos
+tocados, y `rg "interaction\.(deferReply|editReply)\(" src/features/*/commands` → solo `context.ts`.
+
+## 2026-05-25 - ctx.respond is a first-class Ctx member (fixes broken responder commands)
+
+**Cambio:** Se añadió `respond: InteractionResponder` a la interfaz `Ctx`
+(`framework/types.ts`) y un getter perezoso en `InteractionCtx` (`framework/world.ts`) que construye
+`createInteractionResponder(this.interaction)` la primera vez que se usa. Acceder a `ctx.respond` en
+un Ctx sin interacción (jobs offline) lanza un error claro.
+
+**Motivo:** La migración a `ctx.respond` se había hecho del lado de los comandos (`mod`, todos los
+subcomandos de `automod`, `handleDbError`) pero el `Ctx` del framework **nunca** expuso `respond`.
+`world.forInteraction()` devolvía un `InteractionCtx` sin esa propiedad, así que en runtime
+`ctx.respond` era `undefined` y esos comandos lanzaban `TypeError`, tragado por el error boundary
+del dispatcher como "An unexpected error occurred". Verificado empíricamente: `typeof ctx.respond
+=== "undefined"` antes del cambio. Los tests no lo detectaban porque inyectan un Ctx simulado.
+
+**Alternativas:** Que cada comando construyera su propio responder desde `interaction` se descartó:
+duplica el patrón en decenas de sitios y contradice el objetivo de la migración (un único punto de
+respuesta). Tipar `Ctx.respond` como opcional se descartó: oculta el contrato real.
+
+**Riesgos:** Bajo. Cambio aditivo. El tipo `Ctx` ahora exige `respond`, lo que obligó a 3 mocks de
+test a declararlo (no usan respond). Desbloquea migrar el resto de comandos de
+`interaction.deferReply/editReply` a `ctx.respond` de forma incremental (plan 06).
+
+**Cómo verificar:** `bun run typecheck`, `bun test` (670 pass / 1 fail preexistente de aislamiento),
+y reproducción: `world.forInteraction(fakeInteraction).respond` expone `defer/send/fail`;
+`world.forInteraction(null).respond` lanza.
+
+## 2026-05-25 - Standardize ephemeral replies on MessageFlags.Ephemeral
+
+**Cambio:** Las 29 llamadas que usaban la forma deprecada `{ ephemeral: true }`
+(`reply`/`deferReply`/`followUp`) en 15 archivos pasaron a `{ flags: MessageFlags.Ephemeral }`,
+alineándose con el resto del código que ya usaba `MessageFlags`. En `framework/panel.ts` el panel V2
+combina banderas (`panelPayload.flags | MessageFlags.Ephemeral`) para no pisar `IsComponentsV2`.
+
+**Motivo:** discord.js deprecó `ephemeral: true`. Convivían las dos formas, una inconsistencia
+puramente cosmética pero visible en cada comando. Es cambio equivalente en runtime (ambas resuelven
+a la misma bandera en el wire).
+
+**Alternativas:** Dejarlo como estaba se descartó: la advertencia de deprecación seguiría y la base
+mezclaría dos estilos.
+
+**Riesgos:** Bajo. Sin cambio de comportamiento. El único punto delicado, el merge de banderas V2 en
+`panel.ts`, está cubierto por typecheck.
+
+**Cómo verificar:** `bun run typecheck`, biome sobre los 15 archivos tocados, y
+`rg "ephemeral: true" src` sin resultados.
+
+## 2026-05-25 - Refactor backlog reconciled with code
+
+**Cambio:** Se re-verificó `docs/refactor/00-INDEX.md` contra el código: los planes 01, 02, 03, 04,
+05, 07, 08 y los ítems 9a/9c del plan 09 ya estaban implementados pese a figurar como `Now`/`Later`.
+El índice ahora refleja el estado real; los archivos de plan se conservan como registro histórico.
+
+**Motivo:** El índice anunciaba como trabajo pendiente cosas ya hechas (p.ej. dividir un `guild.ts`
+de 722 líneas que hoy tiene 190), lo que confunde a cualquier lector nuevo — drift doc/código.
+
+**Riesgos:** Ninguno (solo documentación).
+
+**Cómo verificar:** Contrastar cada fila del índice con el código citado (router.ts, store.ts,
+db/schemas/guild/, core/state.ts, framework/command.ts).
+
 ## 2026-05-24 - RPG state canonical components
 
 **Cambio:** RPG runtime state no longer uses embedded `users` document fields.

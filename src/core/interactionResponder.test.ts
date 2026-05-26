@@ -115,6 +115,27 @@ describe("interaction payload validation", () => {
     if (result.isErr()) expect(result.error.message).toContain("5");
   });
 
+  it("allows up to ten top-level components for Components V2 payloads", () => {
+    const components = Array.from({ length: 10 }, () => ({ type: 1, components: [] }));
+    const result = validateInteractionPayload({
+      components,
+      flags: MessageFlags.IsComponentsV2,
+    });
+
+    expect(result.isOk()).toBe(true);
+  });
+
+  it("rejects more than ten top-level components even for Components V2", () => {
+    const components = Array.from({ length: 11 }, () => ({ type: 1, components: [] }));
+    const result = validateInteractionPayload({
+      components,
+      flags: MessageFlags.IsComponentsV2,
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) expect(result.error.message).toContain("10");
+  });
+
   it("rejects oversized content and embed arrays before Discord does", () => {
     expect(validateInteractionPayload({ content: "x".repeat(2001) }).isErr()).toBe(true);
     expect(

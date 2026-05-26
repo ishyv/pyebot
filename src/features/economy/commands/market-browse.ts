@@ -1,4 +1,4 @@
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { browseListings } from "@/features/economy/market";
 import { defineCommand } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -12,10 +12,10 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   if (!interaction.guild) {
-    await interaction.editReply({ content: "This command can only be used in a server." });
+    await ctx.respond.send({ content: "This command can only be used in a server." });
     return;
   }
 
@@ -25,7 +25,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   const result = await browseListings(ctx, guildId, { itemId, pageSize: 10 });
 
   if (result.isErr()) {
-    await interaction.editReply({ content: `Error: ${result.error.message}` });
+    await ctx.respond.send({ content: `Error: ${result.error.message}` });
     return;
   }
 
@@ -42,7 +42,7 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     body = `## Market Listings\n${lines.join("\n")}`;
   }
 
-  await interaction.editReply(v2Message(container("info", text(body))));
+  await ctx.respond.send(v2Message(container("info", text(body))));
 }
 
 export default defineCommand({

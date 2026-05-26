@@ -39,8 +39,8 @@ async function autocomplete(interaction: AutocompleteInteraction, _ctx: Ctx): Pr
   await interaction.respond(choices);
 }
 
-async function execute(interaction: ChatInputCommandInteraction, _ctx: Ctx): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  await ctx.respond.defer({ visibility: "ephemeral" });
 
   const topic = interaction.options.getString("topic");
 
@@ -50,7 +50,7 @@ async function execute(interaction: ChatInputCommandInteraction, _ctx: Ctx): Pro
       .map((entry) => `**${entry.feature.name}**\n${entry.feature.description}`)
       .join("\n\n");
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "info",
@@ -76,7 +76,7 @@ async function execute(interaction: ChatInputCommandInteraction, _ctx: Ctx): Pro
       .map(({ name, meta }) => `**/${name}** — ${meta.description}`)
       .join("\n");
 
-    await interaction.editReply(
+    await ctx.respond.send(
       v2Message(
         container(
           "info",
@@ -118,12 +118,12 @@ async function execute(interaction: ChatInputCommandInteraction, _ctx: Ctx): Pro
       children.push(separator("sm"), text(`-# ${footer}`));
     }
 
-    await interaction.editReply(v2Message(container("info", ...children)));
+    await ctx.respond.send(v2Message(container("info", ...children)));
     return;
   }
 
   // Unknown topic
-  await interaction.editReply(
+  await ctx.respond.send(
     v2Message(
       container(
         "danger",

@@ -1,0 +1,82 @@
+import type { CommandScenario } from "./command-harness";
+
+const rawNoGuild = (commandName: string, subcommand?: string): CommandScenario => ({
+  commandName,
+  subcommand,
+  guild: false,
+  expectResponse: "raw",
+});
+
+const ctxNoGuild = (commandName: string, subcommand?: string): CommandScenario => ({
+  commandName,
+  subcommand,
+  guild: false,
+  expectResponse: "ctx",
+});
+
+export const commandSmokeScenarios: Readonly<Record<string, CommandScenario>> = {
+  channels: { ...rawNoGuild("channels", "panel"), isAdmin: false },
+  dashboard: { ...rawNoGuild("dashboard"), isAdmin: false },
+  "economy-config": { ...rawNoGuild("economy-config", "panel"), isAdmin: false },
+  features: { ...rawNoGuild("features"), isAdmin: false },
+  forums: { ...rawNoGuild("forums", "panel"), isAdmin: false },
+  rep: { ...rawNoGuild("rep", "panel"), isAdmin: false },
+  roles: { ...rawNoGuild("roles", "dashboard"), isAdmin: false },
+  tops: { ...rawNoGuild("tops", "panel"), isAdmin: false },
+
+  ai: rawNoGuild("ai", "panel"),
+  context: rawNoGuild("context"),
+  automod: { ...rawNoGuild("automod", "panel"), isAdmin: false },
+  autorole: ctxNoGuild("autorole", "list"),
+
+  balance: ctxNoGuild("balance"),
+  bank: ctxNoGuild("bank", "balance"),
+  coinflip: ctxNoGuild("coinflip"),
+  daily: ctxNoGuild("daily"),
+  inventory: ctxNoGuild("inventory"),
+  "market-browse": ctxNoGuild("market-browse"),
+  "market-buy": ctxNoGuild("market-buy"),
+  "market-cancel": ctxNoGuild("market-cancel"),
+  "market-list": ctxNoGuild("market-list"),
+  "eco-profile": ctxNoGuild("eco-profile"),
+  "quest-accept": ctxNoGuild("quest-accept"),
+  "quest-claim": ctxNoGuild("quest-claim"),
+  "quest-list": ctxNoGuild("quest-list"),
+  rob: ctxNoGuild("rob"),
+  transfer: ctxNoGuild("transfer"),
+  trivia: ctxNoGuild("trivia"),
+  work: ctxNoGuild("work"),
+
+  embed: rawNoGuild("embed"),
+  ban: ctxNoGuild("ban"),
+  case: ctxNoGuild("case", "view"),
+  cases: ctxNoGuild("cases"),
+  kick: ctxNoGuild("kick"),
+  lockdown: ctxNoGuild("lockdown", "on"),
+  mod: ctxNoGuild("mod", "help"),
+  modconfig: ctxNoGuild("modconfig", "modlog"),
+  modset: ctxNoGuild("modset", "status"),
+  mute: ctxNoGuild("mute"),
+  note: ctxNoGuild("note", "list"),
+  purge: ctxNoGuild("purge"),
+  quarantine: ctxNoGuild("quarantine", "add"),
+  restrict: ctxNoGuild("restrict"),
+  unban: ctxNoGuild("unban"),
+  warn: ctxNoGuild("warn", "list"),
+  offer: rawNoGuild("offer", "panel"),
+
+  craft: ctxNoGuild("craft"),
+  equip: ctxNoGuild("equip"),
+  expedition: ctxNoGuild("expedition"),
+  fight: ctxNoGuild("fight"),
+  "gather-locations": ctxNoGuild("gather-locations"),
+  hideout: ctxNoGuild("hideout", "help"),
+  process: ctxNoGuild("process"),
+  "rpg-profile": ctxNoGuild("rpg-profile"),
+  "rpg-quest": ctxNoGuild("rpg-quest", "list"),
+  ticket: ctxNoGuild("ticket", "open"),
+  help: {
+    ...ctxNoGuild("help"),
+    options: { strings: { topic: "missing-topic" } },
+  },
+};
