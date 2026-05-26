@@ -112,6 +112,53 @@ function dashboardRows(
     );
   }
 
+  const automatable = ownedIds.filter((id) => !factory.lines[id].automated);
+  if (automatable.length > 0) {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId("tycoon:automate")
+      .setPlaceholder("👷 Hire automation…")
+      .addOptions(
+        automatable.map((id) => ({
+          label: LINES[id].name.slice(0, 100),
+          description:
+            `${LINES[id].automationCost.toLocaleString()} coins · removes offline cap`.slice(
+              0,
+              100,
+            ),
+          value: id,
+        })),
+      );
+    rows.push(
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) as ActionRowBuilder<
+        ButtonBuilder | StringSelectMenuBuilder
+      >,
+    );
+  }
+
+  if (ownedIds.length > 0) {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId("tycoon:mode")
+      .setPlaceholder("🔁 Toggle sell / stockpile…")
+      .addOptions(
+        ownedIds.map((id) => {
+          const next = factory.lines[id].mode === "sell" ? "stockpile" : "sell";
+          return {
+            label: `${LINES[id].name} → ${next}`.slice(0, 100),
+            description: (next === "sell"
+              ? "Sell finished goods for scrip"
+              : "Stockpile refined material to stash"
+            ).slice(0, 100),
+            value: `${id}:${next}`,
+          };
+        }),
+      );
+    rows.push(
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) as ActionRowBuilder<
+        ButtonBuilder | StringSelectMenuBuilder
+      >,
+    );
+  }
+
   return rows;
 }
 

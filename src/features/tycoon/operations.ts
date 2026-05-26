@@ -241,3 +241,79 @@ function toFundsError(err: unknown, cost: number): TycoonError {
 export function getScrip(ctx: Ctx, userId: string): Promise<number> {
   return getBalance(ctx, userId, "scrip");
 }
+
+/** Coins paid per scrip at the Guild Exchange, before the fee. */
+export const SCRIP_TO_COINS_RATE = 1;
+/** Fraction skimmed by the Exchange — the main scrip→coin inflation sink. */
+export const EXCHANGE_FEE = 0.2;
+
+/** Buy the automation module for a line (removes its offline cap). */
+export async function automate(
+  ctx: Ctx,
+  userId: string,
+  lineId: LineId,
+): Promise<Result<{ cost: number }, TycoonError>> {
+  const def = LINES[lineId];
+  const factory = await ctx.ensure(userId, UserFactory);
+  const line = factory.lines[lineId];
+  if (!line) return ErrResult(new TycoonError("NOT_OWNED", `You don't own ${def.name} yet.`));
+  if (line.automated) {
+    return ErrResult(new TycoonError("ALREADY_AUTOMATED", `${def.name} is already automated.`));
+  }
+
+  try {
+    await adjustBalance(ctx, userId, "coins", -def.automationCost);
+  } catch (err) {
+    return ErrResult(toFundsError(err, def.automationCost));
+  }
+
+  await ctx.patch(userId, UserFactory, (cur) => {
+    const cl = cur.lines[lineId];
+    if (!cl) return {};
+    return { lines: { ...cur.lines, [lineId]: { ...cl, automated: true } } };
+  });
+  return OkResult({ cost: def.automationCost });
+}
+
+/** Switch a line between selling for scrip and stockpiling refined material. */
+export async function setMode(
+  ctx: Ctx,
+  userId: string,
+  lineId: LineId,
+  mode: "sell" | "stockpile",
+): Promise<Result<{ mode: "sell" | "stockpile" }, TycoonError>> {
+  const def = LINES[lineId];
+  const factory = await ctx.ensure(userId, UserFactory);
+  const line = factory.lines[lineId];
+  if (!line) return ErrResult(new TycoonError("NOT_OWNED", `You don't own ${def.name} yet.`));
+
+  await ctx.patch(userId, UserFactory, (cur) => {
+    const cl = cur.lines[lineId];
+    if (!cl) return {};
+    return { lines: { ...cur.lines, [lineId]: { ...cl, mode } } };
+  });
+  return OkResult({ mode });
+}
+
+/** Convert scrip to coins at the Guild Exchange (rate × (1 − fee)). */
+export async function exchange(
+  ctx: Ctx,
+  userId: string,
+  scripAmount: number,
+): Promise<Result<{ scripSpent: number; coinsGained: number }, TycoonError>> {
+  if (scripAmount <= 0) {
+    return ErrResult(new TycoonError("INVALID_AMOUNT", "Enter a positive amount of scrip."));
+  }
+  const balance = await getBalance(ctx, userId, "scrip");
+  if (balance < scripAmount) {
+    return ErrResult(new TycoonError("NO_SCRIP", `You only have ${balance} scrip.`));
+  }
+  const coinsGained = Math.floor(scripAmount * SCRIP_TO_COINS_RATE * (1 - EXCHANGE_FEE));
+  if (coinsGained <= 0) {
+    return ErrResult(new TycoonError("INVALID_AMOUNT", "That amount converts to 0 coins."));
+  }
+
+  await adjustBalance(ctx, userId, "scrip", -scripAmount);
+  await adjustBalance(ctx, userId, "coins", coinsGained);
+  return OkResult({ scripSpent: scripAmount, coinsGained });
+}

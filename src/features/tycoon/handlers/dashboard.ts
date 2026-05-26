@@ -16,7 +16,7 @@ import type { Ctx } from "@/framework/types";
 import { coins } from "@/utils/fmt";
 import { LINES, type LineId, parseLineId, type StageKind } from "../content/lines";
 import { renderDashboard } from "../dashboard";
-import { collect, upgrade } from "../operations";
+import { automate, collect, setMode, upgrade } from "../operations";
 
 const STAGES: readonly StageKind[] = ["extractor", "refinery", "assembler"];
 
@@ -69,6 +69,32 @@ export async function handleTycoonComponent(
         });
       }
     }
+    await refresh(interaction, ctx, userId);
+    return;
+  }
+
+  if (cid === "tycoon:automate" && interaction.isStringSelectMenu()) {
+    await interaction.deferUpdate();
+    const lineId = parseLineId(interaction.values[0]);
+    if (lineId) {
+      const result = await automate(ctx, userId, lineId);
+      if (result.isErr()) {
+        await interaction.followUp({
+          content: `❌ ${result.error.message}`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    }
+    await refresh(interaction, ctx, userId);
+    return;
+  }
+
+  if (cid === "tycoon:mode" && interaction.isStringSelectMenu()) {
+    await interaction.deferUpdate();
+    const [lineRaw, modeRaw] = (interaction.values[0] ?? "").split(":");
+    const lineId = parseLineId(lineRaw);
+    const mode = modeRaw === "sell" || modeRaw === "stockpile" ? modeRaw : null;
+    if (lineId && mode) await setMode(ctx, userId, lineId, mode);
     await refresh(interaction, ctx, userId);
     return;
   }

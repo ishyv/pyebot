@@ -7,7 +7,16 @@ import { locks } from "@/core/state";
 import type { Component, Ctx } from "@/framework/types";
 import { eventSeed, rollEvent } from "./accrual";
 import { LINES } from "./content/lines";
-import { charter, collect, getScrip, upgrade } from "./operations";
+import {
+  automate,
+  charter,
+  collect,
+  EXCHANGE_FEE,
+  exchange,
+  getScrip,
+  setMode,
+  upgrade,
+} from "./operations";
 
 /** Minimal Ctx backed by an in-memory `collection → id → doc` store. */
 function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
@@ -160,5 +169,96 @@ describe("collect() — sell mode", () => {
     const res = await collect(ctx, USER, "lumber_mill");
     expect(res.isErr()).toBe(true);
     if (res.isErr()) expect(res.error.code).toBe("NOTHING_TO_COLLECT");
+  });
+});
+
+function stockpileFactory(stashSize: number) {
+  return {
+    ...wallet(0, 0),
+    rpg_profiles: { [USER]: { stashSize } },
+    user_inventories: { [USER]: { slots: {} } },
+    user_factories: {
+      [USER]: {
+        lines: {
+          lumber_mill: {
+            stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
+            mode: "stockpile",
+            automated: false,
+            lastCollectedAt: 0,
+          },
+        },
+        lifetimeScrip: 0,
+      },
+    },
+  };
+}
+
+describe("collect() — stockpile mode", () => {
+  test("deposits refined material into the stash", async () => {
+    const ctx = makeCtx(stockpileFactory(1_000_000));
+    const res = await collect(ctx, USER, "lumber_mill");
+    expect(res.isOk()).toBe(true);
+    if (res.isOk()) {
+      const s = res.unwrap();
+      expect(s.mode).toBe("stockpile");
+      expect(s.materialId).toBe(LINES.lumber_mill.refinedMaterialId);
+      expect(s.materialsGained).toBeGreaterThan(0);
+    }
+    const inv = await ctx.get(USER, (await import("@/components/user-inventory")).UserInventory);
+    const slot = inv?.slots[LINES.lumber_mill.refinedMaterialId];
+    expect(slot && "qty" in slot ? slot.qty : 0).toBeGreaterThan(0);
+  });
+
+  test("halts with STASH_FULL and keeps the anchor when the stash can't hold the output", async () => {
+    const ctx = makeCtx(stockpileFactory(10));
+    const res = await collect(ctx, USER, "lumber_mill");
+    expect(res.isErr()).toBe(true);
+    if (res.isErr()) expect(res.error.code).toBe("STASH_FULL");
+    // Anchor preserved → a later collect (with room) would still pay out.
+    const factory = await ctx.get(USER, (await import("@/components/user-factory")).UserFactory);
+    expect(factory?.lines.lumber_mill?.lastCollectedAt).toBe(0);
+  });
+});
+
+describe("automate()", () => {
+  test("debits the module cost and flips automated on", async () => {
+    const ctx = makeCtx(wallet(10_000));
+    await charter(ctx, USER, "lumber_mill");
+    const res = await automate(ctx, USER, "lumber_mill");
+    expect(res.isOk()).toBe(true);
+    if (res.isOk()) expect(res.unwrap().cost).toBe(LINES.lumber_mill.automationCost);
+    const again = await automate(ctx, USER, "lumber_mill");
+    expect(again.isErr()).toBe(true);
+    if (again.isErr()) expect(again.error.code).toBe("ALREADY_AUTOMATED");
+  });
+});
+
+describe("setMode()", () => {
+  test("switches a line's output mode", async () => {
+    const ctx = makeCtx(wallet(5000));
+    await charter(ctx, USER, "lumber_mill");
+    const res = await setMode(ctx, USER, "lumber_mill", "stockpile");
+    expect(res.isOk()).toBe(true);
+    const factory = await ctx.get(USER, (await import("@/components/user-factory")).UserFactory);
+    expect(factory?.lines.lumber_mill?.mode).toBe("stockpile");
+  });
+});
+
+describe("exchange()", () => {
+  test("converts scrip to coins minus the fee", async () => {
+    const ctx = makeCtx(wallet(0, 1000));
+    const res = await exchange(ctx, USER, 500);
+    expect(res.isOk()).toBe(true);
+    if (res.isOk()) {
+      expect(res.unwrap().coinsGained).toBe(Math.floor(500 * (1 - EXCHANGE_FEE)));
+    }
+    expect(await getScrip(ctx, USER)).toBe(500);
+  });
+
+  test("rejects converting more scrip than owned", async () => {
+    const ctx = makeCtx(wallet(0, 100));
+    const res = await exchange(ctx, USER, 500);
+    expect(res.isErr()).toBe(true);
+    if (res.isErr()) expect(res.error.code).toBe("NO_SCRIP");
   });
 });
