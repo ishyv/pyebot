@@ -9,6 +9,7 @@ import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 import { LINES, type LineId, parseLineId, type StageKind } from "../content/lines";
+import { renderDashboard } from "../dashboard";
 import { type CollectSummary, charter, collect, upgrade } from "../operations";
 
 const STAGE_CHOICES = [
@@ -20,6 +21,7 @@ const STAGE_CHOICES = [
 const data = new SlashCommandBuilder()
   .setName("tycoon")
   .setDescription("Manage your automated production lines")
+  .addSubcommand((s) => s.setName("view").setDescription("Open your production dashboard"))
   .addSubcommand((s) =>
     s
       .setName("charter")
@@ -83,9 +85,15 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 
   const sub = interaction.options.getSubcommand();
-  if (sub === "charter") await handleCharter(interaction, ctx);
+  if (sub === "view") await handleView(interaction, ctx);
+  else if (sub === "charter") await handleCharter(interaction, ctx);
   else if (sub === "collect") await handleCollect(interaction, ctx);
   else if (sub === "upgrade") await handleUpgrade(interaction, ctx);
+}
+
+async function handleView(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
+  const payload = await renderDashboard(ctx, interaction.user.id);
+  await ctx.respond.send(payload);
 }
 
 function fail(ctx: Ctx, body: string): Promise<unknown> {
