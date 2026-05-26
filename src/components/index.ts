@@ -21,6 +21,7 @@ export * from "./rpg-profile";
 export * from "./temp-role-grant";
 export * from "./ticket";
 export * from "./user-currency";
+export * from "./user-factory";
 export * from "./user-inventory";
 export * from "./user-sanctions";
 export * from "./user-tickets";

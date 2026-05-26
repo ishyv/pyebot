@@ -25,7 +25,7 @@ export const UserCurrency = component({
 export type UserCurrencyValue = z.infer<typeof UserCurrency.schema>;
 
 /** Well-known currency IDs the bot tracks. Extend as needed. */
-export const CURRENCY_IDS = ["coins", "rep"] as const;
+export const CURRENCY_IDS = ["coins", "rep", "scrip"] as const;
 export type KnownCurrencyId = (typeof CURRENCY_IDS)[number];
 
 export function isValidCurrencyId(id: string): boolean {
