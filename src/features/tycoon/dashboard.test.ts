@@ -182,6 +182,33 @@ describe("renderDashboard()", () => {
     expect(payloadText(payload)).toContain("Next ×2: Lv");
   });
 
+  test("quantifies idle loss on a capped manual line", async () => {
+    const payload = await renderDashboard(
+      makeCtx({
+        [UserFactory.collection]: {
+          [USER]: {
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
+              },
+            },
+            lifetimeScrip: 0,
+          },
+        },
+        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
+      }),
+      USER,
+    );
+    expect(payloadText(payload)).toContain("Storage full");
+  });
+
   test("warns when stockpile output will not fit in the stash", async () => {
     const payload = await renderDashboard(stockpileDashboardCtx(10), USER);
 

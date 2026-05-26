@@ -162,6 +162,10 @@ function lineBlock(state: LineConsoleState): string {
       `⚠️ Stash blocked: ${state.collectUnits.toLocaleString()} ${def.refinedMaterialId} won't fit; clear stash or upgrade it before collecting.`,
     );
   }
+  if (state.capped && !state.line.automated) {
+    // Storage is full, so anything produced past the cap is lost — quantify it.
+    notes.push(`💸 Storage full — ~${ratePerHour(state.rate)} idle. Collect or automate.`);
+  }
   if (state.eventLabel) notes.push(`🎲 Event queued: ${state.eventLabel}`);
 
   return `## 🏭 ${def.name}  [${modeTag}]  ${state.status}\n${stageLines}\n→ ${output}\nBottleneck: 🔴 ${def.stages[state.bottleneck].name} • Pending: ${state.fill}${milestoneNote}${notes.length ? `\n${notes.join("\n")}` : ""}`;
