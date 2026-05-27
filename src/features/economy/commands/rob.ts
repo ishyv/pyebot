@@ -1,11 +1,10 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { MinigameError, rob } from "@/features/economy/minigames";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("rob")
+const data = command("rob")
   .setDescription("Attempt to rob another user")
   .addUserOption((opt) => opt.setName("user").setDescription("User to rob").setRequired(true));
 
@@ -46,8 +45,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/balance"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/balance"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

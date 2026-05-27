@@ -1,18 +1,12 @@
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { getCases } from "@/features/moderation/service";
 import { renderSanctionHistory } from "@/features/moderation/views";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { hasPermission } from "@/middleware/permissions";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("cases")
+const data = command("cases")
   .setDescription("View the sanction history of a user on this server")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to look up (defaults to yourself)").setRequired(false),
@@ -73,8 +67,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   await ctx.respond.send(renderSanctionHistory(targetUser.tag, entries));
 }
 
-export default defineCommand({
-  data,
-  help: { hints: [] },
-  execute,
-});
+export default data
+  .help({ hints: [] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

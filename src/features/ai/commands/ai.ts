@@ -1,4 +1,4 @@
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 /**
  * /ai set-provider <provider> — Set the AI provider for this guild.
@@ -6,12 +6,7 @@ import type { Ctx } from "@/framework/types";
  * /ai clear-memory            — Clear your personal conversation memory.
  */
 
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 import { aiConfig } from "@/features/ai/config";
@@ -27,8 +22,7 @@ const ALL_MODELS = [
 const DEFAULT_OPENAI_MODEL = aiConfig.providers.openai.low;
 const DEFAULT_GEMINI_MODEL = aiConfig.providers.google.low;
 
-const data = new SlashCommandBuilder()
-  .setName("ai")
+const data = command("ai")
   .setDescription("AI feature configuration")
   .addSubcommand((sub) =>
     sub
@@ -184,8 +178,8 @@ async function handleClearMemory(
   });
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/context"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/context"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

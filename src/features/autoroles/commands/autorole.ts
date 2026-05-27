@@ -7,7 +7,6 @@ import {
   MessageFlags,
   PermissionFlagsBits,
   type Role,
-  SlashCommandBuilder,
 } from "discord.js";
 import {
   AutoroleRule,
@@ -15,12 +14,11 @@ import {
   autoroleRuleId,
 } from "@/components/autorole-rule";
 import { autoroleButtonId, normalizeEmoji, parseDurationMs } from "@/features/autoroles/rules";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, section, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("autorole")
+const data = command("autorole")
   .setDescription("Manage automatic role assignment rules")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
   .setDMPermission(false)
@@ -487,8 +485,8 @@ function formatDuration(ms: number): string {
   return `${ms / 60_000}m`;
 }
 
-export default defineCommand({
-  data,
-  help: { hints: [] },
-  execute,
-});
+export default data
+  .help({ hints: [] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

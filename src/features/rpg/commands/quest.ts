@@ -1,12 +1,11 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { acceptRpgQuest, claimRewards, listRpgQuests } from "@/features/rpg/quests";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-const data = new SlashCommandBuilder()
-  .setName("rpg-quest")
+const data = command("rpg-quest")
   .setDescription("RPG quest commands")
   .addSubcommand((sub) => sub.setName("list").setDescription("Browse available RPG quests"))
   .addSubcommand((sub) =>
@@ -172,8 +171,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/rpg-profile", "/expedition", "/inventory"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/rpg-profile", "/expedition", "/inventory"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

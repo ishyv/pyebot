@@ -1,7 +1,7 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { adjustBalance, getBalance } from "@/features/economy/mutations";
 import { getRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
@@ -20,8 +20,7 @@ const STASH_QUOTES = [
   "Larger holding approved. The guards who protect it are no more attentive than before.",
 ];
 
-const data = new SlashCommandBuilder()
-  .setName("hideout")
+const data = command("hideout")
   .setDescription("Your Hideout: heal, upgrade your stash, and check your standing.")
   .addSubcommand((sub) =>
     sub
@@ -270,8 +269,8 @@ function hideoutHelpV2() {
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/expedition", "/balance"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/expedition", "/balance"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

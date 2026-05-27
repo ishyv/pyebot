@@ -2,14 +2,12 @@ import {
   type ChatInputCommandInteraction,
   type InteractionReplyOptions,
   MessageFlags,
-  SlashCommandBuilder,
 } from "discord.js";
 import type { CommandContext } from "@/core/feature";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("mod")
+const data = command("mod")
   .setDescription("Moderation help and workflow guidance")
   .setDMPermission(false)
   .addSubcommand((sub) =>
@@ -85,8 +83,8 @@ async function execute(
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/modset status", "/modconfig modlog"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/modset status", "/modconfig modlog"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

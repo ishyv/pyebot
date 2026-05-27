@@ -1,17 +1,12 @@
-import {
-  type AutocompleteInteraction,
-  type ChatInputCommandInteraction,
-  SlashCommandBuilder,
-} from "discord.js";
+import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
 import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
 import { craft } from "@/features/rpg/crafting";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-const data = new SlashCommandBuilder()
-  .setName("craft")
+const data = command("craft")
   .setDescription("Craft an item using materials from your inventory")
   .addStringOption((opt) =>
     opt
@@ -90,9 +85,9 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/equip", "/inventory", "/expedition"] },
-  autocomplete,
-  execute,
-});
+export default data
+  .help({ hints: ["/equip", "/inventory", "/expedition"] })
+  .autocomplete(autocomplete)
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

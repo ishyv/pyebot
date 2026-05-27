@@ -2,7 +2,6 @@ import {
   type ChatInputCommandInteraction,
   type InteractionReplyOptions,
   MessageFlags,
-  SlashCommandBuilder,
 } from "discord.js";
 import { z } from "zod";
 import { createLogger } from "@/core/logger";
@@ -21,7 +20,7 @@ import {
   type GenerateResilientObjectResult,
   generateResilientObject,
 } from "@/features/ai/service";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import { container, text, v2Message } from "@/ui/v2";
 
 const log = createLogger("ai:context");
@@ -66,8 +65,7 @@ export const contextSummarySchema = z.object({
 
 export type ContextSummary = z.infer<typeof contextSummarySchema>;
 
-const data = new SlashCommandBuilder()
-  .setName("context")
+const data = command("context")
   .setDescription("Summarize recent channel conversation with AI")
   .addStringOption((option) =>
     option
@@ -318,8 +316,8 @@ async function safeEdit(interaction: ChatInputCommandInteraction, content: strin
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/ai panel"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/ai panel"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

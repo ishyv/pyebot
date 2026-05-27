@@ -1,13 +1,8 @@
-import {
-  type ChatInputCommandInteraction,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
-import { defineCommand } from "@/framework";
+import { type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
+import { command } from "@/framework";
 import { assertPanelPermission, openAdminPanel } from "../panels";
 
-const data = new SlashCommandBuilder()
-  .setName("economy-config")
+const data = command("economy-config")
   .setDescription("Open economy configuration")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false)
@@ -18,8 +13,8 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   await openAdminPanel(interaction, "economy");
 }
 
-export default defineCommand({
-  data,
-  help: false,
-  execute,
-});
+export default data
+  .hidden()
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

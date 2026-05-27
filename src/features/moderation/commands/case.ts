@@ -1,16 +1,10 @@
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { deleteCase, editCase, getCaseById } from "@/features/moderation/service";
 import { renderCaseView } from "@/features/moderation/views";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 
-const data = new SlashCommandBuilder()
-  .setName("case")
+const data = command("case")
   .setDescription("Manage a specific moderation case")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setDMPermission(false)
@@ -93,8 +87,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/cases"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/cases"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

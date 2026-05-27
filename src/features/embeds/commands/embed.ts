@@ -3,11 +3,10 @@ import {
   ButtonStyle,
   type ChatInputCommandInteraction,
   PermissionFlagsBits,
-  SlashCommandBuilder,
 } from "discord.js";
 import { createLogger } from "@/core/logger";
 import { getEmbedConfig, listEmbedConfigs, patchEmbedConfig } from "@/db/repositories/embeds";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import type { ContainerChild } from "@/ui/v2";
 import { container, row, section, separator, text } from "@/ui/v2";
@@ -28,8 +27,7 @@ const log = createLogger("embeds:command");
 // Slash command definition
 // ---------------------------------------------------------------------------
 
-const data = new SlashCommandBuilder()
-  .setName("embed")
+const data = command("embed")
   .setDescription("Manage custom embeds")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .setDMPermission(false)
@@ -306,4 +304,8 @@ async function handlePreview(interaction: ChatInputCommandInteraction, _ctx: Ctx
 // Export
 // ---------------------------------------------------------------------------
 
-export default defineCommand({ data, help: { hints: [] }, execute });
+export default data
+  .help({ hints: [] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

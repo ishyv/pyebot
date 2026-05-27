@@ -1,12 +1,12 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { GuildEconomy } from "@/components/guild-economy";
 import { WorkError, work, workConfigFromGuildEconomy } from "@/features/economy/work";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins, relativeTs } from "@/utils/fmt";
 
-const data = new SlashCommandBuilder().setName("work").setDescription("Work to earn coins");
+const data = command("work").setDescription("Work to earn coins");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await ctx.respond.defer();
@@ -74,8 +74,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/coinflip", "/balance"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/coinflip", "/balance"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

@@ -175,9 +175,9 @@ describe("planScaffold", () => {
     expect(plan.files[0]?.path).toBe(
       join("/repo", "src", "features", "economy", "commands", "balance.ts"),
     );
-    expect(plan.files[0]?.content).toContain("new SlashCommandBuilder()");
+    expect(plan.files[0]?.content).toContain('command("balance")');
     expect(plan.files[0]?.content).toContain("await ctx.respond.send");
-    expect(plan.files[0]?.content).toContain("requiresAdmin: true");
+    expect(plan.files[0]?.content).toContain(".adminOnly()");
   });
 
   test("config scaffold prints registry wiring instead of editing the registry", async () => {

@@ -1,12 +1,11 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { acceptQuest, QUEST_DEFINITIONS } from "@/features/economy/quests";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
-const data = new SlashCommandBuilder()
-  .setName("quest-accept")
+const data = command("quest-accept")
   .setDescription("Accept a quest")
   .addStringOption((opt) =>
     opt
@@ -76,8 +75,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   await ctx.respond.send(v2Message(container("info", text(body))));
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/quest-claim", "/work", "/balance"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/quest-claim", "/work", "/balance"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

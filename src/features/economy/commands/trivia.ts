@@ -1,16 +1,10 @@
-import {
-  ButtonBuilder,
-  ButtonStyle,
-  type ChatInputCommandInteraction,
-  SlashCommandBuilder,
-} from "discord.js";
+import { ButtonBuilder, ButtonStyle, type ChatInputCommandInteraction } from "discord.js";
 import { MinigameError, startTrivia } from "@/features/economy/minigames";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, row, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("trivia")
+const data = command("trivia")
   .setDescription("Answer a trivia question to win coins")
   .addIntegerOption((opt) =>
     opt.setName("wager").setDescription("Amount to wager").setRequired(true).setMinValue(1),
@@ -59,8 +53,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/balance", "/work"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/balance", "/work"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

@@ -93,6 +93,13 @@ export type CommandHelp =
       readonly requires?: string;
     };
 
+/** Command lifecycle metadata emitted by the framework command DSL. */
+export interface CommandContract {
+  readonly dsl: true;
+  readonly guildOnly: boolean;
+  readonly defer: "ephemeral" | "public" | false;
+}
+
 /**
  * What every file in a feature's `commands/` folder must export by default.
  *
@@ -110,6 +117,8 @@ export interface CommandModule {
   readonly help: CommandHelp;
   /** When true, bootstrap rejects non-ManageGuild callers before execute runs. */
   readonly requiresAdmin?: boolean;
+  /** Lifecycle metadata owned by the command DSL, used by graph/check tooling. */
+  readonly contract?: CommandContract;
   execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void>;
   autocomplete?(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void>;
 }

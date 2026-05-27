@@ -42,7 +42,12 @@ const config = defineFeatureConfig({
   },
 });
 
-function command(name: string, help: CommandModule["help"], requiresAdmin = false): CommandModule {
+function command(
+  name: string,
+  help: CommandModule["help"],
+  requiresAdmin = false,
+  contract: CommandModule["contract"] | undefined = undefined,
+): CommandModule {
   return {
     data: {
       name,
@@ -50,6 +55,7 @@ function command(name: string, help: CommandModule["help"], requiresAdmin = fals
     },
     help,
     requiresAdmin,
+    contract,
     execute: async () => {},
   };
 }
@@ -75,7 +81,11 @@ describe("capability graph", () => {
     const graph = buildCapabilityGraph({
       features: [
         feature("counting", [
-          command("count", { hints: ["/help"], requires: "Counting channel" }),
+          command("count", { hints: ["/help"], requires: "Counting channel" }, false, {
+            dsl: true,
+            guildOnly: true,
+            defer: "ephemeral",
+          }),
           command("hidden-count", false, true),
         ]),
         feature("utility", [command("help", { hints: [] })], new CapabilityHandlers()),
@@ -91,6 +101,7 @@ describe("capability graph", () => {
       hints: ["/help"],
       requires: "Counting channel",
       hidden: false,
+      badges: ["command", "guild_only", "deferred"],
     });
     expect(graph.commands.find((entry) => entry.name === "hidden-count")?.badges).toEqual([
       "command",

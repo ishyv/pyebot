@@ -1,6 +1,6 @@
-import { type ChatInputCommandInteraction, MessageFlags, SlashCommandBuilder } from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { coinflip, DEFAULT_COINFLIP_CONFIG, MinigameError } from "@/features/economy/minigames";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import type { AccentKey } from "@/ui/theme";
 import { container, text, v2Message } from "@/ui/v2";
@@ -11,8 +11,7 @@ export interface CoinflipErrorCopy {
   readonly accent: AccentKey;
 }
 
-const data = new SlashCommandBuilder()
-  .setName("coinflip")
+const data = command("coinflip")
   .setDescription("Bet coins on a coinflip")
   .addIntegerOption((opt) =>
     opt
@@ -106,8 +105,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/balance", "/work"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/balance", "/work"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

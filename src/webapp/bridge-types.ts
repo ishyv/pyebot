@@ -80,6 +80,8 @@ export type GuideBadge =
   | "command"
   | "hidden"
   | "admin"
+  | "guild_only"
+  | "deferred"
   | "event"
   | "component"
   | "dashboard"

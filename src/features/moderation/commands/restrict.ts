@@ -1,18 +1,13 @@
-import {
-  type ChatInputCommandInteraction,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
 import { getGuild } from "@/db/repositories/guilds";
 import { restrict } from "@/features/moderation/service";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { sendModLog } from "../modlog";
 import { dmUser } from "../notifications";
 import { renderModlogCase } from "../views";
 
-const data = new SlashCommandBuilder()
-  .setName("restrict")
+const data = command("restrict")
   .setDescription("Restrict a member from specific server areas")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setDMPermission(false)
@@ -121,8 +116,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/cases"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/cases"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

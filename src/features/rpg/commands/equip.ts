@@ -1,21 +1,18 @@
 import {
   ActionRowBuilder,
   type ChatInputCommandInteraction,
-  SlashCommandBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import { EQUIPABLE_TOOLS } from "@/features/rpg/handlers/equip";
 import { getStackQuantity } from "@/features/rpg/inventory";
 import { getRpgProfile } from "@/features/rpg/profile";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-const data = new SlashCommandBuilder()
-  .setName("equip")
-  .setDescription("Equip a tool from your inventory");
+const data = command("equip").setDescription("Equip a tool from your inventory");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
@@ -84,8 +81,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   });
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/expedition", "/rpg-profile"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/expedition", "/rpg-profile"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

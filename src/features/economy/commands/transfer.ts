@@ -1,12 +1,11 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { getBalance, MutationError, transfer } from "@/features/economy/mutations";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
-const data = new SlashCommandBuilder()
-  .setName("transfer")
+const data = command("transfer")
   .setDescription("Transfer coins to another user")
   .addUserOption((opt) => opt.setName("user").setDescription("Recipient").setRequired(true))
   .addIntegerOption((opt) =>
@@ -59,8 +58,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/balance"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/balance"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

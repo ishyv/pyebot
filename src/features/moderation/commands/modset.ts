@@ -1,4 +1,4 @@
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 /**
  * /modset — configure the moderation feature.
@@ -18,19 +18,13 @@ import type { Ctx } from "@/framework/types";
  *   status             show all current config
  */
 
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 import { DURATION_MAP } from "@/features/moderation/service";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("modset")
+const data = command("modset")
   .setDescription("Configure moderation settings")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false)
@@ -542,8 +536,8 @@ async function handleStatus(
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/modconfig modlog", "/mod help"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/modconfig modlog", "/mod help"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

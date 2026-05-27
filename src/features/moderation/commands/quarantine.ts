@@ -1,17 +1,11 @@
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { quarantine, release } from "@/features/moderation/service";
 import { renderModlogCase } from "@/features/moderation/views";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("quarantine")
+const data = command("quarantine")
   .setDescription("Quarantine or release a member")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setDMPermission(false)
@@ -88,8 +82,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/cases"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/cases"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

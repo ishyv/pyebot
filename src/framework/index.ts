@@ -7,7 +7,18 @@
  */
 
 export { bootstrapFramework } from "./bootstrap";
-export { defineCommand } from "./command";
+export type {
+  BaseOptionSettings,
+  ChannelOptionSettings,
+  CommandDsl,
+  CommandGroupDsl,
+  CommandOptionDsl,
+  IntegerOptionSettings,
+  RunContext,
+  RunContextFor,
+  StringOptionSettings,
+} from "./command";
+export { command } from "./command";
 export { component } from "./component";
 export { Handle, Listen, On } from "./decorators";
 export { defineFeature } from "./feature";

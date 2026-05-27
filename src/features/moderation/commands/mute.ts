@@ -1,21 +1,15 @@
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { sendModLog } from "@/features/moderation/modlog";
 import { dmUser } from "@/features/moderation/notifications";
 import { mute } from "@/features/moderation/service";
 import { renderModlogCase } from "@/features/moderation/views";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { parseDuration } from "@/utils/duration";
 import { msToHuman } from "@/utils/time";
 
-const data = new SlashCommandBuilder()
-  .setName("mute")
+const data = command("mute")
   .setDescription("Timeout (mute) a member")
   .addUserOption((opt) => opt.setName("user").setDescription("Member to mute").setRequired(true))
   .addStringOption((opt) =>
@@ -90,8 +84,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/cases"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/cases"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

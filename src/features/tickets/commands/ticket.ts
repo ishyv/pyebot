@@ -1,15 +1,10 @@
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 /**
  * /ticket open [type] — Opens a ticket channel in the configured category.
  * /ticket close      — Closes the current ticket channel.
  */
 
-import {
-  ChannelType,
-  type ChatInputCommandInteraction,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { ChannelType, type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 import { TICKET_CLOSE_BUTTON_PREFIX } from "@/features/tickets/customIds";
@@ -24,8 +19,7 @@ import { renderTicketWelcome } from "@/features/tickets/views";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("ticket")
+const data = command("ticket")
   .setDescription("Ticket system")
   .addSubcommand((sub) =>
     sub
@@ -242,8 +236,8 @@ async function handleSetup(interaction: ChatInputCommandInteraction, ctx: Ctx): 
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: [] },
-  execute,
-});
+export default data
+  .help({ hints: [] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

@@ -1,18 +1,12 @@
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { kick } from "@/features/moderation/service";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { sendModLog } from "../modlog";
 import { dmUser } from "../notifications";
 import { renderModlogCase } from "../views";
 
-const data = new SlashCommandBuilder()
-  .setName("kick")
+const data = command("kick")
   .setDescription("Kick a member from the server")
   .addUserOption((opt) => opt.setName("user").setDescription("Member to kick").setRequired(true))
   .addStringOption((opt) =>
@@ -60,8 +54,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   await ctx.respond.send(renderModlogCase({ result: sanctionResult }));
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/cases"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/cases"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

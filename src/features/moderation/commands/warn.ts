@@ -1,19 +1,13 @@
-import {
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { clearWarns, getCases, removeWarn, warn } from "@/features/moderation/service";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { hasPermission } from "@/middleware/permissions";
 import { sendModLog } from "../modlog";
 import { dmUser } from "../notifications";
 import { renderModlogCase, renderSanctionHistory } from "../views";
 
-const data = new SlashCommandBuilder()
-  .setName("warn")
+const data = command("warn")
   .setDescription("Manage member warnings")
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .setDMPermission(false)
@@ -182,8 +176,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/cases"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/cases"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

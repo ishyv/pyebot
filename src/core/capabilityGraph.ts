@@ -211,6 +211,8 @@ function collectCommands(
     const badges: GuideBadge[] = ["command"];
     if (hidden) badges.push("hidden");
     if (requiresAdmin) badges.push("admin");
+    if (command.contract?.guildOnly) badges.push("guild_only");
+    if (command.contract?.defer) badges.push("deferred");
     return {
       id: commandId(feature.descriptor.id, command.data.name),
       featureId: feature.descriptor.id,

@@ -3,15 +3,13 @@ import {
   type Message,
   MessageFlags,
   PermissionFlagsBits,
-  SlashCommandBuilder,
   type TextChannel,
 } from "discord.js";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("purge")
+const data = command("purge")
   .setDescription("Bulk delete messages in the current channel")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .setDMPermission(false)
@@ -112,8 +110,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/mod help"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/mod help"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

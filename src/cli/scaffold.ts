@@ -58,17 +58,15 @@ function planFeature(command: NewFeatureCommand, cwd: string): FilePlan {
 function planCommand(command: NewCommandCommand, cwd: string): FilePlan {
   validateId("command", command.name);
   const hiddenHelp = command.hidden ? "false" : "{ hints: [] }";
-  const requiresAdmin = command.requiresAdmin ? "\n  requiresAdmin: true," : "";
   return {
     files: [
       {
         path: join(featureDir(cwd, command.feature), "commands", `${command.name}.ts`),
         content: [
-          'import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";',
-          'import { defineCommand, type Ctx } from "@/framework";',
+          'import { type ChatInputCommandInteraction } from "discord.js";',
+          'import { command, type Ctx } from "@/framework";',
           "",
-          "const data = new SlashCommandBuilder()",
-          `  .setName(${quote(command.name)})`,
+          `const data = command(${quote(command.name)})`,
           `  .setDescription(${quote(command.description)});`,
           "",
           "async function execute(",
@@ -78,11 +76,10 @@ function planCommand(command: NewCommandCommand, cwd: string): FilePlan {
           `  await ctx.respond.send({ content: ${quote(command.description)} });`,
           "}",
           "",
-          "export default defineCommand({",
-          "  data,",
-          `  help: ${hiddenHelp},${requiresAdmin}`,
-          "  execute,",
-          "});",
+          "export default data",
+          command.hidden ? "  .hidden()" : `  .help(${hiddenHelp})`,
+          ...(command.requiresAdmin ? ["  .adminOnly()"] : []),
+          "  .run(({ interaction, ctx }) => execute(interaction, ctx));",
           "",
         ].join("\n"),
       },

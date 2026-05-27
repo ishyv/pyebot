@@ -1,10 +1,6 @@
-import {
-  type AutocompleteInteraction,
-  type ChatInputCommandInteraction,
-  SlashCommandBuilder,
-} from "discord.js";
+import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
 import { UserFactory } from "@/components/user-factory";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
@@ -30,8 +26,7 @@ const STAGE_CHOICES = [
   { name: "Assembler", value: "assembler" },
 ];
 
-const data = new SlashCommandBuilder()
-  .setName("tycoon")
+const data = command("tycoon")
   .setDescription("Manage your automated production lines")
   .addSubcommand((s) => s.setName("play").setDescription("Open the Guild Automated Works console"))
   .addSubcommand((s) =>
@@ -401,9 +396,9 @@ async function handleCollect(interaction: ChatInputCommandInteraction, ctx: Ctx)
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/tycoon play", "/tycoon collect", "/tycoon upgrade"] },
-  autocomplete,
-  execute,
-});
+export default data
+  .help({ hints: ["/tycoon play", "/tycoon collect", "/tycoon upgrade"] })
+  .autocomplete(autocomplete)
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

@@ -1,11 +1,11 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { claimDaily, DailyError } from "@/features/economy/daily";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins, relativeTs } from "@/utils/fmt";
 
-const data = new SlashCommandBuilder().setName("daily").setDescription("Claim your daily reward");
+const data = command("daily").setDescription("Claim your daily reward");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await ctx.respond.defer();
@@ -55,8 +55,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/balance", "/work"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/balance", "/work"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

@@ -1,12 +1,10 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { browseQuests } from "@/features/economy/quests";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("quest-list")
-  .setDescription("Browse available quests");
+const data = command("quest-list").setDescription("Browse available quests");
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
@@ -29,8 +27,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   await ctx.respond.send(v2Message(container("info", text(body))));
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/quest-accept", "/balance"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/quest-accept", "/balance"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

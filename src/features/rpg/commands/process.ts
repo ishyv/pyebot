@@ -1,12 +1,11 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { process } from "@/features/rpg/processing";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-const data = new SlashCommandBuilder()
-  .setName("process")
+const data = command("process")
   .setDescription("Process raw materials into refined materials")
   .addStringOption((opt) =>
     opt.setName("material").setDescription("The raw material ID to process").setRequired(true),
@@ -74,8 +73,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/craft", "/inventory", "/market-list"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/craft", "/inventory", "/market-list"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

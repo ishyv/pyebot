@@ -1,4 +1,4 @@
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 /**
  * /offer create <title> <description> [requirements] [salary] [contact]
@@ -6,13 +6,12 @@ import type { Ctx } from "@/framework/types";
  * /offer edit <field> <value>
  */
 
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 import { createOffer, type OfferError, withdrawOffer } from "@/features/offers/service";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("offer")
+const data = command("offer")
   .setDescription("Manage job/service offers")
   .addSubcommand((sub) =>
     sub
@@ -137,8 +136,8 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: [] },
-  execute,
-});
+export default data
+  .help({ hints: [] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

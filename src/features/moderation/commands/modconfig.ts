@@ -1,4 +1,4 @@
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 /**
  * /modconfig — Admin configuration for moderation settings.
@@ -9,19 +9,13 @@ import type { Ctx } from "@/framework/types";
  *   escalation     — Enable/disable auto-escalation + warn threshold + mute duration
  */
 
-import {
-  ChannelType,
-  type ChatInputCommandInteraction,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { ChannelType, type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { parseDuration } from "@/utils/duration";
 import { msToHuman } from "@/utils/time";
 
-const data = new SlashCommandBuilder()
-  .setName("modconfig")
+const data = command("modconfig")
   .setDescription("Configure moderation settings")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false)
@@ -230,8 +224,8 @@ async function handleEscalation(interaction: ChatInputCommandInteraction, ctx: C
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/modset status", "/mod help"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/modset status", "/mod help"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

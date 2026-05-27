@@ -1,8 +1,8 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
+import { command } from "@/framework";
 
 /** Slash-command definition for `/automod`; execution lives in subcommand handlers. */
-export const data = new SlashCommandBuilder()
-  .setName("automod")
+export const data = command("automod")
   .setDescription("Configure automatic moderation")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addSubcommand((sub) =>

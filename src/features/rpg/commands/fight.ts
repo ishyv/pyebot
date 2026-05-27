@@ -1,17 +1,11 @@
-import {
-  ButtonBuilder,
-  ButtonStyle,
-  type ChatInputCommandInteraction,
-  SlashCommandBuilder,
-} from "discord.js";
+import { ButtonBuilder, ButtonStyle, type ChatInputCommandInteraction } from "discord.js";
 import { initiateFight } from "@/features/rpg/combat/fight";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, section, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-const data = new SlashCommandBuilder()
-  .setName("fight")
+const data = command("fight")
   .setDescription("Challenge another user to a fight")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("The user to challenge").setRequired(true),
@@ -61,8 +55,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/rpg-profile", "/rpg-quest list", "/inventory"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/rpg-profile", "/rpg-quest list", "/inventory"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

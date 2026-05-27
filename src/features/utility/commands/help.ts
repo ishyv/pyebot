@@ -1,9 +1,5 @@
-import {
-  type AutocompleteInteraction,
-  type ChatInputCommandInteraction,
-  SlashCommandBuilder,
-} from "discord.js";
-import { defineCommand } from "@/framework";
+import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { type ContainerChild, container, separator, text, v2Message } from "@/ui/v2";
 import {
@@ -13,8 +9,7 @@ import {
   getHints,
 } from "@/utils/command-registry";
 
-const data = new SlashCommandBuilder()
-  .setName("help")
+const data = command("help")
   .setDescription("Browse commands by category or get help for a specific command")
   .addStringOption((opt) =>
     opt
@@ -133,9 +128,9 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: [] },
-  autocomplete,
-  execute,
-});
+export default data
+  .help({ hints: [] })
+  .autocomplete(autocomplete)
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

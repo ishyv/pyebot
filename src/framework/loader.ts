@@ -101,7 +101,7 @@ async function loadCommands(featureDir: string): Promise<CommandModule[]> {
     const mod = await importDefault<unknown>(abs);
     if (!isCommandModule(mod)) {
       throw new Error(
-        `Command file ${abs} must default-export defineCommand({ data, help, execute }). ` +
+        `Command file ${abs} must default-export command(...).help(...).run(...). ` +
           `Use help: false only for commands intentionally hidden from /help.`,
       );
     }

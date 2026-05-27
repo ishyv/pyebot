@@ -1,11 +1,10 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { buyListing } from "@/features/economy/market";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("market-buy")
+const data = command("market-buy")
   .setDescription("Purchase a market listing")
   .addStringOption((opt) =>
     opt.setName("listing_id").setDescription("Listing ID to purchase").setRequired(true),
@@ -49,8 +48,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/market-browse", "/balance"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/market-browse", "/balance"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

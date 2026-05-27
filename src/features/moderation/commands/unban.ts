@@ -1,17 +1,12 @@
-import {
-  type ChatInputCommandInteraction,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from "discord.js";
+import { type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
 import { unban } from "@/features/moderation/service";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { sendModLog } from "../modlog";
 import { renderModlogCase } from "../views";
 
-const data = new SlashCommandBuilder()
-  .setName("unban")
+const data = command("unban")
   .setDescription("Unban a user from this server")
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .setDMPermission(false)
@@ -73,8 +68,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   await ctx.respond.send(renderModlogCase({ result: sanctionResult }));
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/cases"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/cases"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

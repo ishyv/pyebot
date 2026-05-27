@@ -3,16 +3,15 @@ import {
   ButtonBuilder,
   ButtonStyle,
   type ChatInputCommandInteraction,
-  SlashCommandBuilder,
 } from "discord.js";
 import { getRpgProfile } from "@/features/rpg/profile";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("expedition")
-  .setDescription("Enter an expedition — explore a biome, gather resources, and venture deeper");
+const data = command("expedition").setDescription(
+  "Enter an expedition — explore a biome, gather resources, and venture deeper",
+);
 
 async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
@@ -61,8 +60,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   });
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/inventory", "/process", "/craft"], requires: "pickaxe or axe in weapon slot" },
-  execute,
-});
+export default data
+  .help({ hints: ["/inventory", "/process", "/craft"], requires: "pickaxe or axe in weapon slot" })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

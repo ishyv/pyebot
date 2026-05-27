@@ -1,15 +1,14 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { RpgProfile } from "@/components/rpg-profile";
 import type { GatherAction } from "@/features/rpg/content/actions";
 import { LOCATIONS } from "@/features/rpg/content/locations";
 import { getEquippedToolTier } from "@/features/rpg/gathering";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-const data = new SlashCommandBuilder()
-  .setName("gather-locations")
+const data = command("gather-locations")
   .setDescription("Browse available gathering spots filtered by your profession and tool tier")
   .addStringOption((opt) =>
     opt
@@ -72,8 +71,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/expedition", "/equip", "/rpg-profile"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/expedition", "/equip", "/rpg-profile"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

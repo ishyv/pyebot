@@ -3,16 +3,14 @@ import {
   ButtonBuilder,
   ButtonStyle,
   type ChatInputCommandInteraction,
-  SlashCommandBuilder,
 } from "discord.js";
 import { RpgProfile } from "@/components/rpg-profile";
 import { ONBOARD_PREFIX } from "@/features/rpg/handlers/onboard";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, section, text, thumb, v2Message } from "@/ui/v2";
 
-const data = new SlashCommandBuilder()
-  .setName("rpg-profile")
+const data = command("rpg-profile")
   .setDescription("View an RPG profile")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("User to view (defaults to you)").setRequired(false),
@@ -83,8 +81,8 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
   );
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/expedition", "/fight", "/rpg-quest list"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/expedition", "/fight", "/rpg-quest list"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );

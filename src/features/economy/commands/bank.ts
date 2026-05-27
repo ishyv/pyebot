@@ -1,4 +1,4 @@
-import { type ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import { UserCurrency } from "@/components/user-currency";
 import { ensureAccount } from "@/features/economy/account";
 import {
@@ -8,13 +8,12 @@ import {
   MutationError,
   withdraw,
 } from "@/features/economy/mutations";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
-const data = new SlashCommandBuilder()
-  .setName("bank")
+const data = command("bank")
   .setDescription("Manage your bank account")
   .addSubcommand((sub) => sub.setName("balance").setDescription("View your hand and bank balance"))
   .addSubcommand((sub) =>
@@ -147,8 +146,8 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx
   }
 }
 
-export default defineCommand({
-  data,
-  help: { hints: ["/balance", "/work"] },
-  execute,
-});
+export default data
+  .help({ hints: ["/balance", "/work"] })
+  .run(({ interaction, ctx }) =>
+    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  );
