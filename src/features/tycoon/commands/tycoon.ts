@@ -27,85 +27,39 @@ const STAGE_CHOICES = [
 ];
 
 const data = command("tycoon")
-  .setDescription("Manage your automated production lines")
-  .addSubcommand((s) => s.setName("play").setDescription("Open the Guild Automated Works console"))
-  .addSubcommand((s) =>
-    s
-      .setName("charter")
-      .setDescription("Charter (buy) a new production line")
-      .addStringOption((o) =>
-        o
-          .setName("line")
-          .setDescription("Which line to charter")
-          .setRequired(true)
-          .setAutocomplete(true),
-      ),
+  .description("Manage your automated production lines")
+  .guildOnly()
+  .defer("ephemeral")
+  .subcommand("play", "Open the Guild Automated Works console")
+  .subcommand("charter", "Charter (buy) a new production line", (s) =>
+    s.string("line", "Which line to charter", { required: true, autocomplete: true }),
   )
-  .addSubcommand((s) =>
-    s
-      .setName("collect")
-      .setDescription("Collect pending output from your lines")
-      .addStringOption((o) =>
-        o
-          .setName("line")
-          .setDescription("A specific line (default: all lines)")
-          .setAutocomplete(true),
-      ),
+  .subcommand("collect", "Collect pending output from your lines", (s) =>
+    s.string("line", "A specific line (default: all lines)", { autocomplete: true }),
   )
-  .addSubcommand((s) =>
+  .subcommand("upgrade", "Upgrade one stage of a line by a level", (s) =>
     s
-      .setName("upgrade")
-      .setDescription("Upgrade one stage of a line by a level")
-      .addStringOption((o) =>
-        o.setName("line").setDescription("Which line").setRequired(true).setAutocomplete(true),
-      )
-      .addStringOption((o) =>
-        o
-          .setName("stage")
-          .setDescription("Which stage to upgrade")
-          .setRequired(true)
-          .addChoices(...STAGE_CHOICES),
-      ),
+      .string("line", "Which line", { required: true, autocomplete: true })
+      .string("stage", "Which stage to upgrade", { required: true, choices: STAGE_CHOICES }),
   )
-  .addSubcommand((s) =>
+  .subcommand("automate", "Hire an automation module so a line never hits its offline cap", (s) =>
+    s.string("line", "Which line", { required: true, autocomplete: true }),
+  )
+  .subcommand("mode", "Set a line to sell for scrip or stockpile refined materials", (s) =>
     s
-      .setName("automate")
-      .setDescription("Hire an automation module so a line never hits its offline cap")
-      .addStringOption((o) =>
-        o.setName("line").setDescription("Which line").setRequired(true).setAutocomplete(true),
-      ),
+      .string("line", "Which line", { required: true, autocomplete: true })
+      .string("mode", "Output mode", {
+        required: true,
+        choices: [
+          { name: "Sell for scrip", value: "sell" },
+          { name: "Stockpile materials", value: "stockpile" },
+        ],
+      }),
   )
-  .addSubcommand((s) =>
-    s
-      .setName("mode")
-      .setDescription("Set a line to sell for scrip or stockpile refined materials")
-      .addStringOption((o) =>
-        o.setName("line").setDescription("Which line").setRequired(true).setAutocomplete(true),
-      )
-      .addStringOption((o) =>
-        o
-          .setName("mode")
-          .setDescription("Output mode")
-          .setRequired(true)
-          .addChoices(
-            { name: "Sell for scrip", value: "sell" },
-            { name: "Stockpile materials", value: "stockpile" },
-          ),
-      ),
+  .subcommand("exchange", "Convert scrip to coins at the Guild Exchange", (s) =>
+    s.integer("amount", "How much scrip to convert", { required: true, min: 1 }),
   )
-  .addSubcommand((s) =>
-    s
-      .setName("exchange")
-      .setDescription("Convert scrip to coins at the Guild Exchange")
-      .addIntegerOption((o) =>
-        o
-          .setName("amount")
-          .setDescription("How much scrip to convert")
-          .setRequired(true)
-          .setMinValue(1),
-      ),
-  )
-  .addSubcommand((s) => s.setName("leaderboard").setDescription("See the richest Guild magnates"));
+  .subcommand("leaderboard", "See the richest Guild magnates");
 
 /**
  * Autocomplete label for a line, annotated with the price relevant to the
@@ -139,24 +93,6 @@ async function autocomplete(interaction: AutocompleteInteraction, ctx: Ctx): Pro
     .slice(0, 25)
     .map((id) => ({ name: lineChoiceLabel(id, sub), value: id }));
   await interaction.respond(choices);
-}
-
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  const sub = interaction.options.getSubcommand();
-  if (sub === "play") await handlePlay(interaction, ctx);
-  else if (sub === "charter") await handleCharter(interaction, ctx);
-  else if (sub === "collect") await handleCollect(interaction, ctx);
-  else if (sub === "upgrade") await handleUpgrade(interaction, ctx);
-  else if (sub === "automate") await handleAutomate(interaction, ctx);
-  else if (sub === "mode") await handleMode(interaction, ctx);
-  else if (sub === "exchange") await handleExchange(interaction, ctx);
-  else if (sub === "leaderboard") await handleLeaderboard(interaction, ctx);
 }
 
 async function handleLeaderboard(
@@ -399,6 +335,14 @@ async function handleCollect(interaction: ChatInputCommandInteraction, ctx: Ctx)
 export default data
   .help({ hints: ["/tycoon play", "/tycoon collect", "/tycoon upgrade"] })
   .autocomplete(autocomplete)
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(async (c) => {
+    const { interaction, ctx } = c;
+    if (c.subcommand === "play") await handlePlay(interaction, ctx);
+    else if (c.subcommand === "charter") await handleCharter(interaction, ctx);
+    else if (c.subcommand === "collect") await handleCollect(interaction, ctx);
+    else if (c.subcommand === "upgrade") await handleUpgrade(interaction, ctx);
+    else if (c.subcommand === "automate") await handleAutomate(interaction, ctx);
+    else if (c.subcommand === "mode") await handleMode(interaction, ctx);
+    else if (c.subcommand === "exchange") await handleExchange(interaction, ctx);
+    else if (c.subcommand === "leaderboard") await handleLeaderboard(interaction, ctx);
+  });
