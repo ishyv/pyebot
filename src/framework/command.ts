@@ -9,6 +9,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import type { Result } from "@/core/result";
+import { container, text, v2Message } from "@/ui/v2";
 import type { CommandContract, CommandHelp, CommandModule, Ctx } from "./types";
 
 type DeferVisibility = "ephemeral" | "public";
@@ -78,6 +79,14 @@ interface CommandContextBase {
   readonly subcommand: string | null;
   readonly subcommandGroup: string | null;
   expect<T, E>(result: Result<T, E>): T;
+  /** Build a success (green) v2 container response. */
+  ok(markdown: string): CommandResponse;
+  /** Build a danger (red) v2 container response. */
+  fail(markdown: string): CommandResponse;
+  /** Build an info (blue) v2 container response. */
+  info(markdown: string): CommandResponse;
+  /** Build a muted (grey) v2 container response. */
+  warn(markdown: string): CommandResponse;
 }
 
 // biome-ignore lint/suspicious/noConfusingVoidType: Command handlers may respond directly and intentionally return nothing.
@@ -158,6 +167,14 @@ interface CommandContextCore {
   readonly user: ChatInputCommandInteraction["user"];
   readonly userId: string;
   expect<T, E>(result: Result<T, E>): T;
+  /** Build a success (green) v2 container response. */
+  ok(markdown: string): CommandResponse;
+  /** Build a danger (red) v2 container response. */
+  fail(markdown: string): CommandResponse;
+  /** Build an info (blue) v2 container response. */
+  info(markdown: string): CommandResponse;
+  /** Build a muted (grey) v2 container response. */
+  warn(markdown: string): CommandResponse;
 }
 type GuildContextFields<S extends DslState> = S["guild"] extends true
   ? {
@@ -732,6 +749,10 @@ class CommandBuilder {
         if (result.isErr()) throw result.error;
         return result.unwrap();
       },
+      ok: (markdown: string) => v2Message(container("ok", text(markdown))),
+      fail: (markdown: string) => v2Message(container("danger", text(markdown))),
+      info: (markdown: string) => v2Message(container("info", text(markdown))),
+      warn: (markdown: string) => v2Message(container("mute", text(markdown))),
     };
   }
 
