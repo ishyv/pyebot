@@ -1,65 +1,39 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { getBalance, MutationError, transfer } from "@/features/economy/mutations";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
-const data = command("transfer")
-  .setDescription("Transfer coins to another user")
-  .addUserOption((opt) => opt.setName("user").setDescription("Recipient").setRequired(true))
-  .addIntegerOption((opt) =>
-    opt.setName("amount").setDescription("Amount to transfer").setRequired(true).setMinValue(1),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("currency")
-      .setDescription("Currency to transfer (default: coins)")
-      .setRequired(false),
-  );
+export default command("transfer")
+  .description("Transfer coins to another user")
+  .user("user", "Recipient", { required: true })
+  .integer("amount", "Amount to transfer", { required: true, min: 1 })
+  .string("currency", "Currency to transfer (default: coins)")
+  .guildOnly()
+  .defer("public")
+  .help({ hints: ["/balance"] })
+  .run(async ({ ctx, userId, options }) => {
+    const recipient = options.user;
+    const amount = options.amount;
+    const currencyId = options.currency ?? "coins";
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer();
-
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  const recipient = interaction.options.getUser("user", true);
-  const amount = interaction.options.getInteger("amount", true);
-  const currencyId = interaction.options.getString("currency") ?? "coins";
-  const senderId = interaction.user.id;
-
-  const beforeBalance = await getBalance(ctx, senderId, currencyId);
-
-  try {
+    const beforeBalance = await getBalance(ctx, userId, currencyId);
     const { senderBalance, recipientBalance } = await transfer(
       ctx,
-      senderId,
+      userId,
       recipient.id,
       currencyId,
       amount,
     );
 
-    await ctx.respond.send(
-      v2Message(
-        container(
-          "ok",
-          text(
-            `## 💸 Transfer Sent\n💰 **Your Balance:** ${coins(beforeBalance, currencyId)} → ${coins(senderBalance, currencyId)}\n📤 **Sent:** ${coins(amount, currencyId)}\n📥 **Recipient:** <@${recipient.id}> now has ${coins(recipientBalance, currencyId)}\n\n-# 💡 /balance • /bank`,
-          ),
+    return v2Message(
+      container(
+        "ok",
+        text(
+          `## 💸 Transfer Sent\n💰 **Your Balance:** ${coins(beforeBalance, currencyId)} → ${coins(senderBalance, currencyId)}\n📤 **Sent:** ${coins(amount, currencyId)}\n📥 **Recipient:** <@${recipient.id}> now has ${coins(recipientBalance, currencyId)}\n\n-# 💡 /balance • /bank`,
         ),
       ),
     );
-  } catch (err) {
-    const msg = err instanceof MutationError ? err.message : "An error occurred.";
-    await ctx.respond.send(v2Message(container("danger", text(`## ❌ Transfer Failed\n${msg}`))));
-  }
-}
-
-export default data
-  .help({ hints: ["/balance"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
+  })
+  .catch(MutationError, (err) =>
+    v2Message(container("danger", text(`## ❌ Transfer Failed\n${err.message}`))),
   );

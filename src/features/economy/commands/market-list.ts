@@ -1,54 +1,35 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { createListing } from "@/features/economy/market";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = command("market-list")
-  .setDescription("List an item for sale on the market")
-  .addStringOption((opt) =>
-    opt.setName("item_id").setDescription("Item ID to list").setRequired(true),
-  )
-  .addIntegerOption((opt) =>
-    opt.setName("quantity").setDescription("Quantity to sell").setRequired(true).setMinValue(1),
-  )
-  .addIntegerOption((opt) =>
-    opt.setName("price").setDescription("Price per unit in coins").setRequired(true).setMinValue(1),
-  );
+export default command("market-list")
+  .description("List an item for sale on the market")
+  .string("item_id", "Item ID to list", { required: true })
+  .integer("quantity", "Quantity to sell", { required: true, min: 1 })
+  .integer("price", "Price per unit in coins", { required: true, min: 1 })
+  .guildOnly()
+  .defer("ephemeral")
+  .help({ hints: ["/market-browse", "/balance"] })
+  .run(async ({ ctx, userId, guildId, options }) => {
+    const result = await createListing(
+      ctx,
+      userId,
+      guildId,
+      options.item_id,
+      options.quantity,
+      options.price,
+    );
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+    if (result.isErr()) {
+      return { content: `Error: ${result.error.message}` };
+    }
 
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  const itemId = interaction.options.getString("item_id", true);
-  const quantity = interaction.options.getInteger("quantity", true);
-  const price = interaction.options.getInteger("price", true);
-  const sellerId = interaction.user.id;
-  const guildId = interaction.guild.id;
-
-  const result = await createListing(ctx, sellerId, guildId, itemId, quantity, price);
-
-  if (result.isErr()) {
-    await ctx.respond.send({ content: `Error: ${result.error.message}` });
-    return;
-  }
-
-  await ctx.respond.send(
-    v2Message(
+    return v2Message(
       container(
         "ok",
-        text(`## Listing Created\nListed **${quantity}x ${itemId}** for **${price} coins** each`),
+        text(
+          `## Listing Created\nListed **${options.quantity}x ${options.item_id}** for **${options.price} coins** each`,
+        ),
       ),
-    ),
-  );
-}
-
-export default data
-  .help({ hints: ["/market-browse", "/balance"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+    );
+  });

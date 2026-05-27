@@ -1,51 +1,33 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { browseListings } from "@/features/economy/market";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = command("market-browse")
-  .setDescription("Browse active market listings")
-  .addStringOption((opt) =>
-    opt.setName("item_id").setDescription("Filter by item ID").setRequired(false),
-  );
-
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
-
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  const guildId = interaction.guild.id;
-  const itemId = interaction.options.getString("item_id") ?? undefined;
-
-  const result = await browseListings(ctx, guildId, { itemId, pageSize: 10 });
-
-  if (result.isErr()) {
-    await ctx.respond.send({ content: `Error: ${result.error.message}` });
-    return;
-  }
-
-  const { listings } = result.unwrap();
-
-  let body: string;
-  if (listings.length === 0) {
-    body = "## Market Listings\nNo listings found.";
-  } else {
-    const lines = listings.map((listing) => {
-      const shortId = listing._id.slice(-8);
-      return `**#${shortId}** — ${listing.quantity}x **${listing.itemId}** @ ${listing.pricePerUnit}/ea — <@${listing.sellerId}>`;
-    });
-    body = `## Market Listings\n${lines.join("\n")}`;
-  }
-
-  await ctx.respond.send(v2Message(container("info", text(body))));
-}
-
-export default data
+export default command("market-browse")
+  .description("Browse active market listings")
+  .string("item_id", "Filter by item ID")
+  .guildOnly()
+  .defer("ephemeral")
   .help({ hints: ["/market-buy", "/market-list"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(async ({ ctx, guildId, options }) => {
+    const itemId = options.item_id ?? undefined;
+    const result = await browseListings(ctx, guildId, { itemId, pageSize: 10 });
+
+    if (result.isErr()) {
+      return { content: `Error: ${result.error.message}` };
+    }
+
+    const { listings } = result.unwrap();
+
+    let body: string;
+    if (listings.length === 0) {
+      body = "## Market Listings\nNo listings found.";
+    } else {
+      const lines = listings.map((listing) => {
+        const shortId = listing._id.slice(-8);
+        return `**#${shortId}** — ${listing.quantity}x **${listing.itemId}** @ ${listing.pricePerUnit}/ea — <@${listing.sellerId}>`;
+      });
+      body = `## Market Listings\n${lines.join("\n")}`;
+    }
+
+    return v2Message(container("info", text(body)));
+  });

@@ -1,4 +1,3 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { UserCurrency } from "@/components/user-currency";
 import { ensureAccount } from "@/features/economy/account";
 import {
@@ -8,49 +7,33 @@ import {
   MutationError,
   withdraw,
 } from "@/features/economy/mutations";
-import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
+import { command, type RunContext } from "@/framework";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
 const data = command("bank")
-  .setDescription("Manage your bank account")
-  .addSubcommand((sub) => sub.setName("balance").setDescription("View your hand and bank balance"))
-  .addSubcommand((sub) =>
-    sub
-      .setName("deposit")
-      .setDescription("Deposit coins into your bank (safe from /rob)")
-      .addIntegerOption((o) =>
-        o.setName("amount").setDescription("Amount to deposit").setRequired(true).setMinValue(1),
-      )
-      .addStringOption((o) => o.setName("currency").setDescription("Currency (default: coins)")),
+  .description("Manage your bank account")
+  .subcommand("balance", "View your hand and bank balance")
+  .subcommand("deposit", "Deposit coins into your bank (safe from /rob)", (s) =>
+    s
+      .integer("amount", "Amount to deposit", { required: true, min: 1 })
+      .string("currency", "Currency (default: coins)"),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("withdraw")
-      .setDescription("Withdraw coins from your bank")
-      .addIntegerOption((o) =>
-        o.setName("amount").setDescription("Amount to withdraw").setRequired(true).setMinValue(1),
-      )
-      .addStringOption((o) => o.setName("currency").setDescription("Currency (default: coins)")),
-  );
+  .subcommand("withdraw", "Withdraw coins from your bank", (s) =>
+    s
+      .integer("amount", "Amount to withdraw", { required: true, min: 1 })
+      .string("currency", "Currency (default: coins)"),
+  )
+  .guildOnly()
+  .defer("ephemeral");
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+type BankCtx = RunContext<typeof data>;
+type BankResponse = ReturnType<typeof v2Message> | { content: string };
 
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  const sub = interaction.options.getSubcommand();
-  if (sub === "balance") await handleBalance(interaction, ctx);
-  else if (sub === "deposit") await handleDeposit(interaction, ctx);
-  else if (sub === "withdraw") await handleWithdraw(interaction, ctx);
-}
-
-async function handleBalance(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  const userId = interaction.user.id;
+async function handleBalance(
+  c: Extract<BankCtx, { subcommand: "balance" }>,
+): Promise<BankResponse> {
+  const { ctx, userId } = c;
   await ensureAccount(ctx, userId);
 
   const wallet = await ctx.get(userId, UserCurrency);
@@ -73,13 +56,15 @@ async function handleBalance(interaction: ChatInputCommandInteraction, ctx: Ctx)
     bodyText = `## 🏦 Bank Account\n${lines.join("\n\n")}\n\n-# 💡 Bank funds are safe from /rob`;
   }
 
-  await ctx.respond.send(v2Message(container("info", text(bodyText))));
+  return v2Message(container("info", text(bodyText)));
 }
 
-async function handleDeposit(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  const userId = interaction.user.id;
-  const amount = interaction.options.getInteger("amount", true);
-  const currencyId = interaction.options.getString("currency") ?? "coins";
+async function handleDeposit(
+  c: Extract<BankCtx, { subcommand: "deposit" }>,
+): Promise<BankResponse> {
+  const { ctx, userId, options } = c;
+  const amount = options.amount;
+  const currencyId = options.currency ?? "coins";
 
   const [beforeHand, beforeBank] = await Promise.all([
     getBalance(ctx, userId, currencyId),
@@ -88,14 +73,11 @@ async function handleDeposit(interaction: ChatInputCommandInteraction, ctx: Ctx)
 
   try {
     const { handBalance, bankBalance } = await deposit(ctx, userId, currencyId, amount);
-
-    await ctx.respond.send(
-      v2Message(
-        container(
-          "ok",
-          text(
-            `## 🏦 Deposit Successful\n**Deposited:** ${coins(amount, currencyId)}\n💰 In Hand: ${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}\n🏦 In Bank: ${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}\n\n-# 💡 Bank funds are safe from /rob`,
-          ),
+    return v2Message(
+      container(
+        "ok",
+        text(
+          `## 🏦 Deposit Successful\n**Deposited:** ${coins(amount, currencyId)}\n💰 In Hand: ${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}\n🏦 In Bank: ${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}\n\n-# 💡 Bank funds are safe from /rob`,
         ),
       ),
     );
@@ -106,14 +88,16 @@ async function handleDeposit(interaction: ChatInputCommandInteraction, ctx: Ctx)
         : err instanceof Error
           ? err.message
           : "An error occurred.";
-    await ctx.respond.send(v2Message(container("danger", text(`## ❌ Deposit Failed\n${desc}`))));
+    return v2Message(container("danger", text(`## ❌ Deposit Failed\n${desc}`)));
   }
 }
 
-async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  const userId = interaction.user.id;
-  const amount = interaction.options.getInteger("amount", true);
-  const currencyId = interaction.options.getString("currency") ?? "coins";
+async function handleWithdraw(
+  c: Extract<BankCtx, { subcommand: "withdraw" }>,
+): Promise<BankResponse> {
+  const { ctx, userId, options } = c;
+  const amount = options.amount;
+  const currencyId = options.currency ?? "coins";
 
   const [beforeHand, beforeBank] = await Promise.all([
     getBalance(ctx, userId, currencyId),
@@ -122,14 +106,11 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx
 
   try {
     const { handBalance, bankBalance } = await withdraw(ctx, userId, currencyId, amount);
-
-    await ctx.respond.send(
-      v2Message(
-        container(
-          "ok",
-          text(
-            `## 💰 Withdrawal Successful\n**Withdrawn:** ${coins(amount, currencyId)}\n💰 In Hand: ${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}\n🏦 In Bank: ${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}\n\n-# 💡 /bank balance • /bank deposit`,
-          ),
+    return v2Message(
+      container(
+        "ok",
+        text(
+          `## 💰 Withdrawal Successful\n**Withdrawn:** ${coins(amount, currencyId)}\n💰 In Hand: ${coins(beforeHand, currencyId)} → ${coins(handBalance, currencyId)}\n🏦 In Bank: ${coins(beforeBank, currencyId)} → ${coins(bankBalance, currencyId)}\n\n-# 💡 /bank balance • /bank deposit`,
         ),
       ),
     );
@@ -140,14 +121,12 @@ async function handleWithdraw(interaction: ChatInputCommandInteraction, ctx: Ctx
         : err instanceof Error
           ? err.message
           : "An error occurred.";
-    await ctx.respond.send(
-      v2Message(container("danger", text(`## ❌ Withdrawal Failed\n${desc}`))),
-    );
+    return v2Message(container("danger", text(`## ❌ Withdrawal Failed\n${desc}`)));
   }
 }
 
-export default data
-  .help({ hints: ["/balance", "/work"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+export default data.help({ hints: ["/balance", "/work"] }).run(async (c) => {
+  if (c.subcommand === "balance") return handleBalance(c);
+  if (c.subcommand === "deposit") return handleDeposit(c);
+  return handleWithdraw(c);
+});

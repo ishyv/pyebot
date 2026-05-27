@@ -1,53 +1,32 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { claimRewards } from "@/features/economy/quests";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = command("quest-claim")
-  .setDescription("Claim rewards for a completed quest")
-  .addStringOption((opt) =>
-    opt.setName("quest_id").setDescription("Quest ID to claim rewards for").setRequired(true),
-  );
+export default command("quest-claim")
+  .description("Claim rewards for a completed quest")
+  .string("quest_id", "Quest ID to claim rewards for", { required: true })
+  .guildOnly()
+  .defer("ephemeral")
+  .help({ hints: ["/quest-list", "/balance"] })
+  .run(async ({ ctx, userId, options }) => {
+    const result = await claimRewards(ctx, userId, options.quest_id);
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+    if (result.isErr()) {
+      return { content: `Error: ${result.error.message}` };
+    }
 
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
+    const { rewards } = result.unwrap();
 
-  const questId = interaction.options.getString("quest_id", true);
-  const userId = interaction.user.id;
+    const rewardLines = rewards.map(
+      (r) => `**${r.type === "currency" ? "Currency" : "XP"}:** ${r.description}`,
+    );
 
-  const result = await claimRewards(ctx, userId, questId);
-
-  if (result.isErr()) {
-    await ctx.respond.send({ content: `Error: ${result.error.message}` });
-    return;
-  }
-
-  const { rewards } = result.unwrap();
-
-  const rewardLines = rewards.map(
-    (r) => `**${r.type === "currency" ? "Currency" : "XP"}:** ${r.description}`,
-  );
-
-  await ctx.respond.send(
-    v2Message(
+    return v2Message(
       container(
         "ok",
         text(
-          `## Rewards Claimed!\nQuest **${questId}** rewards collected.\n\n${rewardLines.join("\n")}`,
+          `## Rewards Claimed!\nQuest **${options.quest_id}** rewards collected.\n\n${rewardLines.join("\n")}`,
         ),
       ),
-    ),
-  );
-}
-
-export default data
-  .help({ hints: ["/quest-list", "/balance"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+    );
+  });

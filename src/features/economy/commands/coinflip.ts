@@ -1,7 +1,6 @@
-import { type ChatInputCommandInteraction, MessageFlags } from "discord.js";
+import { MessageFlags } from "discord.js";
 import { coinflip, DEFAULT_COINFLIP_CONFIG, MinigameError } from "@/features/economy/minigames";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import type { AccentKey } from "@/ui/theme";
 import { container, text, v2Message } from "@/ui/v2";
 
@@ -10,23 +9,6 @@ export interface CoinflipErrorCopy {
   readonly description: string;
   readonly accent: AccentKey;
 }
-
-const data = command("coinflip")
-  .setDescription("Bet coins on a coinflip")
-  .addIntegerOption((opt) =>
-    opt
-      .setName("amount")
-      .setDescription("Amount to wager")
-      .setRequired(true)
-      .setMinValue(DEFAULT_COINFLIP_CONFIG.minBet),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("side")
-      .setDescription("Side to bet on (default: heads)")
-      .setRequired(false)
-      .addChoices({ name: "Heads", value: "heads" }, { name: "Tails", value: "tails" }),
-  );
 
 export function coinflipErrorCopy(error: Error): CoinflipErrorCopy {
   if (error instanceof MinigameError) {
@@ -54,59 +36,45 @@ export function coinflipErrorCopy(error: Error): CoinflipErrorCopy {
   return { title: "Coinflip Unavailable", description: error.message, accent: "danger" };
 }
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  if (!interaction.guild) {
-    await ctx.respond.send({
-      content: "This command can only be used in a server.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const amount = interaction.options.getInteger("amount", true);
-  const side = (interaction.options.getString("side") ?? "heads") as "heads" | "tails";
-
-  if (amount < DEFAULT_COINFLIP_CONFIG.minBet) {
-    const copy = coinflipErrorCopy(new MinigameError("BET_TOO_LOW", ""));
-    await ctx.respond.send({
-      ...v2Message(container(copy.accent, text(`## ${copy.title}\n${copy.description}`))),
-      flags: MessageFlags.Ephemeral,
-    } as any);
-    return;
-  }
-
-  await ctx.respond.defer();
-
-  try {
-    const { won, betAmount, winnings, outcome } = await coinflip(
-      ctx,
-      interaction.user.id,
-      side,
-      amount,
-    );
-
-    const payload = won
-      ? v2Message(
-          container("ok", text(`## You Won!\nYou won **${winnings} coins**! It was ${outcome}.`)),
-        )
-      : v2Message(
-          container(
-            "danger",
-            text(`## You Lost!\nYou lost **${betAmount} coins**. It was ${outcome}.`),
-          ),
-        );
-
-    await ctx.respond.send(payload);
-  } catch (err) {
-    const copy = coinflipErrorCopy(err instanceof Error ? err : new Error(String(err)));
-    await ctx.respond.send(
-      v2Message(container(copy.accent, text(`## ${copy.title}\n${copy.description}`))),
-    );
-  }
-}
-
-export default data
+export default command("coinflip")
+  .description("Bet coins on a coinflip")
+  .integer("amount", "Amount to wager", { required: true, min: DEFAULT_COINFLIP_CONFIG.minBet })
+  .string("side", "Side to bet on (default: heads)", {
+    choices: [
+      { name: "Heads", value: "heads" },
+      { name: "Tails", value: "tails" },
+    ],
+  })
+  .guildOnly()
   .help({ hints: ["/balance", "/work"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(async ({ ctx, userId, options }) => {
+    const amount = options.amount;
+    const side = (options.side ?? "heads") as "heads" | "tails";
+
+    if (amount < DEFAULT_COINFLIP_CONFIG.minBet) {
+      const copy = coinflipErrorCopy(new MinigameError("BET_TOO_LOW", ""));
+      const { components } = v2Message(
+        container(copy.accent, text(`## ${copy.title}\n${copy.description}`)),
+      );
+      return { components, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral };
+    }
+
+    await ctx.respond.defer();
+
+    try {
+      const { won, betAmount, winnings, outcome } = await coinflip(ctx, userId, side, amount);
+      return won
+        ? v2Message(
+            container("ok", text(`## You Won!\nYou won **${winnings} coins**! It was ${outcome}.`)),
+          )
+        : v2Message(
+            container(
+              "danger",
+              text(`## You Lost!\nYou lost **${betAmount} coins**. It was ${outcome}.`),
+            ),
+          );
+    } catch (err) {
+      const copy = coinflipErrorCopy(err instanceof Error ? err : new Error(String(err)));
+      return v2Message(container(copy.accent, text(`## ${copy.title}\n${copy.description}`)));
+    }
+  });

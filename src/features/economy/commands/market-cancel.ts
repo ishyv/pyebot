@@ -1,49 +1,28 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { cancelListing } from "@/features/economy/market";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = command("market-cancel")
-  .setDescription("Cancel one of your market listings")
-  .addStringOption((opt) =>
-    opt.setName("listing_id").setDescription("Listing ID to cancel").setRequired(true),
-  );
+export default command("market-cancel")
+  .description("Cancel one of your market listings")
+  .string("listing_id", "Listing ID to cancel", { required: true })
+  .guildOnly()
+  .defer("ephemeral")
+  .help({ hints: ["/market-browse", "/market-list"] })
+  .run(async ({ ctx, userId, options }) => {
+    const result = await cancelListing(ctx, userId, options.listing_id);
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+    if (result.isErr()) {
+      return { content: `Error: ${result.error.message}` };
+    }
 
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
+    const { itemId, returnedQuantity } = result.unwrap();
 
-  const listingId = interaction.options.getString("listing_id", true);
-  const sellerId = interaction.user.id;
-
-  const result = await cancelListing(ctx, sellerId, listingId);
-
-  if (result.isErr()) {
-    await ctx.respond.send({ content: `Error: ${result.error.message}` });
-    return;
-  }
-
-  const { itemId, returnedQuantity } = result.unwrap();
-
-  await ctx.respond.send(
-    v2Message(
+    return v2Message(
       container(
         "ok",
         text(
           `## Listing Cancelled\nListing cancelled. **${returnedQuantity}x ${itemId}** returned to your inventory.`,
         ),
       ),
-    ),
-  );
-}
-
-export default data
-  .help({ hints: ["/market-browse", "/market-list"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+    );
+  });

@@ -42,6 +42,7 @@ describe("/eco-profile", () => {
     } as unknown as Ctx;
 
     const interaction = {
+      guildId: "guild-1",
       guild: { id: "guild-1" },
       user: {
         id: "user-1",

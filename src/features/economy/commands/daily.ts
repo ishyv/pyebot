@@ -1,25 +1,18 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { claimDaily, DailyError } from "@/features/economy/daily";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { coins, relativeTs } from "@/utils/fmt";
 
-const data = command("daily").setDescription("Claim your daily reward");
-
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer();
-
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  try {
+export default command("daily")
+  .description("Claim your daily reward")
+  .guildOnly()
+  .defer("public")
+  .help({ hints: ["/balance", "/work"] })
+  .run(async ({ ctx, userId, guildId }) => {
     const { base, streakBonus, total, newBalance, streak, currencyId } = await claimDaily(
       ctx,
-      interaction.user.id,
-      interaction.guild.id,
+      userId,
+      guildId,
     );
 
     const streakLine = "🔥".repeat(Math.min(streak, 10));
@@ -34,29 +27,18 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
     }
     body += `\n📊 **Total:** +${coins(total, currencyId)}\n💳 **New Balance:** ${coins(newBalance, currencyId)}\n\n-# 💡 Keep your streak going! Come back tomorrow`;
 
-    await ctx.respond.send(v2Message(container("ok", text(body))));
-  } catch (err) {
-    if (err instanceof DailyError && err.code === "ON_COOLDOWN" && err.expiresAt) {
-      await ctx.respond.send(
-        v2Message(
-          container(
-            "warn",
-            text(
-              `## ⏳ Daily on Cooldown\nYou've already claimed your daily reward.\n\nCome back ${relativeTs(err.expiresAt)}\n\n-# 💡 Keep your streak going! Come back tomorrow`,
-            ),
+    return v2Message(container("ok", text(body)));
+  })
+  .catch(DailyError, (err) => {
+    if (err.code === "ON_COOLDOWN" && err.expiresAt) {
+      return v2Message(
+        container(
+          "warn",
+          text(
+            `## ⏳ Daily on Cooldown\nYou've already claimed your daily reward.\n\nCome back ${relativeTs(err.expiresAt)}\n\n-# 💡 Keep your streak going! Come back tomorrow`,
           ),
         ),
       );
-      return;
     }
-    await ctx.respond.send({
-      content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
-    });
-  }
-}
-
-export default data
-  .help({ hints: ["/balance", "/work"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+    return { content: `Error: ${err.message}` };
+  });
