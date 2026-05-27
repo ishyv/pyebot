@@ -13,6 +13,7 @@ export type {
   CommandDsl,
   CommandGroupDsl,
   CommandOptionDsl,
+  CooldownScope,
   DslState,
   IntegerOptionSettings,
   RunContext,

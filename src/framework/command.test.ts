@@ -288,6 +288,40 @@ describe("command DSL", () => {
     expect(dispatched).toEqual(["group-add:3", "group-list:list"]);
   });
 
+  it(".cooldown() blocks second invocation and records only on success", async () => {
+    const { CooldownManager } = await import("@/core/state");
+    const localCooldowns = new CooldownManager();
+    const fakeCooldownCtx = (base: Ctx): Ctx =>
+      ({ ...base, cooldowns: localCooldowns }) as unknown as Ctx;
+
+    let invocations = 0;
+    const mod = command("daily")
+      .description("Daily reward")
+      .cooldown("24h") // per-user
+      .help({ hints: [] })
+      .run(async () => {
+        invocations++;
+        return { content: "claimed" };
+      });
+
+    const { ctx: baseCtx, calls } = fakeCtx();
+    const ctx = fakeCooldownCtx(baseCtx);
+    const interaction = fakeInteraction();
+
+    // First call: handler runs and cooldown is recorded
+    await mod.execute(interaction, ctx);
+    expect(invocations).toBe(1);
+    expect(calls.at(-1)).toMatchObject({ method: "send", payload: { content: "claimed" } });
+
+    // Second call: blocked by cooldown
+    await mod.execute(interaction, ctx);
+    expect(invocations).toBe(1); // still 1 — handler NOT called again
+    expect(calls.at(-1)).toMatchObject({
+      method: "send",
+      payload: expect.objectContaining({ content: expect.stringContaining("You can use this again") }),
+    });
+  });
+
   it("maps known errors through catch handlers and rethrows unknown errors", async () => {
     const mod = command("boom")
       .description("Boom")

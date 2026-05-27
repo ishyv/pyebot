@@ -10,10 +10,19 @@ import {
 } from "discord.js";
 import type { Result } from "@/core/result";
 import { container, text, v2Message } from "@/ui/v2";
+import { parseDuration } from "@/utils/duration";
 import type { CommandContract, CommandHelp, CommandModule, Ctx } from "./types";
 
 type DeferVisibility = "ephemeral" | "public";
 type CommandResponse = Parameters<Ctx["respond"]["send"]>[0];
+
+/** Scope for a declarative `.cooldown()` — determines which ID the cooldown key is keyed to. */
+export type CooldownScope = "user" | "guild" | "channel" | "global";
+
+interface CooldownSpec {
+  readonly durationMs: number;
+  readonly scope: CooldownScope;
+}
 type MaybePromise<T> = T | Promise<T>;
 type ErrorConstructor<E extends Error = Error> = new (...args: never[]) => E;
 type CommandPermissions = Parameters<SlashCommandBuilder["setDefaultMemberPermissions"]>[0];
@@ -277,6 +286,25 @@ export interface CommandDsl<S extends DslState = DslState> {
   adminOnly(): CommandDsl<S>;
   guildOnly(): CommandDsl<WithGuild<S>>;
   defer(visibility: DeferVisibility | false): CommandDsl<S>;
+  /**
+   * Declare a cooldown for this command.
+   *
+   * The framework checks the cooldown BEFORE calling `.run()`. If it fires, the
+   * user gets an ephemeral "You can use this again <t:timestamp:R>" message and
+   * the handler is not invoked. On a successful (non-throwing) handler return,
+   * the cooldown is recorded.
+   *
+   * @param duration  Milliseconds or a human string: `"24h"`, `"30m"`, `"7d"`.
+   * @param scope     Which ID keys the cooldown. Defaults to `"user"`.
+   *                  Stacking multiple `.cooldown()` calls is supported.
+   *
+   * @example
+   * command("daily")
+   *   .cooldown("24h")                 // per user
+   *   .cooldown("1h", "guild")         // also per guild
+   *   .run(async (c) => { ... });
+   */
+  cooldown(duration: number | string, scope?: CooldownScope): CommandDsl<S>;
   defaultMemberPermissions(permissions: CommandPermissions): CommandDsl<S>;
   dmPermission(enabled: boolean): CommandDsl<S>;
 
@@ -685,6 +713,7 @@ class CommandBuilder {
   }) as never;
   private readonly catchHandlers: CatchEntry[] = [];
   private readonly subHandlers: Map<string, RunHandler> = new Map();
+  private readonly cooldownSpecs: CooldownSpec[] = [];
 
   constructor(name: string) {
     this.data = new SlashCommandBuilder().setName(name).setDescription(name);
@@ -723,6 +752,20 @@ class CommandBuilder {
   defer(visibility: DeferVisibility | false): this {
     this.deferVisibility = visibility;
     this.contractState.defer = visibility;
+    return this;
+  }
+
+  cooldown(duration: number | string, scope: CooldownScope = "user"): this {
+    const durationMs =
+      typeof duration === "number"
+        ? duration
+        : parseDuration(duration);
+    if (durationMs === null || durationMs <= 0) {
+      throw new Error(
+        `Invalid cooldown duration "${duration}". Use a positive number (ms) or a string like "24h", "30m", "7d".`,
+      );
+    }
+    this.cooldownSpecs.push({ durationMs, scope });
     return this;
   }
 
@@ -831,12 +874,32 @@ class CommandBuilder {
         return;
       }
       if (this.deferVisibility) await ctx.respond.defer({ visibility: this.deferVisibility });
+      // Cooldown gate — check each declared spec; fire the first that's still active.
+      for (const spec of this.cooldownSpecs) {
+        const scopeId = this.cooldownScopeId(interaction, spec.scope);
+        if (!scopeId) continue;
+        const cdKey = `${this.data.name}:${spec.scope}`;
+        if (ctx.cooldowns.isOnCooldown(scopeId, cdKey)) {
+          const remaining = ctx.cooldowns.getRemainingMs(scopeId, cdKey);
+          const expiresAt = Math.floor((Date.now() + remaining) / 1000);
+          await ctx.respond.send({
+            content: `You can use this again <t:${expiresAt}:R>.`,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+      }
       const subGroup = getSubcommandGroup(interaction, false);
       const subName = getSubcommand(interaction, false);
       const dispatchKey = subGroup ? `${subGroup}:${subName}` : (subName ?? "");
       const handler = (dispatchKey ? this.subHandlers.get(dispatchKey) : undefined) ?? this.runHandler;
       const response = await handler?.(context);
       if (response !== undefined) await ctx.respond.send(response);
+      // Record cooldowns only after a successful (non-throwing) handler return.
+      for (const spec of this.cooldownSpecs) {
+        const scopeId = this.cooldownScopeId(interaction, spec.scope);
+        if (scopeId) ctx.cooldowns.set(scopeId, `${this.data.name}:${spec.scope}`, spec.durationMs);
+      }
     } catch (error) {
       if (error instanceof ResponseSentinel) {
         await ctx.respond.send(error.response);
@@ -925,6 +988,22 @@ class CommandBuilder {
       );
     }
     return this.options.length > 0 ? this.options : jsonOptions.filter((entry) => !entry.children);
+  }
+
+  private cooldownScopeId(
+    interaction: ChatInputCommandInteraction,
+    scope: CooldownScope,
+  ): string | null {
+    switch (scope) {
+      case "user":
+        return interaction.user.id;
+      case "guild":
+        return interaction.guildId;
+      case "channel":
+        return interaction.channelId;
+      case "global":
+        return "global";
+    }
   }
 
   private async handleError(
