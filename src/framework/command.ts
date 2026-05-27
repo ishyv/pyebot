@@ -23,6 +23,12 @@ interface CooldownSpec {
   readonly durationMs: number;
   readonly scope: CooldownScope;
 }
+
+/** A per-subcommand permission requirement registered via `.require()`. */
+interface PermissionSpec {
+  readonly subcommand: string;
+  readonly permission: bigint;
+}
 type MaybePromise<T> = T | Promise<T>;
 type ErrorConstructor<E extends Error = Error> = new (...args: never[]) => E;
 type CommandPermissions = Parameters<SlashCommandBuilder["setDefaultMemberPermissions"]>[0];
@@ -305,6 +311,22 @@ export interface CommandDsl<S extends DslState = DslState> {
    *   .run(async (c) => { ... });
    */
   cooldown(duration: number | string, scope?: CooldownScope): CommandDsl<S>;
+  /**
+   * Enforce an additional permission requirement before dispatching a specific
+   * top-level subcommand. Only meaningful on guild commands (`.guildOnly()`).
+   *
+   * The framework checks `memberPermissions.has(permission)` before calling
+   * the handler. If the member lacks the permission, they receive an ephemeral
+   * error message and the handler is NOT invoked.
+   *
+   * @example
+   * command("warn")
+   *   .defaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+   *   .subcommand("clear", "Clear all warnings", s => s.user("user", ...))
+   *   .require("clear", PermissionFlagsBits.BanMembers)  // elevated requirement
+   *   .run(async (c) => { ... });
+   */
+  require(subcommand: string, permission: bigint): CommandDsl<S>;
   defaultMemberPermissions(permissions: CommandPermissions): CommandDsl<S>;
   dmPermission(enabled: boolean): CommandDsl<S>;
 
@@ -714,6 +736,7 @@ class CommandBuilder {
   private readonly catchHandlers: CatchEntry[] = [];
   private readonly subHandlers: Map<string, RunHandler> = new Map();
   private readonly cooldownSpecs: CooldownSpec[] = [];
+  private readonly permissionSpecs: PermissionSpec[] = [];
 
   constructor(name: string) {
     this.data = new SlashCommandBuilder().setName(name).setDescription(name);
@@ -766,6 +789,11 @@ class CommandBuilder {
       );
     }
     this.cooldownSpecs.push({ durationMs, scope });
+    return this;
+  }
+
+  require(subcommand: string, permission: bigint): this {
+    this.permissionSpecs.push({ subcommand, permission });
     return this;
   }
 
@@ -874,6 +902,19 @@ class CommandBuilder {
         return;
       }
       if (this.deferVisibility) await ctx.respond.defer({ visibility: this.deferVisibility });
+      // Per-subcommand permission gate
+      if (this.permissionSpecs.length > 0 && interaction.memberPermissions) {
+        const subName = getSubcommand(interaction, false);
+        for (const spec of this.permissionSpecs) {
+          if (spec.subcommand === subName && !interaction.memberPermissions.has(spec.permission)) {
+            await ctx.respond.send({
+              content: "You don't have the required permissions for this subcommand.",
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+        }
+      }
       // Cooldown gate — check each declared spec; fire the first that's still active.
       for (const spec of this.cooldownSpecs) {
         const scopeId = this.cooldownScopeId(interaction, spec.scope);

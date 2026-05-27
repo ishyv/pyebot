@@ -322,6 +322,61 @@ describe("command DSL", () => {
     });
   });
 
+  it(".require() blocks subcommand when member lacks the permission", async () => {
+    const { PermissionFlagsBits } = await import("discord.js");
+    const dispatched: string[] = [];
+
+    const mod = command("warn")
+      .description("Warn")
+      .guildOnly()
+      .defer("ephemeral")
+      .subcommand("add", "Add", (s) => s.user("user", "User", { required: true }))
+      .subcommand("clear", "Clear all")
+      .require("clear", PermissionFlagsBits.BanMembers)
+      .help({ hints: [] })
+      .run(async (c) => {
+        dispatched.push(c.subcommand ?? "");
+      });
+
+    const makeInteraction = (sub: string, hasBan: boolean) =>
+      fakeInteraction({
+        memberPermissions: {
+          has: (perm: bigint) =>
+            perm === PermissionFlagsBits.BanMembers ? hasBan : true,
+        },
+        options: {
+          getString: () => null,
+          getInteger: () => null,
+          getBoolean: () => null,
+          getUser: () => null,
+          getChannel: () => null,
+          getRole: () => null,
+          getMentionable: () => null,
+          getAttachment: () => null,
+          getSubcommand: () => sub,
+          getSubcommandGroup: () => null,
+        },
+      });
+
+    const { ctx, calls } = fakeCtx();
+
+    // "add" has no requirement — should always pass
+    await mod.execute(makeInteraction("add", false), ctx);
+    expect(dispatched).toEqual(["add"]);
+
+    // "clear" without BanMembers — blocked
+    await mod.execute(makeInteraction("clear", false), ctx);
+    expect(dispatched).toEqual(["add"]); // still just "add"
+    expect(calls.at(-1)).toMatchObject({
+      method: "send",
+      payload: expect.objectContaining({ content: expect.stringContaining("permissions") }),
+    });
+
+    // "clear" with BanMembers — allowed
+    await mod.execute(makeInteraction("clear", true), ctx);
+    expect(dispatched).toEqual(["add", "clear"]);
+  });
+
   it("maps known errors through catch handlers and rethrows unknown errors", async () => {
     const mod = command("boom")
       .description("Boom")
