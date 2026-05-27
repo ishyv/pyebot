@@ -816,6 +816,16 @@ class CommandBuilder {
 
   private context(interaction: ChatInputCommandInteraction, ctx: Ctx): CommandContextBase {
     const user = interaction.user ?? ({ id: "" } as ChatInputCommandInteraction["user"]);
+    // Options are extracted lazily on first access: a handler that early-returns
+    // (e.g. a guild guard) never pays for extraction, and Discord's required-option
+    // guarantee is only consulted when the value is actually read.
+    let optionsCache: Readonly<Record<string, unknown>> | undefined;
+    const readOptions = (): Readonly<Record<string, unknown>> => {
+      if (optionsCache === undefined) {
+        optionsCache = extractOptions(interaction, this.optionsFor(interaction));
+      }
+      return optionsCache;
+    };
     return {
       interaction,
       ctx,
@@ -824,7 +834,9 @@ class CommandBuilder {
       guild: interaction.guild,
       guildId: interaction.guildId,
       member: interaction.member,
-      options: extractOptions(interaction, this.optionsFor(interaction)),
+      get options() {
+        return readOptions();
+      },
       subcommand: getSubcommand(interaction, false),
       subcommandGroup: getSubcommandGroup(interaction, false),
       expect: <T, E>(result: Result<T, E>): T => {
