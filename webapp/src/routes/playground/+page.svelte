@@ -1,7 +1,17 @@
 <script lang="ts">
-import { Button, PageHeader, Panel, Stack, Textarea } from "@hyvnt/hyvui";
+import { Button, PageHeader, Panel, Select, Stack, Textarea } from "@hyvnt/hyvui";
 import DiscordComponentsPreview from "$lib/components/DiscordComponentsPreview.svelte";
 import { parsePayloadJson } from "$lib/discord-preview/parse";
+import scenesJson from "$lib/discord-preview/scenes.generated.json";
+
+// Real bot render output, dumped by `bun run scenes:dump`. Pick one to load it
+// into the editor below and see exactly what the bot would send.
+type Scene = { id: string; label: string; payload: { flags?: number; components: unknown[] } };
+const scenes = scenesJson as Scene[];
+const sceneOptions = [
+  { value: "", label: "load a scene..." },
+  ...scenes.map((s) => ({ value: s.id, label: s.label })),
+];
 
 // A small tycoon-console-shaped payload so the preview shows something on load.
 // Matches what `v2Message(...).toJSON()` emits on the bot side.
@@ -52,6 +62,13 @@ const result = $derived(trimmed ? parsePayloadJson(trimmed) : ({ ok: true, nodes
 const nodes = $derived(result.ok ? result.nodes : []);
 const error = $derived(result.ok ? null : result.error);
 
+let sceneId = $state("");
+$effect(() => {
+  if (!sceneId) return;
+  const scene = scenes.find((s) => s.id === sceneId);
+  if (scene) raw = JSON.stringify(scene.payload, null, 2);
+});
+
 function loadSample(): void {
   raw = JSON.stringify(SAMPLE, null, 2);
 }
@@ -78,6 +95,12 @@ function clear(): void {
     <div class="layout">
       <Panel withInset>
         {#snippet header()}<span class="panel-title">payload json</span>{/snippet}
+        {#if scenes.length > 0}
+          <div class="scene-row">
+            <Select bind:value={sceneId} options={sceneOptions} />
+            <span class="scene-hint">real bot output, via bun run scenes:dump</span>
+          </div>
+        {/if}
         <Textarea
           bind:value={raw}
           rows={18}
@@ -139,6 +162,17 @@ function clear(): void {
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text);
+  }
+  .scene-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+  .scene-hint {
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
   }
   .preview-col {
     position: sticky;

@@ -11,6 +11,7 @@
     "doctor": "bun scripts/doctor.ts",
     "tx": "bun scripts/cli.ts",
     "glyphs:sync": "bun scripts/glyphs-sync.ts",
+    "scenes:dump": "bun scripts/dump-preview-scenes.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "fmt": "biome format --write .",
