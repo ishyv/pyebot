@@ -138,6 +138,64 @@ describe("command DSL", () => {
     ]);
   });
 
+  it("c.unwrap() short-circuits with mapped response on Err and returns value on Ok", async () => {
+    // Err path: unwrap throws sentinel → execute catches and sends mapped response
+    const errCmd = command("transfer")
+      .description("Transfer")
+      .help({ hints: [] })
+      .run(async (c) => {
+        const _value = c.unwrap(ErrResult(new Error("insufficient funds")), (e) => ({
+          content: `Failed: ${e.message}`,
+        }));
+        return { content: "should not reach here" };
+      });
+    const { ctx: ctx1, calls: calls1 } = fakeCtx();
+    await errCmd.execute(fakeInteraction(), ctx1);
+    expect(calls1).toEqual([{ method: "send", payload: { content: "Failed: insufficient funds" } }]);
+
+    // Ok path: unwrap returns the value normally
+    const okCmd = command("balance")
+      .description("Balance")
+      .help({ hints: [] })
+      .run(async (c) => {
+        const value = c.unwrap(OkResult(42), () => ({ content: "never" }));
+        return { content: String(value) };
+      });
+    const { ctx: ctx2, calls: calls2 } = fakeCtx();
+    await okCmd.execute(fakeInteraction(), ctx2);
+    expect(calls2).toEqual([{ method: "send", payload: { content: "42" } }]);
+  });
+
+  it("c.unwrapOr() returns fallback on Err and value on Ok", async () => {
+    let resultOr: number | undefined;
+    const mod = command("test")
+      .description("Test")
+      .help({ hints: [] })
+      .run(async (c) => {
+        const a = c.unwrapOr(ErrResult(new Error("oops")), 99);
+        const b = c.unwrapOr(OkResult(7), 99);
+        resultOr = a * 10 + b;
+      });
+    await mod.execute(fakeInteraction(), fakeCtx().ctx);
+    expect(resultOr).toBe(997);
+  });
+
+  it("c.ok/fail/info/warn build v2 container responses with correct flags", async () => {
+    const { MessageFlags: Flags } = await import("discord.js");
+    let captured: unknown[] = [];
+    const mod = command("test")
+      .description("Test")
+      .help({ hints: [] })
+      .run(async (c) => {
+        captured = [c.ok("text"), c.fail("text"), c.info("text"), c.warn("text")];
+      });
+    await mod.execute(fakeInteraction(), fakeCtx().ctx);
+    for (const r of captured) {
+      expect(r).toMatchObject({ flags: Flags.IsComponentsV2 });
+      expect(Array.isArray((r as { components: unknown[] }).components)).toBe(true);
+    }
+  });
+
   it("maps known errors through catch handlers and rethrows unknown errors", async () => {
     const mod = command("boom")
       .description("Boom")

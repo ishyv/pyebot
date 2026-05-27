@@ -79,6 +79,15 @@ interface CommandContextBase {
   readonly subcommand: string | null;
   readonly subcommandGroup: string | null;
   expect<T, E>(result: Result<T, E>): T;
+  /**
+   * Unwrap a Result or short-circuit `.run()` with a mapped error response.
+   * If the result is `Err`, throws a sentinel that `execute()` catches and
+   * sends as the command response — no explicit `if (result.isErr()) return`
+   * needed at the call site.
+   */
+  unwrap<T, E>(result: Result<T, E>, mapErr: (e: E) => CommandResponse): T;
+  /** Unwrap a Result or silently return `fallback` on failure. */
+  unwrapOr<T>(result: Result<T, unknown>, fallback: T): T;
   /** Build a success (green) v2 container response. */
   ok(markdown: string): CommandResponse;
   /** Build a danger (red) v2 container response. */
@@ -167,6 +176,15 @@ interface CommandContextCore {
   readonly user: ChatInputCommandInteraction["user"];
   readonly userId: string;
   expect<T, E>(result: Result<T, E>): T;
+  /**
+   * Unwrap a Result or short-circuit `.run()` with a mapped error response.
+   * If the result is `Err`, throws a sentinel that `execute()` catches and
+   * sends as the command response — no explicit `if (result.isErr()) return`
+   * needed at the call site.
+   */
+  unwrap<T, E>(result: Result<T, E>, mapErr: (e: E) => CommandResponse): T;
+  /** Unwrap a Result or silently return `fallback` on failure. */
+  unwrapOr<T>(result: Result<T, unknown>, fallback: T): T;
   /** Build a success (green) v2 container response. */
   ok(markdown: string): CommandResponse;
   /** Build a danger (red) v2 container response. */
@@ -469,6 +487,15 @@ export interface CommandGroupDsl<GS extends GroupSubState = never> {
 }
 
 /**
+ * Thrown by `c.unwrap()` to short-circuit `.run()` with a mapped response.
+ * Caught in `CommandBuilder.execute()` before the normal `.catch()` handlers
+ * so it never surfaces as an unhandled error.
+ */
+class ResponseSentinel {
+  constructor(readonly response: CommandResponse) {}
+}
+
+/**
  * Creates a framework command DSL builder.
  *
  * The builder owns Discord slash-command construction while returning the
@@ -705,6 +732,10 @@ class CommandBuilder {
       const response = await this.runHandler?.(context);
       if (response !== undefined) await ctx.respond.send(response);
     } catch (error) {
+      if (error instanceof ResponseSentinel) {
+        await ctx.respond.send(error.response);
+        return;
+      }
       const response = await this.handleError(error, context);
       if (response !== undefined) {
         await ctx.respond.send(response);
@@ -748,6 +779,13 @@ class CommandBuilder {
       expect: <T, E>(result: Result<T, E>): T => {
         if (result.isErr()) throw result.error;
         return result.unwrap();
+      },
+      unwrap: <T, E>(result: Result<T, E>, mapErr: (e: E) => CommandResponse): T => {
+        if (result.isErr()) throw new ResponseSentinel(mapErr(result.error));
+        return result.unwrap();
+      },
+      unwrapOr: <T>(result: Result<T, unknown>, fallback: T): T => {
+        return result.isErr() ? fallback : result.unwrap();
       },
       ok: (markdown: string) => v2Message(container("ok", text(markdown))),
       fail: (markdown: string) => v2Message(container("danger", text(markdown))),
