@@ -1,55 +1,31 @@
-import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
 import { ban, TEMP_BAN_DURATION_CHOICES } from "@/features/moderation/service";
 import { renderModlogCase } from "@/features/moderation/views";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 
-const data = command("ban")
-  .setDescription("Ban a user from the server")
-  .addUserOption((opt) => opt.setName("user").setDescription("User to ban").setRequired(true))
-  .addStringOption((opt) =>
-    opt.setName("reason").setDescription("Reason for the ban").setRequired(true),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("duration")
-      .setDescription("Temporary ban duration (omit for permanent)")
-      .addChoices(...TEMP_BAN_DURATION_CHOICES.map((d) => ({ name: d, value: d }))),
-  )
-  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-  .setDMPermission(false);
-
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  if (!interaction.guild || !interaction.member) {
-    await ctx.respond.send({
-      content: "This command can only be used in a server.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const target = interaction.options.getUser("user", true);
-  const reason = interaction.options.getString("reason", true);
-  const duration = interaction.options.getString("duration") ?? undefined;
-  const moderator = await interaction.guild.members.fetch(interaction.user.id);
-
-  await ctx.respond.defer({ visibility: "ephemeral" });
-
-  const result = await ban(interaction.guild, moderator, target, reason, duration);
-
-  if (result.isErr()) {
-    await ctx.respond.send({ content: `Failed: ${result.error.message}` });
-    return;
-  }
-
-  const modResult = result.unwrap();
-  await ctx.respond.send(
-    renderModlogCase({ result: modResult, extras: duration ? { duration } : undefined }),
-  );
-}
-
-export default data
+export default command("ban")
+  .description("Ban a user from the server")
+  .user("user", "User to ban", { required: true })
+  .string("reason", "Reason for the ban", { required: true })
+  .string("duration", "Temporary ban duration (omit for permanent)", {
+    choices: TEMP_BAN_DURATION_CHOICES.map((d) => ({ name: d, value: d })),
+  })
+  .defaultMemberPermissions(PermissionFlagsBits.BanMembers)
+  .guildOnly()
+  .defer("ephemeral")
   .help({ hints: ["/cases"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(async ({ guild, user, options }) => {
+    const target = options.user;
+    const reason = options.reason;
+    const duration = options.duration ?? undefined;
+    const moderator = await guild.members.fetch(user.id);
+
+    const result = await ban(guild, moderator, target, reason, duration);
+
+    if (result.isErr()) {
+      return { content: `Failed: ${result.error.message}` };
+    }
+
+    const modResult = result.unwrap();
+    return renderModlogCase({ result: modResult, extras: duration ? { duration } : undefined });
+  });

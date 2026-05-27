@@ -1,113 +1,81 @@
-import {
-  ChannelType,
-  type ChatInputCommandInteraction,
-  MessageFlags,
-  type NewsChannel,
-  PermissionFlagsBits,
-  type TextChannel,
-} from "discord.js";
+import type { NewsChannel } from "discord.js";
+import { ChannelType, type Guild, PermissionFlagsBits, type TextChannel } from "discord.js";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = command("lockdown")
-  .setDescription("Lock or unlock channels to prevent members from sending messages")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-  .setDMPermission(false)
-  .addSubcommand((sub) =>
-    sub
-      .setName("on")
-      .setDescription("Lock all text channels (removes @everyone Send Messages)")
-      .addStringOption((o) => o.setName("reason").setDescription("Reason for lockdown")),
+export default command("lockdown")
+  .description("Lock or unlock channels to prevent members from sending messages")
+  .defaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+  .guildOnly()
+  .defer("ephemeral")
+  .subcommand("on", "Lock all text channels (removes @everyone Send Messages)", (s) =>
+    s.string("reason", "Reason for lockdown"),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("off")
-      .setDescription("Unlock all text channels (restores @everyone Send Messages)"),
+  .subcommand("off", "Unlock all text channels (restores @everyone Send Messages)")
+  .subcommand("channel", "Lock or unlock a specific channel", (s) =>
+    s
+      .channel("channel", "Channel to lock/unlock", {
+        required: true,
+        channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+      })
+      .string("action", "Lock or unlock", {
+        required: true,
+        choices: [
+          { name: "Lock", value: "lock" },
+          { name: "Unlock", value: "unlock" },
+        ],
+      })
+      .string("reason", "Reason"),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("channel")
-      .setDescription("Lock or unlock a specific channel")
-      .addChannelOption((o) =>
-        o
-          .setName("channel")
-          .setDescription("Channel to lock/unlock")
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-          .setRequired(true),
-      )
-      .addStringOption((o) =>
-        o
-          .setName("action")
-          .setDescription("Lock or unlock")
-          .setRequired(true)
-          .addChoices({ name: "Lock", value: "lock" }, { name: "Unlock", value: "unlock" }),
-      )
-      .addStringOption((o) => o.setName("reason").setDescription("Reason")),
-  );
+  .help({ hints: ["/mod help"] })
+  .run(async (c) => {
+    const { guild, interaction } = c;
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "Server only.", flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  await ctx.respond.defer({ visibility: "ephemeral" });
-  const sub = interaction.options.getSubcommand();
-
-  if (sub === "on") {
-    const reason = interaction.options.getString("reason") ?? "Server lockdown";
-    await setEveryoneSendMessages(interaction, ctx, false, reason);
-    return;
-  }
-
-  if (sub === "off") {
-    await setEveryoneSendMessages(interaction, ctx, null, "Lockdown lifted");
-    return;
-  }
-
-  if (sub === "channel") {
-    const channel = interaction.options.getChannel("channel", true) as TextChannel | NewsChannel;
-    const action = interaction.options.getString("action", true);
-    const reason =
-      interaction.options.getString("reason") ??
-      (action === "lock" ? "Channel locked" : "Channel unlocked");
-    const deny = action === "lock" ? false : null;
-
-    try {
-      await channel.permissionOverwrites.edit(
-        interaction.guild.roles.everyone,
-        {
-          SendMessages: deny,
-        },
-        { reason: `${reason} — by ${interaction.user.tag}` },
-      );
-    } catch {
-      await ctx.respond.send({ content: "Failed to update channel permissions." });
-      return;
+    if (c.subcommand === "on") {
+      const reason = c.options.reason ?? "Server lockdown";
+      return setEveryoneSendMessages(guild, interaction.user.tag, false, reason);
     }
 
-    const isLocking = action === "lock";
-    await ctx.respond.send(
-      v2Message(
+    if (c.subcommand === "off") {
+      return setEveryoneSendMessages(guild, interaction.user.tag, null, "Lockdown lifted");
+    }
+
+    if (c.subcommand === "channel") {
+      const channel = c.options.channel as TextChannel | NewsChannel;
+      const action = c.options.action;
+      const reason =
+        c.options.reason ?? (action === "lock" ? "Channel locked" : "Channel unlocked");
+      const deny = action === "lock" ? false : null;
+
+      try {
+        await channel.permissionOverwrites.edit(
+          guild.roles.everyone,
+          { SendMessages: deny },
+          { reason: `${reason} — by ${interaction.user.tag}` },
+        );
+      } catch {
+        return { content: "Failed to update channel permissions." };
+      }
+
+      const isLocking = action === "lock";
+      return v2Message(
         container(
           isLocking ? "danger" : "ok",
           text(
             `**${isLocking ? "🔒 Channel Locked" : "🔓 Channel Unlocked"}** — <#${channel.id}>\n**Reason:** ${reason}`,
           ),
         ),
-      ),
-    );
-  }
-}
+      );
+    }
+    return undefined;
+  });
 
 async function setEveryoneSendMessages(
-  interaction: ChatInputCommandInteraction,
-  ctx: Ctx,
+  guild: Guild,
+  userTag: string,
   value: boolean | null,
   reason: string,
-): Promise<void> {
-  const guild = interaction.guild!;
+) {
   const textChannels = guild.channels.cache.filter(
     (c) => c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement,
   );
@@ -121,7 +89,7 @@ async function setEveryoneSendMessages(
         await (c as TextChannel).permissionOverwrites.edit(
           guild.roles.everyone,
           { SendMessages: value },
-          { reason: `${reason} — by ${interaction.user.tag}` },
+          { reason: `${reason} — by ${userTag}` },
         );
         updated++;
       } catch {
@@ -132,21 +100,13 @@ async function setEveryoneSendMessages(
 
   const isLocking = value === false;
   const failedNote = failed > 0 ? `\n**Failed:** ${failed}` : "";
-  await ctx.respond.send(
-    v2Message(
-      container(
-        isLocking ? "danger" : "ok",
-        text(
-          `**${isLocking ? "🔒 Server Locked Down" : "🔓 Lockdown Lifted"}**\n` +
-            `**Channels updated:** ${updated}${failedNote}\n**Reason:** ${reason}`,
-        ),
+  return v2Message(
+    container(
+      isLocking ? "danger" : "ok",
+      text(
+        `**${isLocking ? "🔒 Server Locked Down" : "🔓 Lockdown Lifted"}**\n` +
+          `**Channels updated:** ${updated}${failedNote}\n**Reason:** ${reason}`,
       ),
     ),
   );
 }
-
-export default data
-  .help({ hints: ["/mod help"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );

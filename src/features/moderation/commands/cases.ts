@@ -1,74 +1,46 @@
-import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
 import { getCases } from "@/features/moderation/service";
 import { renderSanctionHistory } from "@/features/moderation/views";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { hasPermission } from "@/middleware/permissions";
 import { container, text, v2Message } from "@/ui/v2";
 
-const data = command("cases")
-  .setDescription("View the sanction history of a user on this server")
-  .addUserOption((opt) =>
-    opt.setName("user").setDescription("User to look up (defaults to yourself)").setRequired(false),
-  )
-  .setDMPermission(false);
+export default command("cases")
+  .description("View the sanction history of a user on this server")
+  .user("user", "User to look up (defaults to yourself)")
+  .guildOnly()
+  .defer("ephemeral")
+  .help({ hints: [] })
+  .run(async ({ guild, user, userId, options }) => {
+    const targetUser = options.user ?? user;
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  if (!interaction.guild) {
-    await ctx.respond.send({
-      content: "This command can only be used in a server.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const targetUser = interaction.options.getUser("user") ?? interaction.user;
-
-  await ctx.respond.defer({ visibility: "ephemeral" });
-
-  // Privacy gate: only allow viewing other users' history if caller has ModerateMembers
-  const isSelf = targetUser.id === interaction.user.id;
-  if (!isSelf) {
-    const callerMember = await interaction.guild.members
-      .fetch(interaction.user.id)
-      .catch(() => null);
-    if (!callerMember || !hasPermission(callerMember, PermissionFlagsBits.ModerateMembers)) {
-      await ctx.respond.send(
-        v2Message(
+    // Privacy gate: only allow viewing other users' history if caller has ModerateMembers
+    if (targetUser.id !== userId) {
+      const callerMember = await guild.members.fetch(userId).catch(() => null);
+      if (!callerMember || !hasPermission(callerMember, PermissionFlagsBits.ModerateMembers)) {
+        return v2Message(
           container(
             "danger",
             text("**Permission denied.** You can only view your own case history."),
           ),
-        ),
-      );
-      return;
+        );
+      }
     }
-  }
 
-  const result = await getCases(targetUser.id, interaction.guild.id);
+    const result = await getCases(targetUser.id, guild.id);
 
-  if (result.isErr()) {
-    await ctx.respond.send({ content: "Failed to fetch case history." });
-    return;
-  }
+    if (result.isErr()) {
+      return { content: "Failed to fetch case history." };
+    }
 
-  const history = result.unwrap();
+    const history = result.unwrap();
 
-  if (history.length === 0) {
-    await ctx.respond.send({
-      content: `**${targetUser.tag}** has no cases recorded on this server.`,
-    });
-    return;
-  }
+    if (history.length === 0) {
+      return { content: `**${targetUser.tag}** has no cases recorded on this server.` };
+    }
 
-  // Most recent first, cap at 15
-  const entries = [...history].reverse().slice(0, 15);
+    // Most recent first, cap at 15
+    const entries = [...history].reverse().slice(0, 15);
 
-  await ctx.respond.send(renderSanctionHistory(targetUser.tag, entries));
-}
-
-export default data
-  .help({ hints: [] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+    return renderSanctionHistory(targetUser.tag, entries);
+  });

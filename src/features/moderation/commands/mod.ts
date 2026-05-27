@@ -1,20 +1,6 @@
-import {
-  type ChatInputCommandInteraction,
-  type InteractionReplyOptions,
-  MessageFlags,
-} from "discord.js";
-import type { CommandContext } from "@/core/feature";
+import { MessageFlags } from "discord.js";
 import { command } from "@/framework";
 import { container, separator, text, v2Message } from "@/ui/v2";
-
-const data = command("mod")
-  .setDescription("Moderation help and workflow guidance")
-  .setDMPermission(false)
-  .addSubcommand((sub) =>
-    sub
-      .setName("help")
-      .setDescription("Show moderation setup, daily-use, automod, and safety guidance"),
-  );
 
 /**
  * Renders the moderation help card as a V2 message.
@@ -66,25 +52,12 @@ export function renderModHelp() {
   );
 }
 
-async function execute(
-  _interaction: ChatInputCommandInteraction,
-  ctx?: CommandContext,
-): Promise<void> {
-  const { components } = renderModHelp();
-  // Both IsComponentsV2 and Ephemeral are required: V2 flag to opt into the
-  // component layout, Ephemeral so the help card is only visible to the requester.
-  const payload: InteractionReplyOptions = {
-    components,
-    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
-  };
-  if (ctx) {
-    await ctx.respond.send(payload);
-    return;
-  }
-}
-
-export default data
+export default command("mod")
+  .description("Moderation help and workflow guidance")
+  .guildOnly()
+  .subcommand("help", "Show moderation setup, daily-use, automod, and safety guidance")
   .help({ hints: ["/modset status", "/modconfig modlog"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(() => {
+    const { components } = renderModHelp();
+    return { components, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral };
+  });
