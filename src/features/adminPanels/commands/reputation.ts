@@ -1,20 +1,14 @@
-import { type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
 import { command } from "@/framework";
 import { assertPanelPermission, openAdminPanel } from "../panels";
 
-const data = command("rep")
-  .setDescription("Open reputation configuration")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .setDMPermission(false)
-  .addSubcommand((sub) => sub.setName("panel").setDescription("Open the reputation panel"));
-
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!(await assertPanelPermission(interaction))) return;
-  await openAdminPanel(interaction, "reputation");
-}
-
-export default data
+export default command("rep")
+  .description("Open reputation configuration")
+  .defaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .dmPermission(false)
+  .subcommand("panel", "Open the reputation panel")
   .hidden()
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(async ({ interaction }) => {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "reputation");
+  });

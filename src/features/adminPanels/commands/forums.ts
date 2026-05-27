@@ -1,20 +1,14 @@
-import { type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
 import { command } from "@/framework";
 import { assertPanelPermission, openAdminPanel } from "../panels";
 
-const data = command("forums")
-  .setDescription("Open forum auto-reply configuration")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .setDMPermission(false)
-  .addSubcommand((sub) => sub.setName("panel").setDescription("Open the forums panel"));
-
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!(await assertPanelPermission(interaction))) return;
-  await openAdminPanel(interaction, "forums");
-}
-
-export default data
+export default command("forums")
+  .description("Open forum auto-reply configuration")
+  .defaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .dmPermission(false)
+  .subcommand("panel", "Open the forums panel")
   .hidden()
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(async ({ interaction }) => {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "forums");
+  });

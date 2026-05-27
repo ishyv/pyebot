@@ -1,20 +1,14 @@
-import { type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
+import { PermissionFlagsBits } from "discord.js";
 import { command } from "@/framework";
 import { assertPanelPermission, openAdminPanel } from "../panels";
 
-const data = command("channels")
-  .setDescription("Manage bot-related channels")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-  .setDMPermission(false)
-  .addSubcommand((sub) => sub.setName("panel").setDescription("Open the channels panel"));
-
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!(await assertPanelPermission(interaction))) return;
-  await openAdminPanel(interaction, "channels");
-}
-
-export default data
+export default command("channels")
+  .description("Manage bot-related channels")
+  .defaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+  .dmPermission(false)
+  .subcommand("panel", "Open the channels panel")
   .hidden()
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+  .run(async ({ interaction }) => {
+    if (!(await assertPanelPermission(interaction))) return;
+    await openAdminPanel(interaction, "channels");
+  });
