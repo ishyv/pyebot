@@ -66,26 +66,16 @@ export const contextSummarySchema = z.object({
 export type ContextSummary = z.infer<typeof contextSummarySchema>;
 
 const data = command("context")
-  .setDescription("Summarize recent channel conversation with AI")
-  .addStringOption((option) =>
-    option
-      .setName("period")
-      .setDescription("How far back to summarize")
-      .setRequired(false)
-      .addChoices(
-        ...CONTEXT_PERIODS.map((period) => ({ name: period.label, value: period.value })),
-      ),
-  );
+  .description("Summarize recent channel conversation with AI")
+  .string("period", "How far back to summarize", {
+    choices: CONTEXT_PERIODS.map((period) => ({ name: period.label, value: period.value })),
+  });
 
 export interface ContextCommandDeps {
   readonly collect?: typeof collectChannelContext;
   readonly summarize?: typeof summarizeChannelContext;
   readonly checkRateLimit?: typeof checkAiRateLimit;
   readonly now?: () => number;
-}
-
-async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await executeWithDeps(interaction, {});
 }
 
 export async function executeWithDeps(
@@ -316,8 +306,6 @@ async function safeEdit(interaction: ChatInputCommandInteraction, content: strin
   }
 }
 
-export default data
-  .help({ hints: ["/ai panel"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+export default data.help({ hints: ["/ai panel"] }).run(async ({ interaction }) => {
+  await executeWithDeps(interaction, {});
+});

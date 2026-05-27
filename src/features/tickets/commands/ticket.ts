@@ -1,10 +1,9 @@
-import { command } from "@/framework";
 /**
  * /ticket open [type] — Opens a ticket channel in the configured category.
  * /ticket close      — Closes the current ticket channel.
  */
 
-import { ChannelType, type ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
+import { ChannelType, PermissionFlagsBits } from "discord.js";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 import { TICKET_CLOSE_BUTTON_PREFIX } from "@/features/tickets/customIds";
@@ -16,94 +15,55 @@ import {
   type TicketError,
 } from "@/features/tickets/service";
 import { renderTicketWelcome } from "@/features/tickets/views";
-import type { Ctx } from "@/framework/types";
+import { command, type RunContext } from "@/framework";
 import { container, text, v2Message } from "@/ui/v2";
 
 const data = command("ticket")
-  .setDescription("Ticket system")
-  .addSubcommand((sub) =>
-    sub
-      .setName("open")
-      .setDescription("Open a support ticket")
-      .addStringOption((opt) =>
-        opt
-          .setName("type")
-          .setDescription("Ticket category")
-          .setRequired(true)
-          .addChoices(
-            ...TICKET_CATEGORIES.map((c) => ({ name: `${c.emoji} ${c.label}`, value: c.id })),
-          ),
-      ),
+  .description("Ticket system")
+  .subcommand("open", "Open a support ticket", (s) =>
+    s.string("type", "Ticket category", {
+      required: true,
+      choices: TICKET_CATEGORIES.map((c) => ({ name: `${c.emoji} ${c.label}`, value: c.id })),
+    }),
   )
-  .addSubcommand((sub) => sub.setName("close").setDescription("Close the current ticket channel"))
-  .addSubcommand((sub) =>
-    sub
-      .setName("setup")
-      .setDescription("Setup the ticket system (Admin only)")
-      .addChannelOption((opt) =>
-        opt
-          .setName("category")
-          .setDescription("The category channel for tickets")
-          .addChannelTypes(ChannelType.GuildCategory)
-          .setRequired(true),
-      ),
+  .subcommand("close", "Close the current ticket channel")
+  .subcommand("setup", "Setup the ticket system (Admin only)", (s) =>
+    s.channel("category", "The category channel for tickets", {
+      required: true,
+      channelTypes: [ChannelType.GuildCategory],
+    }),
   )
-  .addSubcommand((sub) =>
-    sub.setName("panel").setDescription("Open the tickets configuration panel"),
-  );
+  .subcommand("panel", "Open the tickets configuration panel")
+  .guildOnly();
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  const sub = interaction.options.getSubcommand();
+type TicketCtx = RunContext<typeof data>;
 
-  if (sub === "open") {
-    await handleOpen(interaction, ctx);
-  } else if (sub === "close") {
-    await handleClose(interaction, ctx);
-  } else if (sub === "setup") {
-    await handleSetup(interaction, ctx);
-  } else if (sub === "panel") {
-    if (!(await assertPanelPermission(interaction))) return;
-    await openAdminPanel(interaction, "tickets");
-  }
-}
+async function handleOpen(c: Extract<TicketCtx, { subcommand: "open" }>) {
+  await c.ctx.respond.defer({ visibility: "ephemeral" });
 
-async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
-
-  const guild = interaction.guild;
-  if (!guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  const typeId = interaction.options.getString("type", true);
-  const category = TICKET_CATEGORIES.find((c) => c.id === typeId);
+  const guild = c.guild;
+  const typeId = c.options.type;
+  const category = TICKET_CATEGORIES.find((cat) => cat.id === typeId);
   if (!category) {
-    await ctx.respond.send({ content: "Invalid ticket type." });
-    return;
+    return { content: "Invalid ticket type." };
   }
 
   const guildResult = await getGuild(guild.id);
   if (guildResult.isErr()) {
-    await ctx.respond.send({ content: "Failed to load guild configuration." });
-    return;
+    return { content: "Failed to load guild configuration." };
   }
 
   const guildDoc = guildResult.unwrap();
   const categoryId = guildDoc?.channels?.ticketCategoryId ?? null;
   if (!categoryId) {
-    await ctx.respond.send({
+    return {
       content: "No ticket category is configured. Please ask an administrator to set it up.",
-    });
-    return;
+    };
   }
 
-  const channelName = makeTicketChannelName(interaction.user.username);
+  const channelName = makeTicketChannelName(c.user.username);
 
-  const result = await openTicket(ctx, guild, interaction.user.id, {
-    categoryId,
-    channelName,
-  });
+  const result = await openTicket(c.ctx, guild, c.userId, { categoryId, channelName });
 
   if (result.isErr()) {
     const err = result.error as TicketError;
@@ -111,8 +71,7 @@ async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): P
       err.code === "LIMIT_REACHED"
         ? "You already have an open ticket. Please close it before opening a new one."
         : "Failed to open ticket. Please try again later.";
-    await ctx.respond.send({ content: msg });
-    return;
+    return { content: msg };
   }
 
   const { channelId } = result.unwrap();
@@ -128,7 +87,7 @@ async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): P
         renderTicketWelcome({
           categoryEmoji: category.emoji,
           categoryLabel: category.label,
-          userId: interaction.user.id,
+          userId: c.userId,
           closeCustomId: `${TICKET_CLOSE_BUTTON_PREFIX}${channelId}`,
         }),
       );
@@ -137,23 +96,21 @@ async function handleOpen(interaction: ChatInputCommandInteraction, ctx: Ctx): P
     // Non-fatal — channel created but couldn't send welcome message
   }
 
-  await ctx.respond.send({ content: `✅ Ticket opened! <#${channelId}>` });
+  return { content: `✅ Ticket opened! <#${channelId}>` };
 }
 
-async function handleClose(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+async function handleClose(c: Extract<TicketCtx, { subcommand: "close" }>) {
+  await c.ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guild = interaction.guild;
-  const channel = interaction.channel;
-  if (!guild || !channel) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
+  const guild = c.guild;
+  const channel = c.interaction.channel;
+  if (!channel) {
+    return { content: "This command can only be used in a server." };
   }
 
   // Only allow closing from the ticket channel itself, or by staff with ManageChannels
-  const member = interaction.member;
+  const member = c.member;
   const isStaff =
-    member &&
     typeof member.permissions !== "string" &&
     member.permissions.has(PermissionFlagsBits.ManageChannels);
 
@@ -161,21 +118,17 @@ async function handleClose(interaction: ChatInputCommandInteraction, ctx: Ctx): 
   const isTicketChannel = channelName.startsWith("ticket-");
 
   if (!isTicketChannel) {
-    await ctx.respond.send({ content: "This command must be used inside a ticket channel." });
-    return;
+    return { content: "This command must be used inside a ticket channel." };
   }
 
   if (!isStaff) {
-    // Allow if user is the ticket opener — session lookup
-    // Best-effort: if we can't confirm ownership, block non-staff
-    await ctx.respond.send({
+    return {
       content:
         "Only staff can close tickets from this command. Use the Close Ticket button instead.",
-    });
-    return;
+    };
   }
 
-  await ctx.respond.send(
+  await c.ctx.respond.send(
     v2Message(
       container(
         "warn",
@@ -186,58 +139,49 @@ async function handleClose(interaction: ChatInputCommandInteraction, ctx: Ctx): 
     ),
   );
 
-  await closeTicket(ctx, guild, channel.id);
+  await closeTicket(c.ctx, guild, channel.id);
+  return undefined;
 }
 
-async function handleSetup(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+async function handleSetup(c: Extract<TicketCtx, { subcommand: "setup" }>) {
+  await c.ctx.respond.defer({ visibility: "ephemeral" });
 
-  const guild = interaction.guild;
-  if (!guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
-
-  const member = interaction.member;
+  const member = c.member;
   const isAdmin =
-    member &&
     typeof member.permissions !== "string" &&
     member.permissions.has(PermissionFlagsBits.Administrator);
 
   if (!isAdmin) {
-    await ctx.respond.send({ content: "Only administrators can setup the ticket system." });
-    return;
+    return { content: "Only administrators can setup the ticket system." };
   }
 
-  const category = interaction.options.getChannel("category", true);
+  const category = c.options.category;
 
   const updateResult = await updateGuildPaths(
-    guild.id,
+    c.guild.id,
     { "channels.ticketCategoryId": category.id },
     { upsert: true },
   );
 
   if (updateResult.isErr()) {
-    await ctx.respond.send({
-      content: `Failed to save configuration: ${updateResult.error.message}`,
-    });
-    return;
+    return { content: `Failed to save configuration: ${updateResult.error.message}` };
   }
 
-  await ctx.respond.send(
-    v2Message(
-      container(
-        "ok",
-        text(
-          `**✅ Ticket System Configured**\nTickets will now be created in the <#${category.id}> category.\n-# Use /ticket open to test the system.`,
-        ),
+  return v2Message(
+    container(
+      "ok",
+      text(
+        `**✅ Ticket System Configured**\nTickets will now be created in the <#${category.id}> category.\n-# Use /ticket open to test the system.`,
       ),
     ),
   );
 }
 
-export default data
-  .help({ hints: [] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+export default data.help({ hints: [] }).run(async (c) => {
+  if (c.subcommand === "open") return handleOpen(c);
+  if (c.subcommand === "close") return handleClose(c);
+  if (c.subcommand === "setup") return handleSetup(c);
+  if (!(await assertPanelPermission(c.interaction))) return undefined;
+  await openAdminPanel(c.interaction, "tickets");
+  return undefined;
+});

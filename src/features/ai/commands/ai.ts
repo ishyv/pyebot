@@ -1,16 +1,15 @@
-import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 /**
  * /ai set-provider <provider> — Set the AI provider for this guild.
  * /ai set-model <model>       — Set the AI model for this guild.
  * /ai clear-memory            — Clear your personal conversation memory.
  */
 
-import { type ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from "discord.js";
+import { MessageFlags, PermissionFlagsBits } from "discord.js";
 import { updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
 import { aiConfig } from "@/features/ai/config";
 import { clearMemory } from "@/features/ai/service";
+import { command, type RunContext } from "@/framework";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
 // Flatten all model names for the set-model command choices
@@ -23,163 +22,121 @@ const DEFAULT_OPENAI_MODEL = aiConfig.providers.openai.low;
 const DEFAULT_GEMINI_MODEL = aiConfig.providers.google.low;
 
 const data = command("ai")
-  .setDescription("AI feature configuration")
-  .addSubcommand((sub) =>
-    sub
-      .setName("set-provider")
-      .setDescription("Set the AI provider for this server (admin only)")
-      .addStringOption((o) =>
-        o
-          .setName("provider")
-          .setDescription("AI provider")
-          .setRequired(true)
-          .addChoices(
-            { name: "Gemini (Google)", value: "gemini" },
-            { name: "OpenAI (GPT)", value: "openai" },
-          ),
-      ),
+  .description("AI feature configuration")
+  .subcommand("set-provider", "Set the AI provider for this server (admin only)", (s) =>
+    s.string("provider", "AI provider", {
+      required: true,
+      choices: [
+        { name: "Gemini (Google)", value: "gemini" },
+        { name: "OpenAI (GPT)", value: "openai" },
+      ],
+    }),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("set-model")
-      .setDescription("Set the AI model for this server (admin only)")
-      .addStringOption((o) =>
-        o
-          .setName("model")
-          .setDescription("Model name")
-          .setRequired(true)
-          .addChoices(...[...ALL_MODELS].slice(0, 25).map((m) => ({ name: m, value: m }))),
-      ),
+  .subcommand("set-model", "Set the AI model for this server (admin only)", (s) =>
+    s.string("model", "Model name", {
+      required: true,
+      choices: [...ALL_MODELS].slice(0, 25).map((m) => ({ name: m, value: m })),
+    }),
   )
-  .addSubcommand((sub) =>
-    sub.setName("clear-memory").setDescription("Clear your personal AI conversation history"),
-  )
-  .addSubcommand((sub) => sub.setName("panel").setDescription("Open the AI configuration panel"));
+  .subcommand("clear-memory", "Clear your personal AI conversation history")
+  .subcommand("panel", "Open the AI configuration panel");
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  const sub = interaction.options.getSubcommand();
+type AiCtx = RunContext<typeof data>;
 
-  if (sub === "set-provider") {
-    await handleSetProvider(interaction, ctx);
-  } else if (sub === "set-model") {
-    await handleSetModel(interaction, ctx);
-  } else if (sub === "clear-memory") {
-    await handleClearMemory(interaction, ctx);
-  } else if (sub === "panel") {
-    if (!(await assertPanelPermission(interaction))) return;
-    await openAdminPanel(interaction, "ai");
-  }
+function isAdmin(member: AiCtx["member"]): boolean {
+  return (
+    member !== null &&
+    typeof member.permissions !== "string" &&
+    member.permissions.has(PermissionFlagsBits.ManageGuild)
+  );
 }
 
-async function handleSetProvider(
-  interaction: ChatInputCommandInteraction,
-  ctx: Ctx,
-): Promise<void> {
-  const member = interaction.member;
-  const isAdmin =
-    member &&
-    typeof member.permissions !== "string" &&
-    member.permissions.has(PermissionFlagsBits.ManageGuild);
+function ephemeralV2(body: ReturnType<typeof container>) {
+  const { components } = v2Message(body);
+  return { components, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral };
+}
 
-  if (!isAdmin) {
-    await ctx.respond.send({
-      ...v2Message(
-        container("danger", text("## Permission Denied\nOnly admins can change the AI provider.")),
-      ),
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+async function handleSetProvider(c: Extract<AiCtx, { subcommand: "set-provider" }>) {
+  if (!isAdmin(c.member)) {
+    return ephemeralV2(
+      container("danger", text("## Permission Denied\nOnly admins can change the AI provider.")),
+    );
   }
 
-  await ctx.respond.defer({ visibility: "ephemeral" });
+  if (!c.guildId) {
+    return ephemeralV2(container("danger", text("## Server Only\nUse this command in a server.")));
+  }
 
-  const provider = interaction.options.getString("provider", true);
+  await c.ctx.respond.defer({ visibility: "ephemeral" });
+
+  const provider = c.options.provider;
   const defaultModel = provider === "openai" ? DEFAULT_OPENAI_MODEL : DEFAULT_GEMINI_MODEL;
 
-  const result = await updateGuildPaths(interaction.guildId!, {
+  const result = await updateGuildPaths(c.guildId, {
     "ai.provider": provider,
     "ai.model": defaultModel,
   });
 
   if (result.isErr()) {
-    await ctx.respond.send(
-      v2Message(container("danger", text("## Failed\nCould not update AI provider."))),
-    );
-    return;
+    return v2Message(container("danger", text("## Failed\nCould not update AI provider.")));
   }
 
-  await ctx.respond.send(
-    v2Message(
-      container(
-        "info",
-        text("## AI Provider Updated"),
-        separator("sm"),
-        text(`**Provider:** ${provider}\n**Default Model:** \`${defaultModel}\``),
-      ),
+  return v2Message(
+    container(
+      "info",
+      text("## AI Provider Updated"),
+      separator("sm"),
+      text(`**Provider:** ${provider}\n**Default Model:** \`${defaultModel}\``),
     ),
   );
 }
 
-async function handleSetModel(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  const member = interaction.member;
-  const isAdmin =
-    member &&
-    typeof member.permissions !== "string" &&
-    member.permissions.has(PermissionFlagsBits.ManageGuild);
-
-  if (!isAdmin) {
-    await ctx.respond.send({
-      ...v2Message(
-        container("danger", text("## Permission Denied\nOnly admins can change the AI model.")),
-      ),
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+async function handleSetModel(c: Extract<AiCtx, { subcommand: "set-model" }>) {
+  if (!isAdmin(c.member)) {
+    return ephemeralV2(
+      container("danger", text("## Permission Denied\nOnly admins can change the AI model.")),
+    );
   }
 
-  await ctx.respond.defer({ visibility: "ephemeral" });
+  if (!c.guildId) {
+    return ephemeralV2(container("danger", text("## Server Only\nUse this command in a server.")));
+  }
 
-  const model = interaction.options.getString("model", true);
+  await c.ctx.respond.defer({ visibility: "ephemeral" });
 
-  const result = await updateGuildPaths(interaction.guildId!, { "ai.model": model });
+  const model = c.options.model;
+
+  const result = await updateGuildPaths(c.guildId, { "ai.model": model });
 
   if (result.isErr()) {
-    await ctx.respond.send(
-      v2Message(container("danger", text("## Failed\nCould not update AI model."))),
-    );
-    return;
+    return v2Message(container("danger", text("## Failed\nCould not update AI model.")));
   }
 
-  await ctx.respond.send(
-    v2Message(
-      container(
-        "info",
-        text("## AI Model Updated"),
-        separator("sm"),
-        text(`**Model:** \`${model}\``),
-      ),
+  return v2Message(
+    container(
+      "info",
+      text("## AI Model Updated"),
+      separator("sm"),
+      text(`**Model:** \`${model}\``),
     ),
   );
 }
 
-async function handleClearMemory(
-  interaction: ChatInputCommandInteraction,
-  ctx: Ctx,
-): Promise<void> {
-  clearMemory(interaction.user.id);
-  await ctx.respond.send({
-    ...v2Message(
-      container(
-        "ok",
-        text("## Memory Cleared\nYour AI conversation history has been cleared. Fresh start!"),
-      ),
+function handleClearMemory(c: Extract<AiCtx, { subcommand: "clear-memory" }>) {
+  clearMemory(c.userId);
+  return ephemeralV2(
+    container(
+      "ok",
+      text("## Memory Cleared\nYour AI conversation history has been cleared. Fresh start!"),
     ),
-    flags: MessageFlags.Ephemeral,
-  });
+  );
 }
 
-export default data
-  .help({ hints: ["/context"] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+export default data.help({ hints: ["/context"] }).run(async (c) => {
+  if (c.subcommand === "set-provider") return handleSetProvider(c);
+  if (c.subcommand === "set-model") return handleSetModel(c);
+  if (c.subcommand === "clear-memory") return handleClearMemory(c);
+  if (!(await assertPanelPermission(c.interaction))) return undefined;
+  await openAdminPanel(c.interaction, "ai");
+  return undefined;
+});

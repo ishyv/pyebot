@@ -1,6 +1,5 @@
-import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
+import type { AutocompleteInteraction } from "discord.js";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { type ContainerChild, container, separator, text, v2Message } from "@/ui/v2";
 import {
   getCommandFeatures,
@@ -9,22 +8,12 @@ import {
   getHints,
 } from "@/utils/command-registry";
 
-const data = command("help")
-  .setDescription("Browse commands by category or get help for a specific command")
-  .addStringOption((opt) =>
-    opt
-      .setName("topic")
-      .setDescription("A category (rpg, economy, moderation, utility) or command name")
-      .setRequired(false)
-      .setAutocomplete(true),
-  );
-
-async function autocomplete(interaction: AutocompleteInteraction, _ctx: Ctx): Promise<void> {
+async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
 
   const features = getCommandFeatures();
   const featureIds = features.map((entry) => entry.feature.id);
-  const commandNames = features.flatMap((entry) => entry.commands.map((command) => command.name));
+  const commandNames = features.flatMap((entry) => entry.commands.map((cmd) => cmd.name));
 
   const choices = [...featureIds, ...commandNames]
     .filter((entry) => entry.toLowerCase().startsWith(focused))
@@ -34,19 +23,24 @@ async function autocomplete(interaction: AutocompleteInteraction, _ctx: Ctx): Pr
   await interaction.respond(choices);
 }
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+export default command("help")
+  .description("Browse commands by category or get help for a specific command")
+  .string("topic", "A category (rpg, economy, moderation, utility) or command name", {
+    autocomplete: true,
+  })
+  .defer("ephemeral")
+  .help({ hints: [] })
+  .autocomplete(autocomplete)
+  .run(async ({ options }) => {
+    const topic = options.topic;
 
-  const topic = interaction.options.getString("topic");
+    // Level 1 — no argument: category overview
+    if (!topic) {
+      const categoryLines = getCommandFeatures()
+        .map((entry) => `**${entry.feature.name}**\n${entry.feature.description}`)
+        .join("\n\n");
 
-  // Level 1 — no argument: category overview
-  if (!topic) {
-    const categoryLines = getCommandFeatures()
-      .map((entry) => `**${entry.feature.name}**\n${entry.feature.description}`)
-      .join("\n\n");
-
-    await ctx.respond.send(
-      v2Message(
+      return v2Message(
         container(
           "info",
           text(
@@ -57,22 +51,19 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
           separator("sm"),
           text("-# /help rpg • /help economy • /help moderation"),
         ),
-      ),
-    );
-    return;
-  }
+      );
+    }
 
-  // Level 2 — category arg
-  const feature = getCommandFeatures().find((entry) => entry.feature.id === topic);
-  if (feature) {
-    const commands = getCommandsForFeature(feature.feature.id);
+    // Level 2 — category arg
+    const feature = getCommandFeatures().find((entry) => entry.feature.id === topic);
+    if (feature) {
+      const commands = getCommandsForFeature(feature.feature.id);
 
-    const commandLines = commands
-      .map(({ name, meta }) => `**/${name}** — ${meta.description}`)
-      .join("\n");
+      const commandLines = commands
+        .map(({ name, meta }) => `**/${name}** — ${meta.description}`)
+        .join("\n");
 
-    await ctx.respond.send(
-      v2Message(
+      return v2Message(
         container(
           "info",
           text(`## ${feature.feature.name} Commands\n${feature.feature.description}`),
@@ -81,56 +72,44 @@ async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Prom
           separator("sm"),
           text("-# Use /help <command> for more details"),
         ),
-      ),
-    );
-    return;
-  }
-
-  // Level 3 — command arg
-  const meta = getCommandMeta(topic);
-  if (meta) {
-    const parts: string[] = [`## /${topic}\n${meta.description}`];
-
-    if (meta.requires) {
-      parts.push(`\n**Requires:** ${meta.requires}`);
+      );
     }
 
-    if (meta.args && meta.args.length > 0) {
-      parts.push("\n**Arguments:**");
-      for (const arg of meta.args) {
-        const required = arg.required ? " *(required)*" : "";
-        parts.push(`• **${arg.name}**${required} — ${arg.description}`);
+    // Level 3 — command arg
+    const meta = getCommandMeta(topic);
+    if (meta) {
+      const parts: string[] = [`## /${topic}\n${meta.description}`];
+
+      if (meta.requires) {
+        parts.push(`\n**Requires:** ${meta.requires}`);
       }
+
+      if (meta.args && meta.args.length > 0) {
+        parts.push("\n**Arguments:**");
+        for (const arg of meta.args) {
+          const required = arg.required ? " *(required)*" : "";
+          parts.push(`• **${arg.name}**${required} — ${arg.description}`);
+        }
+      }
+
+      if (meta.hints.length > 0) {
+        parts.push(`\n**See Also:** ${meta.hints.join(" • ")}`);
+      }
+
+      const footer = getHints(topic);
+      const children: ContainerChild[] = [text(parts.join("\n"))];
+      if (footer) {
+        children.push(separator("sm"), text(`-# ${footer}`));
+      }
+
+      return v2Message(container("info", ...children));
     }
 
-    if (meta.hints.length > 0) {
-      parts.push(`\n**See Also:** ${meta.hints.join(" • ")}`);
-    }
-
-    const footer = getHints(topic);
-    const children: ContainerChild[] = [text(parts.join("\n"))];
-    if (footer) {
-      children.push(separator("sm"), text(`-# ${footer}`));
-    }
-
-    await ctx.respond.send(v2Message(container("info", ...children)));
-    return;
-  }
-
-  // Unknown topic
-  await ctx.respond.send(
-    v2Message(
+    // Unknown topic
+    return v2Message(
       container(
         "danger",
         text(`Unknown command or category: \`${topic}\`.\nUse \`/help\` to browse all categories.`),
       ),
-    ),
-  );
-}
-
-export default data
-  .help({ hints: [] })
-  .autocomplete(autocomplete)
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+    );
+  });
