@@ -1,28 +1,9 @@
-import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
+import type { AutocompleteInteraction } from "discord.js";
 import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
 import { craft } from "@/features/rpg/crafting";
 import { command } from "@/framework";
-import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
-
-const data = command("craft")
-  .setDescription("Craft an item using materials from your inventory")
-  .addStringOption((opt) =>
-    opt
-      .setName("item")
-      .setDescription("The item ID to craft (e.g. stone_pickaxe)")
-      .setRequired(true)
-      .setAutocomplete(true),
-  )
-  .addIntegerOption((opt) =>
-    opt
-      .setName("quantity")
-      .setDescription("How many to craft (default: 1)")
-      .setRequired(false)
-      .setMinValue(1)
-      .setMaxValue(99),
-  );
 
 async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
   const focused = interaction.options.getFocused().toLowerCase();
@@ -33,61 +14,52 @@ async function autocomplete(interaction: AutocompleteInteraction): Promise<void>
   await interaction.respond(choices);
 }
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
+export default command("craft")
+  .description("Craft an item using materials from your inventory")
+  .string("item", "The item ID to craft (e.g. stone_pickaxe)", {
+    required: true,
+    autocomplete: true,
+  })
+  .integer("quantity", "How many to craft (default: 1)", { min: 1, max: 99 })
+  .guildOnly()
+  .defer("ephemeral")
+  .help({ hints: ["/equip", "/inventory", "/expedition"] })
+  .autocomplete(autocomplete)
+  .run(async ({ ctx, userId, options }) => {
+    const itemId = options.item;
+    const quantity = options.quantity ?? 1;
 
-  if (!interaction.guild) {
-    await ctx.respond.send({ content: "This command can only be used in a server." });
-    return;
-  }
+    const result = await craft(ctx, userId, itemId, quantity);
 
-  const itemId = interaction.options.getString("item", true);
-  const quantity = interaction.options.getInteger("quantity") ?? 1;
-  const userId = interaction.user.id;
+    if (result.isErr()) {
+      const err = result.error;
+      let description: string;
 
-  const result = await craft(ctx, userId, itemId, quantity);
+      if (err.code === "RECIPE_NOT_FOUND") {
+        description = `No recipe for \`${itemId}\`. Use \`/help craft\` to see craftable items.`;
+      } else if (err.code === "INSUFFICIENT_MATERIALS") {
+        description = err.message;
+      } else if (err.code === "UPDATE_FAILED") {
+        description = "Something went wrong saving your inventory. Please try again.";
+      } else {
+        description = err.message;
+      }
 
-  if (result.isErr()) {
-    const err = result.error;
-    let description: string;
-
-    if (err.code === "RECIPE_NOT_FOUND") {
-      description = `No recipe for \`${itemId}\`. Use \`/help craft\` to see craftable items.`;
-    } else if (err.code === "INSUFFICIENT_MATERIALS") {
-      description = err.message;
-    } else if (err.code === "UPDATE_FAILED") {
-      description = "Something went wrong saving your inventory. Please try again.";
-    } else {
-      description = err.message;
+      return v2Message(container("danger", text(`${description}\n-# ${getHints("craft")}`)));
     }
 
-    await ctx.respond.send(
-      v2Message(container("danger", text(`${description}\n-# ${getHints("craft")}`))),
-    );
-    return;
-  }
+    const { materialsConsumed } = result.unwrap();
 
-  const { materialsConsumed } = result.unwrap();
+    const materialsText = Object.entries(materialsConsumed)
+      .map(([material, amount]) => `${amount}x ${material}`)
+      .join("\n");
 
-  const materialsText = Object.entries(materialsConsumed)
-    .map(([material, amount]) => `${amount}x ${material}`)
-    .join("\n");
-
-  await ctx.respond.send(
-    v2Message(
+    return v2Message(
       container(
         "ok",
         text(`## Crafted!\nYou crafted ${quantity}x \`${itemId}\``),
         separator("sm"),
         text(`**Materials Used**\n${materialsText || "None"}\n-# ${getHints("craft")}`),
       ),
-    ),
-  );
-}
-
-export default data
-  .help({ hints: ["/equip", "/inventory", "/expedition"] })
-  .autocomplete(autocomplete)
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+    );
+  });
