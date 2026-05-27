@@ -85,7 +85,8 @@ function isCommandModule(mod: unknown): mod is CommandModule {
     typeof (mod as { data: { toJSON?: unknown } }).data.toJSON === "function" &&
     (typeof (mod as { help?: unknown }).help === "object" ||
       (mod as { help?: unknown }).help === false) &&
-    typeof (mod as { execute?: unknown }).execute === "function"
+    typeof (mod as { execute?: unknown }).execute === "function" &&
+    (mod as { contract?: { dsl?: unknown } }).contract?.dsl === true
   );
 }
 

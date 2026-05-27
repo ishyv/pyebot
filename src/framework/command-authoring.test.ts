@@ -20,13 +20,29 @@ async function commandFiles(dir = join(process.cwd(), "src", "features")): Promi
   return files;
 }
 
+/** Tokens that are unambiguous signals of an un-migrated command file. */
+const BANNED_PATTERNS: Array<{ token: string; description: string }> = [
+  { token: "defineCommand", description: "legacy defineCommand helper" },
+  { token: "SlashCommandBuilder", description: "raw SlashCommandBuilder import" },
+  {
+    token: ".run(({ interaction, ctx }) =>",
+    description: "old adapter .run shape — use canonical async (c) => handler",
+  },
+  {
+    token: "async function execute(interaction",
+    description: "old execute wrapper — inline handler into .run()",
+  },
+];
+
 describe("feature command authoring", () => {
   it("uses the framework command DSL instead of legacy command builders", async () => {
     const offenders: string[] = [];
     for (const file of await commandFiles()) {
       const text = await readFile(file, "utf8");
-      if (text.includes("defineCommand") || text.includes("SlashCommandBuilder")) {
-        offenders.push(file.replace(process.cwd(), "."));
+      for (const { token, description } of BANNED_PATTERNS) {
+        if (text.includes(token)) {
+          offenders.push(`${file.replace(process.cwd(), ".")} — ${description}`);
+        }
       }
     }
 

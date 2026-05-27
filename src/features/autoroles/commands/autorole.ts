@@ -19,156 +19,81 @@ import type { Ctx } from "@/framework/types";
 import { container, section, text, v2Message } from "@/ui/v2";
 
 const data = command("autorole")
-  .setDescription("Manage automatic role assignment rules")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-  .setDMPermission(false)
-  .addSubcommand((sub) =>
-    sub
-      .setName("create")
-      .setDescription("Create a rule")
-      .addStringOption((o) =>
-        o.setName("name").setDescription("Unique rule name").setRequired(true),
+  .description("Manage automatic role assignment rules")
+  .defaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+  .guildOnly()
+  .defer("ephemeral")
+  .subcommand("create", "Create a rule", (s) =>
+    s
+      .string("name", "Unique rule name", { required: true })
+      .string("trigger", "When to grant the role", {
+        required: true,
+        choices: [
+          { name: "On Join", value: "onJoin" },
+          { name: "On Reaction", value: "onReact" },
+          { name: "Message Contains", value: "messageContains" },
+        ],
+      })
+      .role("role", "Role to grant", { required: true })
+      .string("message_id", "Message ID for reactions")
+      .string("emoji", "Emoji for reactions, or *")
+      .string("keywords", "Comma-separated keywords")
+      .string("duration", "Optional duration: 30m, 2h, 7d"),
+  )
+  .subcommand("delete", "Delete a rule", (s) => s.string("name", "Rule name", { required: true }))
+  .subcommand("list", "List rules")
+  .subcommand("enable", "Enable a rule", (s) => s.string("name", "Rule name", { required: true }))
+  .subcommand("disable", "Disable a rule", (s) => s.string("name", "Rule name", { required: true }))
+  .group("prompt", "Post a self-role prompt and create its rule", (g) =>
+    g
+      .subcommand("reaction", "Post a reaction-role prompt", (s) =>
+        s
+          .channel("channel", "Channel to post in", {
+            required: true,
+            channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+          })
+          .role("role", "Role to grant", { required: true })
+          .string("emoji", "Reaction emoji", { required: true })
+          .string("title", "Prompt title")
+          .string("description", "Prompt text")
+          .string("duration", "Optional duration: 30m, 2h, 7d")
+          .string("name", "Rule name"),
       )
-      .addStringOption((o) =>
-        o
-          .setName("trigger")
-          .setDescription("When to grant the role")
-          .setRequired(true)
-          .addChoices(
-            { name: "On Join", value: "onJoin" },
-            { name: "On Reaction", value: "onReact" },
-            { name: "Message Contains", value: "messageContains" },
-          ),
-      )
-      .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
-      .addStringOption((o) => o.setName("message_id").setDescription("Message ID for reactions"))
-      .addStringOption((o) => o.setName("emoji").setDescription("Emoji for reactions, or *"))
-      .addStringOption((o) => o.setName("keywords").setDescription("Comma-separated keywords"))
-      .addStringOption((o) =>
-        o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
+      .subcommand("button", "Post a button self-role prompt", (s) =>
+        s
+          .channel("channel", "Channel to post in", {
+            required: true,
+            channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+          })
+          .role("role", "Role to toggle", { required: true })
+          .string("label", "Button label")
+          .string("title", "Prompt title")
+          .string("description", "Prompt text")
+          .string("duration", "Optional duration: 30m, 2h, 7d")
+          .string("name", "Rule name"),
       ),
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("delete")
-      .setDescription("Delete a rule")
-      .addStringOption((o) => o.setName("name").setDescription("Rule name").setRequired(true)),
-  )
-  .addSubcommand((sub) => sub.setName("list").setDescription("List rules"))
-  .addSubcommand((sub) =>
-    sub
-      .setName("enable")
-      .setDescription("Enable a rule")
-      .addStringOption((o) => o.setName("name").setDescription("Rule name").setRequired(true)),
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName("disable")
-      .setDescription("Disable a rule")
-      .addStringOption((o) => o.setName("name").setDescription("Rule name").setRequired(true)),
-  )
-  .addSubcommandGroup((group) =>
-    group
-      .setName("prompt")
-      .setDescription("Post a self-role prompt and create its rule")
-      .addSubcommand((sub) =>
-        sub
-          .setName("reaction")
-          .setDescription("Post a reaction-role prompt")
-          .addChannelOption((o) =>
-            o
-              .setName("channel")
-              .setDescription("Channel to post in")
-              .setRequired(true)
-              .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
-          )
-          .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
-          .addStringOption((o) =>
-            o.setName("emoji").setDescription("Reaction emoji").setRequired(true),
-          )
-          .addStringOption((o) => o.setName("title").setDescription("Prompt title"))
-          .addStringOption((o) => o.setName("description").setDescription("Prompt text"))
-          .addStringOption((o) =>
-            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
-          )
-          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
+  .group("attach", "Attach a rule to an existing prompt message", (g) =>
+    g
+      .subcommand("reaction", "Attach a reaction-role rule", (s) =>
+        s
+          .string("message_id", "Message ID", { required: true })
+          .role("role", "Role to grant", { required: true })
+          .string("emoji", "Reaction emoji", { required: true })
+          .string("duration", "Optional duration: 30m, 2h, 7d")
+          .string("name", "Rule name"),
       )
-      .addSubcommand((sub) =>
-        sub
-          .setName("button")
-          .setDescription("Post a button self-role prompt")
-          .addChannelOption((o) =>
-            o
-              .setName("channel")
-              .setDescription("Channel to post in")
-              .setRequired(true)
-              .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
-          )
-          .addRoleOption((o) =>
-            o.setName("role").setDescription("Role to toggle").setRequired(true),
-          )
-          .addStringOption((o) => o.setName("label").setDescription("Button label"))
-          .addStringOption((o) => o.setName("title").setDescription("Prompt title"))
-          .addStringOption((o) => o.setName("description").setDescription("Prompt text"))
-          .addStringOption((o) =>
-            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
-          )
-          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
-      ),
-  )
-  .addSubcommandGroup((group) =>
-    group
-      .setName("attach")
-      .setDescription("Attach a rule to an existing prompt message")
-      .addSubcommand((sub) =>
-        sub
-          .setName("reaction")
-          .setDescription("Attach a reaction-role rule")
-          .addStringOption((o) =>
-            o.setName("message_id").setDescription("Message ID").setRequired(true),
-          )
-          .addRoleOption((o) => o.setName("role").setDescription("Role to grant").setRequired(true))
-          .addStringOption((o) =>
-            o.setName("emoji").setDescription("Reaction emoji").setRequired(true),
-          )
-          .addStringOption((o) =>
-            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
-          )
-          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName("button")
-          .setDescription("Attach a button self-role rule")
-          .addStringOption((o) =>
-            o.setName("message_id").setDescription("Message ID").setRequired(true),
-          )
-          .addRoleOption((o) =>
-            o.setName("role").setDescription("Role to toggle").setRequired(true),
-          )
-          .addStringOption((o) => o.setName("label").setDescription("Button label"))
-          .addStringOption((o) =>
-            o.setName("duration").setDescription("Optional duration: 30m, 2h, 7d"),
-          )
-          .addStringOption((o) => o.setName("name").setDescription("Rule name")),
+      .subcommand("button", "Attach a button self-role rule", (s) =>
+        s
+          .string("message_id", "Message ID", { required: true })
+          .role("role", "Role to toggle", { required: true })
+          .string("label", "Button label")
+          .string("duration", "Optional duration: 30m, 2h, 7d")
+          .string("name", "Rule name"),
       ),
   );
 
-async function execute(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  const group = interaction.options.getSubcommandGroup(false);
-  const sub = interaction.options.getSubcommand();
-
-  if (group === "prompt") return handlePrompt(interaction, ctx, sub);
-  if (group === "attach") return handleAttach(interaction, ctx, sub);
-  if (sub === "create") return handleCreate(interaction, ctx);
-  if (sub === "delete") return handleDelete(interaction, ctx);
-  if (sub === "list") return handleList(interaction, ctx);
-  if (sub === "enable") return handleToggle(interaction, ctx, true);
-  if (sub === "disable") return handleToggle(interaction, ctx, false);
-}
-
 async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
   const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
@@ -214,7 +139,6 @@ async function handlePrompt(
   ctx: Ctx,
   sub: string,
 ): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
   const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
@@ -238,8 +162,8 @@ async function handlePrompt(
    * UI. The `components` array is cast at the send/edit boundary because discord.js
    * types don't yet include ContainerBuilder in MessageCreateOptions/MessageEditOptions.
    */
-  // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in discord.js MessageCreateOptions types.
   const message = await channel.send(
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in discord.js MessageCreateOptions types.
     v2Message(container("info", text(`## ${title}\n${description}`))) as any,
   );
 
@@ -265,8 +189,8 @@ async function handlePrompt(
     .setCustomId(autoroleButtonId(message.id, role.id))
     .setLabel(label)
     .setStyle(ButtonStyle.Primary);
-  // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in discord.js MessageEditOptions types.
   await message.edit({
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in discord.js MessageEditOptions types.
     components: [container("info", section(`## ${title}\n${description}`, selfRoleButton))] as any,
     flags: MessageFlags.IsComponentsV2,
   });
@@ -286,7 +210,6 @@ async function handleAttach(
   ctx: Ctx,
   sub: string,
 ): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
   const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
@@ -317,7 +240,6 @@ async function handleAttach(
 }
 
 async function handleDelete(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
   const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
@@ -333,7 +255,6 @@ async function handleDelete(interaction: ChatInputCommandInteraction, ctx: Ctx):
 }
 
 async function handleList(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
   const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
@@ -366,7 +287,6 @@ async function handleToggle(
   ctx: Ctx,
   enabled: boolean,
 ): Promise<void> {
-  await ctx.respond.defer({ visibility: "ephemeral" });
   const guildId = requireGuild(interaction, ctx);
   if (!guildId) return;
 
@@ -485,8 +405,34 @@ function formatDuration(ms: number): string {
   return `${ms / 60_000}m`;
 }
 
-export default data
-  .help({ hints: [] })
-  .run(({ interaction, ctx }) =>
-    (execute as (...args: never[]) => Promise<void>)(interaction as never, ctx as never),
-  );
+export default data.help({ hints: [] }).run(async (c) => {
+  const { interaction, ctx } = c;
+  if (c.subcommandGroup === "prompt") {
+    await handlePrompt(interaction, ctx, c.subcommand);
+    return;
+  }
+  if (c.subcommandGroup === "attach") {
+    await handleAttach(interaction, ctx, c.subcommand);
+    return;
+  }
+  if (c.subcommand === "create") {
+    await handleCreate(interaction, ctx);
+    return;
+  }
+  if (c.subcommand === "delete") {
+    await handleDelete(interaction, ctx);
+    return;
+  }
+  if (c.subcommand === "list") {
+    await handleList(interaction, ctx);
+    return;
+  }
+  if (c.subcommand === "enable") {
+    await handleToggle(interaction, ctx, true);
+    return;
+  }
+  if (c.subcommand === "disable") {
+    await handleToggle(interaction, ctx, false);
+    return;
+  }
+});

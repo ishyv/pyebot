@@ -5,17 +5,8 @@ import {
   type AutocompleteInteraction,
   type ChatInputCommandInteraction,
   MessageFlags,
-  type SlashCommandAttachmentOption,
-  type SlashCommandBooleanOption,
   SlashCommandBuilder,
-  type SlashCommandChannelOption,
-  type SlashCommandIntegerOption,
-  type SlashCommandMentionableOption,
-  type SlashCommandRoleOption,
-  type SlashCommandStringOption,
   type SlashCommandSubcommandBuilder,
-  type SlashCommandSubcommandGroupBuilder,
-  type SlashCommandUserOption,
 } from "discord.js";
 import type { Result } from "@/core/result";
 import type { CommandContract, CommandHelp, CommandModule, Ctx } from "./types";
@@ -237,38 +228,6 @@ export interface CommandDsl<S extends DslState = DslState> {
   defer(visibility: DeferVisibility | false): CommandDsl<S>;
   defaultMemberPermissions(permissions: CommandPermissions): CommandDsl<S>;
   dmPermission(enabled: boolean): CommandDsl<S>;
-
-  // Compatibility surface — kept only during the migration, removed in the
-  // final step once every feature command uses canonical DSL syntax.
-  setDescription(description: string): CommandDsl<S>;
-  setDefaultMemberPermissions(permissions: CommandPermissions): CommandDsl<S>;
-  setDMPermission(enabled: boolean): CommandDsl<S>;
-  addStringOption(
-    build: (option: SlashCommandStringOption) => SlashCommandStringOption,
-  ): CommandDsl<S>;
-  addIntegerOption(
-    build: (option: SlashCommandIntegerOption) => SlashCommandIntegerOption,
-  ): CommandDsl<S>;
-  addBooleanOption(
-    build: (option: SlashCommandBooleanOption) => SlashCommandBooleanOption,
-  ): CommandDsl<S>;
-  addUserOption(build: (option: SlashCommandUserOption) => SlashCommandUserOption): CommandDsl<S>;
-  addChannelOption(
-    build: (option: SlashCommandChannelOption) => SlashCommandChannelOption,
-  ): CommandDsl<S>;
-  addRoleOption(build: (option: SlashCommandRoleOption) => SlashCommandRoleOption): CommandDsl<S>;
-  addMentionableOption(
-    build: (option: SlashCommandMentionableOption) => SlashCommandMentionableOption,
-  ): CommandDsl<S>;
-  addAttachmentOption(
-    build: (option: SlashCommandAttachmentOption) => SlashCommandAttachmentOption,
-  ): CommandDsl<S>;
-  addSubcommand(
-    build: (sub: SlashCommandSubcommandBuilder) => SlashCommandSubcommandBuilder,
-  ): CommandDsl<S>;
-  addSubcommandGroup(
-    build: (group: SlashCommandSubcommandGroupBuilder) => SlashCommandSubcommandGroupBuilder,
-  ): CommandDsl<S>;
 
   // Typed options. The first overload matches `{ required: true }` and yields a
   // non-null value type; the second is the optional/default form.
@@ -611,10 +570,6 @@ class CommandBuilder {
     return this;
   }
 
-  setDescription(description: string): this {
-    return this.description(description);
-  }
-
   hidden(): this {
     this.help = false;
     return this;
@@ -643,74 +598,8 @@ class CommandBuilder {
     return this;
   }
 
-  setDefaultMemberPermissions(permissions: CommandPermissions): this {
-    return this.defaultMemberPermissions(permissions);
-  }
-
   dmPermission(enabled: boolean): this {
     this.data.setDMPermission(enabled);
-    return this;
-  }
-
-  setDMPermission(enabled: boolean): this {
-    return this.dmPermission(enabled);
-  }
-
-  addStringOption(build: (option: SlashCommandStringOption) => SlashCommandStringOption): this {
-    this.data.addStringOption(build);
-    return this;
-  }
-
-  addIntegerOption(build: (option: SlashCommandIntegerOption) => SlashCommandIntegerOption): this {
-    this.data.addIntegerOption(build);
-    return this;
-  }
-
-  addBooleanOption(build: (option: SlashCommandBooleanOption) => SlashCommandBooleanOption): this {
-    this.data.addBooleanOption(build);
-    return this;
-  }
-
-  addUserOption(build: (option: SlashCommandUserOption) => SlashCommandUserOption): this {
-    this.data.addUserOption(build);
-    return this;
-  }
-
-  addChannelOption(build: (option: SlashCommandChannelOption) => SlashCommandChannelOption): this {
-    this.data.addChannelOption(build);
-    return this;
-  }
-
-  addRoleOption(build: (option: SlashCommandRoleOption) => SlashCommandRoleOption): this {
-    this.data.addRoleOption(build);
-    return this;
-  }
-
-  addMentionableOption(
-    build: (option: SlashCommandMentionableOption) => SlashCommandMentionableOption,
-  ): this {
-    this.data.addMentionableOption(build);
-    return this;
-  }
-
-  addAttachmentOption(
-    build: (option: SlashCommandAttachmentOption) => SlashCommandAttachmentOption,
-  ): this {
-    this.data.addAttachmentOption(build);
-    return this;
-  }
-
-  addSubcommand(
-    build: (sub: SlashCommandSubcommandBuilder) => SlashCommandSubcommandBuilder,
-  ): this {
-    this.data.addSubcommand(build);
-    return this;
-  }
-
-  addSubcommandGroup(
-    build: (group: SlashCommandSubcommandGroupBuilder) => SlashCommandSubcommandGroupBuilder,
-  ): this {
-    this.data.addSubcommandGroup(build);
     return this;
   }
 

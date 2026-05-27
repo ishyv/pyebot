@@ -157,7 +157,7 @@ describe("planScaffold", () => {
     ).rejects.toThrow("Refusing to overwrite existing file");
   });
 
-  test("plans a command entrypoint that uses ctx.respond", async () => {
+  test("plans a command entrypoint with canonical DSL run handler", async () => {
     const fs = memoryFs([join("/repo", "src", "features", "economy", "index.ts")]);
     const plan = await planScaffold(
       {
@@ -176,7 +176,7 @@ describe("planScaffold", () => {
       join("/repo", "src", "features", "economy", "commands", "balance.ts"),
     );
     expect(plan.files[0]?.content).toContain('command("balance")');
-    expect(plan.files[0]?.content).toContain("await ctx.respond.send");
+    expect(plan.files[0]?.content).toContain(".run(async (_c) =>");
     expect(plan.files[0]?.content).toContain(".adminOnly()");
   });
 
