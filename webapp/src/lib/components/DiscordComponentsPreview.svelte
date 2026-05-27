@@ -6,7 +6,7 @@
  * pixel-perfect Discord clone. Button colors use HyvUI status/accent tokens
  * (semantic), not Discord's literal brand hex, per the webapp design law.
  */
-import { inlineMarkdown } from "$lib/discord-preview/markdown";
+import { renderMarkdown } from "$lib/discord-preview/markdown";
 import type { PreviewButton, PreviewNode } from "$lib/discord-preview/types";
 
 interface Props {
@@ -27,8 +27,8 @@ const { nodes }: Props = $props();
       {#each n.children as child, i (i)}{@render node(child)}{/each}
     </div>
   {:else if n.kind === "text"}
-    <!-- escaped + limited markdown, see markdown.ts -->
-    <div class="text">{@html inlineMarkdown(n.content)}</div>
+    <!-- escaped + block markdown (headings/subtext/bullets), see markdown.ts -->
+    <div class="text">{@html renderMarkdown(n.content)}</div>
   {:else if n.kind === "separator"}
     <div class="sep" class:divider={n.divider} class:large={n.large}></div>
   {:else if n.kind === "section"}
@@ -98,11 +98,40 @@ const { nodes }: Props = $props();
     font-size: 0.95rem;
     line-height: 1.5;
     color: var(--text-soft);
-    white-space: pre-wrap;
     word-wrap: break-word;
   }
   .text :global(a) {
     color: var(--accent);
+  }
+  /* Discord block markdown: hierarchy by size + color (no weight change). */
+  .text :global(.md-h1) {
+    font-size: 1.2rem;
+    color: var(--text);
+    margin: 0.15rem 0;
+  }
+  .text :global(.md-h2) {
+    font-size: 1.05rem;
+    color: var(--text);
+    margin: 0.12rem 0;
+  }
+  .text :global(.md-h3) {
+    font-size: 0.98rem;
+    color: var(--text);
+    margin: 0.1rem 0;
+  }
+  .text :global(.md-sub) {
+    font-size: 0.8rem;
+    color: var(--text-soft);
+  }
+  .text :global(.md-li) {
+    padding-left: 0.6rem;
+    text-indent: -0.4rem;
+  }
+  .text :global(.md-li)::before {
+    content: "• ";
+  }
+  .text :global(.md-blank) {
+    height: 0.5rem;
   }
   .text :global(code) {
     font-family: var(--font-mono);
