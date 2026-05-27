@@ -199,6 +199,95 @@ describe("command DSL", () => {
     }
   });
 
+  it(".handle() dispatches to inline subcommand handlers and falls back to .run()", async () => {
+    const dispatched: string[] = [];
+    const mod = command("warn")
+      .description("Warn")
+      .guildOnly()
+      .defer("ephemeral")
+      .subcommand("add", "Add a warning", (s) => s.user("user", "User", { required: true }))
+      .subcommand("list", "List warnings", (s) => s.user("user", "User", { required: true }))
+      .subcommand("remove", "Remove a warning")
+      .help({ hints: [] })
+      .handle("add", async (c) => {
+        dispatched.push(`add:${c.options.user.id}`);
+      })
+      .run(async (c) => {
+        dispatched.push(`fallback:${c.subcommand}`);
+      });
+
+    const fakeUser = { id: "target-1" } as never;
+    const subInteraction = (sub: string) =>
+      fakeInteraction({
+        options: {
+          getString: () => null,
+          getInteger: () => null,
+          getBoolean: () => null,
+          getUser: (name: string) => (name === "user" ? fakeUser : null),
+          getChannel: () => null,
+          getRole: () => null,
+          getMentionable: () => null,
+          getAttachment: () => null,
+          getSubcommand: () => sub,
+          getSubcommandGroup: () => null,
+        },
+      });
+
+    const { ctx } = fakeCtx();
+    await mod.execute(subInteraction("add"), ctx);
+    await mod.execute(subInteraction("list"), ctx);
+    await mod.execute(subInteraction("remove"), ctx);
+
+    expect(dispatched).toEqual(["add:target-1", "fallback:list", "fallback:remove"]);
+  });
+
+  it(".handle() on CommandGroupDsl dispatches group subcommands", async () => {
+    const dispatched: string[] = [];
+    const mod = command("modset")
+      .description("Modset")
+      .guildOnly()
+      .defer("ephemeral")
+      .group("escalation", "Escalation settings", (g) =>
+        g
+          .subcommand("add", "Add threshold", (s) =>
+            s.integer("warns", "Warn count", { required: true }),
+          )
+          .subcommand("list", "List thresholds")
+          .handle("add", async (c) => {
+            dispatched.push(`group-add:${c.options.warns}`);
+          })
+          .handle("list", async (c) => {
+            dispatched.push(`group-list:${c.subcommand}`);
+          }),
+      )
+      .help({ hints: [] })
+      .run(async (c) => {
+        dispatched.push(`fallback:${c.subcommandGroup}:${c.subcommand}`);
+      });
+
+    const groupInteraction = (sub: string, warns: number | null = null) =>
+      fakeInteraction({
+        options: {
+          getString: () => null,
+          getInteger: (name: string) => (name === "warns" ? warns : null),
+          getBoolean: () => null,
+          getUser: () => null,
+          getChannel: () => null,
+          getRole: () => null,
+          getMentionable: () => null,
+          getAttachment: () => null,
+          getSubcommand: () => sub,
+          getSubcommandGroup: () => "escalation",
+        },
+      });
+
+    const { ctx } = fakeCtx();
+    await mod.execute(groupInteraction("add", 3), ctx);
+    await mod.execute(groupInteraction("list"), ctx);
+
+    expect(dispatched).toEqual(["group-add:3", "group-list:list"]);
+  });
+
   it("maps known errors through catch handlers and rethrows unknown errors", async () => {
     const mod = command("boom")
       .description("Boom")

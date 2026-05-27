@@ -225,6 +225,22 @@ export type RunContextFor<S extends DslState> = CommandContextCore &
   GuildContextFields<S> &
   OptionContextFields<S>;
 
+/**
+ * Context for a `.handle()` callback declared inside `CommandGroupDsl`.
+ *
+ * The guild fields are loosely typed (nullable) because the group builder does
+ * not carry the parent command's guildOnly flag. Options are narrowed to exactly
+ * the subcommand matched by `N`.
+ */
+type GroupRunContext<GS extends GroupSubState, N extends string> = CommandContextCore & {
+  readonly guild: ChatInputCommandInteraction["guild"];
+  readonly guildId: string | null;
+  readonly member: ChatInputCommandInteraction["member"];
+  readonly subcommand: N;
+  readonly subcommandGroup: string;
+  readonly options: Readonly<Extract<GS, { name: N }>["opts"]>;
+};
+
 /** Extracts the run context from a built command, e.g. `RunContext<typeof data>`. */
 export type RunContext<C> = C extends CommandDsl<infer S> ? RunContextFor<S> : never;
 
@@ -360,6 +376,27 @@ export interface CommandDsl<S extends DslState = DslState> {
 
   autocomplete(handler: NonNullable<CommandModule["autocomplete"]>): CommandDsl<S>;
   autocomplete(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void>;
+  /**
+   * Register an inline handler for a specific top-level subcommand.
+   *
+   * The handler receives a narrowed run context: `c.options` is typed to exactly
+   * the options declared for `name`, and `c.subcommandGroup` is `null`.
+   * `.handle()` is additive — the `.run()` fallback still fires for any
+   * subcommand that does NOT have an inline handler.
+   *
+   * @example
+   * command("warn")
+   *   .subcommand("add", "...", s => s.user("user", ...).string("reason", ...))
+   *   .handle("add", async (c) => {
+   *     const { user, reason } = c.options; // fully typed
+   *   })
+   */
+  handle<N extends Extract<S["subs"], { group: null }>["name"]>(
+    name: N,
+    handler: (
+      c: Extract<RunContextFor<S>, { subcommand: N; subcommandGroup: null }>,
+    ) => MaybePromise<CommandResponse | void>,
+  ): CommandDsl<S>;
   run(handler: RunContextHandler<S>): CommandDsl<S>;
   catch<E extends Error>(
     errorClass: ErrorConstructor<E>,
@@ -505,6 +542,26 @@ export interface CommandGroupDsl<GS extends GroupSubState = never> {
     description: string,
     build?: (sub: CommandOptionDsl) => CommandOptionDsl<O>,
   ): CommandGroupDsl<GS | { name: N; opts: O }>;
+  /**
+   * Register an inline handler for a specific subcommand within this group.
+   *
+   * `c.options` is typed to exactly the options declared for `name`.
+   * Guild fields are loosely typed (nullable) because the group builder does
+   * not carry the parent command's guildOnly constraint.
+   *
+   * @example
+   * .group("escalation", "...", g =>
+   *   g
+   *     .subcommand("add", "...", s => s.integer("warns", ...).string("action", ...))
+   *     .handle("add", async (c) => {
+   *       const { warns, action } = c.options; // fully typed
+   *     })
+   * )
+   */
+  handle<N extends GS["name"]>(
+    name: N,
+    handler: (c: GroupRunContext<GS, N>) => MaybePromise<CommandResponse | void>,
+  ): CommandGroupDsl<GS>;
 }
 
 /**
@@ -573,6 +630,7 @@ class OptionListBuilder {
 
 class GroupBuilder {
   readonly subcommands: SubcommandDefinition[] = [];
+  readonly subHandlers: Map<string, RunHandler> = new Map();
 
   subcommand(
     name: string,
@@ -582,6 +640,11 @@ class GroupBuilder {
     const sub = new OptionListBuilder();
     build(sub);
     this.subcommands.push({ name, description, options: sub.options });
+    return this;
+  }
+
+  handle(name: string, handler: RunHandler): this {
+    this.subHandlers.set(name, handler);
     return this;
   }
 }
@@ -621,6 +684,7 @@ class CommandBuilder {
     return this;
   }) as never;
   private readonly catchHandlers: CatchEntry[] = [];
+  private readonly subHandlers: Map<string, RunHandler> = new Map();
 
   constructor(name: string) {
     this.data = new SlashCommandBuilder().setName(name).setDescription(name);
@@ -722,12 +786,21 @@ class CommandBuilder {
     build(group);
     const definition = { name, description, subcommands: group.subcommands };
     this.groups.push(definition);
+    // Merge inline group subcommand handlers with a "group:sub" key prefix.
+    for (const [subName, handler] of group.subHandlers) {
+      this.subHandlers.set(`${name}:${subName}`, handler);
+    }
     this.data.addSubcommandGroup((builder) => {
       builder.setName(name).setDescription(description);
       for (const sub of definition.subcommands)
         builder.addSubcommand((entry) => applySubcommand(entry, sub));
       return builder;
     });
+    return this;
+  }
+
+  handle(name: string, handler: RunHandler): this {
+    this.subHandlers.set(name, handler);
     return this;
   }
 
@@ -758,7 +831,11 @@ class CommandBuilder {
         return;
       }
       if (this.deferVisibility) await ctx.respond.defer({ visibility: this.deferVisibility });
-      const response = await this.runHandler?.(context);
+      const subGroup = getSubcommandGroup(interaction, false);
+      const subName = getSubcommand(interaction, false);
+      const dispatchKey = subGroup ? `${subGroup}:${subName}` : (subName ?? "");
+      const handler = (dispatchKey ? this.subHandlers.get(dispatchKey) : undefined) ?? this.runHandler;
+      const response = await handler?.(context);
       if (response !== undefined) await ctx.respond.send(response);
     } catch (error) {
       if (error instanceof ResponseSentinel) {
