@@ -144,7 +144,7 @@ describe("command DSL", () => {
       .description("Transfer")
       .help({ hints: [] })
       .run(async (c) => {
-        const _value = c.unwrap(ErrResult(new Error("insufficient funds")), (e) => ({
+        c.unwrap(ErrResult(new Error("insufficient funds")), (e) => ({
           content: `Failed: ${e.message}`,
         }));
         return { content: "should not reach here" };
@@ -172,7 +172,10 @@ describe("command DSL", () => {
       .description("Test")
       .help({ hints: [] })
       .run(async (c) => {
-        const a = c.unwrapOr(ErrResult(new Error("oops")), 99);
+        const errResult: import("@/core/result").Result<number, Error> = ErrResult(
+          new Error("oops"),
+        );
+        const a = c.unwrapOr(errResult, 99);
         const b = c.unwrapOr(OkResult(7), 99);
         resultOr = a * 10 + b;
       });

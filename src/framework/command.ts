@@ -139,7 +139,7 @@ interface SubcommandState {
 }
 
 /** Accumulated compile-time state threaded through the builder type. */
-interface DslState {
+export interface DslState {
   readonly opts: OptionRecord;
   readonly subs: SubcommandState;
   readonly guild: boolean;
@@ -365,6 +365,16 @@ export interface CommandDsl<S extends DslState = DslState> {
     errorClass: ErrorConstructor<E>,
     handler: CatchContextHandler<S, E>,
   ): CommandDsl<S>;
+  /**
+   * Pipe this builder through a factory function.
+   * Useful for extracting shared option groups into named, reusable functions
+   * without breaking the builder chain.
+   *
+   * @example
+   * const withTarget = (s: CommandDsl<S>) => s.user("user", "Target", { required: true });
+   * command("ban").build(withTarget).string("reason", ...).run(...);
+   */
+  build<NS extends DslState>(factory: (s: CommandDsl<S>) => CommandDsl<NS>): CommandDsl<NS>;
 }
 
 /** Shared settings for any slash command option. */
@@ -475,6 +485,17 @@ export interface CommandOptionDsl<O extends OptionRecord = Record<string, never>
     description: string,
     options?: BaseOptionSettings,
   ): CommandOptionDsl<O & { readonly [P in N]: EntityOptionValue["attachment"] | null }>;
+  /**
+   * Pipe this option builder through a factory function.
+   * Useful for extracting shared subcommand option shapes into named, reusable functions.
+   *
+   * @example
+   * const withTarget = (s: CommandOptionDsl) => s.user("user", "Target", { required: true });
+   * .subcommand("ban", "Ban", (s) => s.build(withTarget).string("reason", ...))
+   */
+  build<NO extends OptionRecord>(
+    factory: (s: CommandOptionDsl<O>) => CommandOptionDsl<NO>,
+  ): CommandOptionDsl<NO>;
 }
 
 /** Subcommand group builder used by `command(...).group(...)`; accumulates subcommands. */
@@ -538,6 +559,10 @@ class OptionListBuilder {
 
   attachment(name: string, description: string, options: BaseOptionSettings = {}): this {
     return this.add({ kind: "attachment", name, description, ...options });
+  }
+
+  build(factory: (self: OptionListBuilder) => OptionListBuilder): OptionListBuilder {
+    return factory(this);
   }
 
   private add(option: OptionDefinition): this {
@@ -704,6 +729,10 @@ class CommandBuilder {
       return builder;
     });
     return this;
+  }
+
+  build(factory: (self: CommandBuilder) => CommandBuilder): CommandBuilder {
+    return factory(this);
   }
 
   run(handler: RunHandler): this {
