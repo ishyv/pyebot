@@ -13,7 +13,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   const path = event.url.pathname;
   const isPublic =
-    PUBLIC_PATHS.includes(path) || path.startsWith("/_app") || path.startsWith("/api/session");
+    PUBLIC_PATHS.includes(path) ||
+    path.startsWith("/_app") ||
+    path.startsWith("/api/session") ||
+    // /playground is a public, no-login Discord-UI preview tool (dev aid).
+    path === "/playground" ||
+    path.startsWith("/playground/");
 
   if (!event.locals.session && !isPublic && path !== "/") {
     throw redirect(303, "/login");
