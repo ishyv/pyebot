@@ -1,5 +1,6 @@
 <script lang="ts">
-import { Avatar, Breadcrumb, Button, SidebarNav, surface, Topbar } from "@hyvnt/hyvui";
+import { Avatar, Breadcrumb, Button, Drawer, SidebarNav, surface, Topbar } from "@hyvnt/hyvui";
+import Menu from "lucide-svelte/icons/menu";
 import type { Snippet } from "svelte";
 
 interface Props {
@@ -11,6 +12,15 @@ interface Props {
 }
 
 const { guildId, guildName, guildIconUrl, activePath, children }: Props = $props();
+
+// Mobile nav drawer. Open via the hamburger, closed on backdrop dismiss, on
+// picking a nav item, and on any route change (the effect below) so it never
+// lingers over the page it navigated to.
+let navOpen = $state(false);
+$effect(() => {
+  void activePath;
+  navOpen = false;
+});
 
 const navItems = $derived(
   [
@@ -43,6 +53,12 @@ const breadcrumb = $derived([
   <Topbar>
     {#snippet left()}
       <div class="brand">
+        <span class="nav-toggle">
+          <Button variant="ghost" size="sm" onclick={() => (navOpen = true)}>
+            <Menu size={16} aria-hidden="true" />
+            <span class="visually-hidden">open navigation</span>
+          </Button>
+        </span>
         <Avatar src={guildIconUrl ?? undefined} name={guildName} size={28} />
         <Breadcrumb items={breadcrumb} />
       </div>
@@ -67,6 +83,12 @@ const breadcrumb = $derived([
   </div>
 </div>
 
+<Drawer open={navOpen} side="left" onclose={() => (navOpen = false)}>
+  <nav class="drawer-nav" aria-label="guild navigation">
+    <SidebarNav items={navItems} onnavigate={() => (navOpen = false)} />
+  </nav>
+</Drawer>
+
 <style>
   .shell {
     display: flex;
@@ -87,6 +109,25 @@ const breadcrumb = $derived([
   }
 
   .topbar-actions form { display: contents; }
+
+  /* Hamburger lives in the topbar but only on narrow viewports; the static
+     sidebar covers navigation above the breakpoint. */
+  .nav-toggle { display: none; }
+
+  .drawer-nav { padding: var(--space-md) var(--space-sm); }
+
+  /* Accessible name for the icon-only hamburger (Button has no aria-label). */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
 
   .body {
     display: grid;
@@ -116,14 +157,12 @@ const breadcrumb = $derived([
     margin-inline: auto;
   }
 
-  @media (max-width: 720px) {
+  /* Below 48rem the static sidebar is replaced by the topbar hamburger + drawer,
+     so the body collapses to a single column. */
+  @media (max-width: 48rem) {
     .body { grid-template-columns: 1fr; }
-    .sidebar {
-      border-right: none;
-      border-bottom: 1px solid var(--line);
-      padding: var(--space-md);
-      background: none;
-    }
+    .sidebar { display: none; }
+    .nav-toggle { display: inline-flex; }
     .main { padding: var(--space-md); }
   }
 </style>
