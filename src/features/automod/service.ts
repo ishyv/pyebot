@@ -23,6 +23,7 @@ import type { AutomodConfig } from "@/db/schemas/guild";
 import { recordAutomodSystemCase } from "@/features/moderation/service";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { type AutomodIncident, recordAutomodIncident } from "./incidents";
+import { extractHostname, extractLinks } from "./links";
 import { type AutomodPolicyDecision, evaluateAutomodPolicy } from "./policy";
 import { type AutomodProfile, updateAutomodProfile } from "./profile";
 import type { AutomodSignal } from "./signals";
@@ -78,23 +79,6 @@ const automodProfiles = new Map<string, AutomodProfile>();
 const automodIncidents = new Map<string, AutomodIncident>();
 const alertTimestamps = new Map<string, number[]>();
 const actionTimestamps = new Map<string, number[]>();
-
-function extractLinks(content: string): string[] {
-  return content.match(/https?:\/\/[^\s>]+/gi) ?? [];
-}
-
-function extractHostname(rawUrl: string): string {
-  try {
-    return new URL(rawUrl).hostname.toLowerCase();
-  } catch {
-    return (
-      rawUrl
-        .replace(/^https?:\/\//i, "")
-        .split(/[/?#\s]/)[0]
-        ?.toLowerCase() ?? ""
-    );
-  }
-}
 
 // ─── Main check function ──────────────────────────────────────────────────────
 

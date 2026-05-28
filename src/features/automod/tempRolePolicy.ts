@@ -1,5 +1,6 @@
 import type { Message } from "discord.js";
 import type { TempRoleMessageRule, TempRolePolicyConfig } from "@/db/schemas/guild";
+import { extractHostname, extractLinks } from "./links";
 import type { AutomodPolicyDecision } from "./policy";
 import {
   type AutomodRecommendedAction,
@@ -40,23 +41,6 @@ export interface TempRoleMessageInput {
   readonly stickerCount: number;
   readonly mentionCount: number;
   readonly createdAt: string;
-}
-
-function extractLinks(content: string): string[] {
-  return content.match(/https?:\/\/[^\s>]+/gi) ?? [];
-}
-
-function hostname(rawUrl: string): string {
-  try {
-    return new URL(rawUrl).hostname.toLowerCase();
-  } catch {
-    return (
-      rawUrl
-        .replace(/^https?:\/\//i, "")
-        .split(/[/?#\s]/)[0]
-        ?.toLowerCase() ?? ""
-    );
-  }
 }
 
 function normalizedContent(content: string): string {
@@ -158,7 +142,7 @@ function countForRule(
     case "shortLinks":
       return {
         count: links.filter((url) => {
-          const host = hostname(url);
+          const host = extractHostname(url);
           return SHORTENER_HOSTS.some((domain) => host === domain || host.endsWith(`.${domain}`));
         }).length,
       };
