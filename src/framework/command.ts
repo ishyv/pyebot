@@ -82,35 +82,19 @@ interface SlashOptionJson {
   readonly options?: readonly SlashOptionJson[];
 }
 
-interface CommandContextBase {
-  readonly interaction: ChatInputCommandInteraction;
-  readonly ctx: Ctx;
-  readonly user: ChatInputCommandInteraction["user"];
-  readonly userId: string;
+/**
+ * The loosely-typed context passed to runtime handlers (`.run()` / `.handle()`
+ * dispatch and `.catch()` mappers). Adds the always-present-but-nullable guild
+ * and subcommand fields to {@link CommandContextCore}; authored handlers receive
+ * the narrowed {@link RunContextFor} instead.
+ */
+interface CommandContextBase extends CommandContextCore {
   readonly guild: ChatInputCommandInteraction["guild"];
   readonly guildId: string | null;
   readonly member: ChatInputCommandInteraction["member"];
   readonly options: Readonly<Record<string, unknown>>;
   readonly subcommand: string | null;
   readonly subcommandGroup: string | null;
-  expect<T, E>(result: Result<T, E>): T;
-  /**
-   * Unwrap a Result or short-circuit `.run()` with a mapped error response.
-   * If the result is `Err`, throws a sentinel that `execute()` catches and
-   * sends as the command response — no explicit `if (result.isErr()) return`
-   * needed at the call site.
-   */
-  unwrap<T, E>(result: Result<T, E>, mapErr: (e: E) => CommandResponse): T;
-  /** Unwrap a Result or silently return `fallback` on failure. */
-  unwrapOr<T>(result: Result<T, unknown>, fallback: T): T;
-  /** Build a success (green) v2 container response. */
-  ok(markdown: string): CommandResponse;
-  /** Build a danger (red) v2 container response. */
-  fail(markdown: string): CommandResponse;
-  /** Build an info (blue) v2 container response. */
-  info(markdown: string): CommandResponse;
-  /** Build a muted (grey) v2 container response. */
-  warn(markdown: string): CommandResponse;
 }
 
 // biome-ignore lint/suspicious/noConfusingVoidType: Command handlers may respond directly and intentionally return nothing.
