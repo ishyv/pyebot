@@ -17,7 +17,7 @@ type DeferVisibility = "ephemeral" | "public";
 type CommandResponse = Parameters<Ctx["respond"]["send"]>[0];
 
 /** Scope for a declarative `.cooldown()` — determines which ID the cooldown key is keyed to. */
-export type CooldownScope = "user" | "guild" | "channel" | "global";
+type CooldownScope = "user" | "guild" | "channel" | "global";
 
 interface CooldownSpec {
   readonly durationMs: number;
@@ -236,7 +236,7 @@ type OptionContextFields<S extends DslState> = [S["subs"]] extends [never]
   : SubcommandContextFields<S["subs"]>;
 
 /** The fully-typed context an authored `.run(...)` handler receives. */
-export type RunContextFor<S extends DslState> = CommandContextCore &
+type RunContextFor<S extends DslState> = CommandContextCore &
   GuildContextFields<S> &
   OptionContextFields<S>;
 
@@ -466,12 +466,12 @@ export interface CommandDsl<S extends DslState = DslState> {
 }
 
 /** Shared settings for any slash command option. */
-export interface BaseOptionSettings {
+interface BaseOptionSettings {
   readonly required?: boolean;
 }
 
 /** Settings for string slash command options. */
-export interface StringOptionSettings extends BaseOptionSettings {
+interface StringOptionSettings extends BaseOptionSettings {
   readonly autocomplete?: boolean;
   readonly choices?: readonly APIApplicationCommandOptionChoice<string>[];
   readonly min?: number;
@@ -479,7 +479,7 @@ export interface StringOptionSettings extends BaseOptionSettings {
 }
 
 /** Settings for integer slash command options. */
-export interface IntegerOptionSettings extends BaseOptionSettings {
+interface IntegerOptionSettings extends BaseOptionSettings {
   readonly autocomplete?: boolean;
   readonly choices?: readonly APIApplicationCommandOptionChoice<number>[];
   readonly min?: number;
@@ -487,7 +487,7 @@ export interface IntegerOptionSettings extends BaseOptionSettings {
 }
 
 /** Settings for channel slash command options. */
-export interface ChannelOptionSettings extends BaseOptionSettings {
+interface ChannelOptionSettings extends BaseOptionSettings {
   readonly channelTypes?: readonly ApplicationCommandOptionAllowedChannelTypes[];
 }
 
@@ -587,7 +587,7 @@ export interface CommandOptionDsl<O extends OptionRecord = Record<string, never>
 }
 
 /** Subcommand group builder used by `command(...).group(...)`; accumulates subcommands. */
-export interface CommandGroupDsl<GS extends GroupSubState = never> {
+interface CommandGroupDsl<GS extends GroupSubState = never> {
   subcommand<N extends string, O extends OptionRecord = Record<string, never>>(
     name: N,
     description: string,

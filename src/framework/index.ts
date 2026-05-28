@@ -7,19 +7,7 @@
  */
 
 export { bootstrapFramework } from "./bootstrap";
-export type {
-  BaseOptionSettings,
-  ChannelOptionSettings,
-  CommandDsl,
-  CommandGroupDsl,
-  CommandOptionDsl,
-  CooldownScope,
-  DslState,
-  IntegerOptionSettings,
-  RunContext,
-  RunContextFor,
-  StringOptionSettings,
-} from "./command";
+export type { CommandDsl, CommandOptionDsl, DslState, RunContext } from "./command";
 export { command } from "./command";
 export { component } from "./component";
 export { Handle, Listen, On } from "./decorators";
