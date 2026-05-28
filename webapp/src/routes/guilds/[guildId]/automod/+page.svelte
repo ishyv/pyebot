@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { ResolveStatus } from "@hyvnt/hyvui";
 import {
+  Alert,
   Button,
   Badge,
   ConfirmDialog,
@@ -18,6 +19,7 @@ import { untrack } from "svelte";
 import { enhance } from "$app/forms";
 import ChannelSelect from "$lib/components/ChannelSelect.svelte";
 import FormField from "$lib/components/FormField.svelte";
+import { enhanceSave, type FieldError, isDirty } from "$lib/forms";
 import RolePicker from "$lib/components/RolePicker.svelte";
 import type { BannedImageTestResult } from "$shared/bridge-types";
 import type { PageData } from "./$types";
@@ -77,6 +79,92 @@ let linkResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let mentionResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let slowResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let imageResolve: { trigger: (s: ResolveStatus) => void } | undefined;
+
+let linkError = $state<FieldError | null>(null);
+let mentionError = $state<FieldError | null>(null);
+let slowError = $state<FieldError | null>(null);
+let imageError = $state<FieldError | null>(null);
+
+// Dirty against the live loader value so a successful save (which reloads
+// `data`) clears the marker automatically.
+const linkDirty = $derived(
+  isDirty(
+    {
+      enabled: linkSpamEnabled,
+      maxLinks: linkSpamMaxLinks,
+      windowSeconds: linkSpamWindowSeconds,
+      reportChannelId: linkSpamReportChannelId,
+    },
+    {
+      enabled: data.linkSpam.enabled,
+      maxLinks: String(data.linkSpam.maxLinks),
+      windowSeconds: String(data.linkSpam.windowSeconds),
+      reportChannelId: data.linkSpam.reportChannelId,
+    },
+  ),
+);
+const mentionDirty = $derived(
+  isDirty(
+    {
+      enabled: mentionSpamEnabled,
+      maxMentions: mentionSpamMaxMentions,
+      windowSeconds: mentionSpamWindowSeconds,
+    },
+    {
+      enabled: data.mentionSpam.enabled,
+      maxMentions: String(data.mentionSpam.maxMentions),
+      windowSeconds: String(data.mentionSpam.windowSeconds),
+    },
+  ),
+);
+const slowDirty = $derived(
+  isDirty(
+    { enabled: perUserSlowEnabled, rules: JSON.stringify(slowRules) },
+    {
+      enabled: data.perUserSlow.enabled,
+      rules: JSON.stringify(normalizeSlowRules(data.perUserSlow.rules)),
+    },
+  ),
+);
+const imageDirty = $derived(
+  isDirty(
+    {
+      enabled: imageDetectionEnabled,
+      reportChannelId: imageReportChannelId,
+      tolerance: imageTolerance,
+    },
+    {
+      enabled: data.imageDetection.enabled,
+      reportChannelId: data.imageDetection.reportChannelId,
+      tolerance: data.imageDetection.tolerance,
+    },
+  ),
+);
+
+function resetLink(): void {
+  linkSpamEnabled = data.linkSpam.enabled;
+  linkSpamMaxLinks = String(data.linkSpam.maxLinks);
+  linkSpamWindowSeconds = String(data.linkSpam.windowSeconds);
+  linkSpamReportChannelId = data.linkSpam.reportChannelId;
+  linkError = null;
+}
+function resetMention(): void {
+  mentionSpamEnabled = data.mentionSpam.enabled;
+  mentionSpamMaxMentions = String(data.mentionSpam.maxMentions);
+  mentionSpamWindowSeconds = String(data.mentionSpam.windowSeconds);
+  mentionError = null;
+}
+function resetSlow(): void {
+  perUserSlowEnabled = data.perUserSlow.enabled;
+  slowRules = normalizeSlowRules(data.perUserSlow.rules);
+  slowError = null;
+}
+function resetImage(): void {
+  imageDetectionEnabled = data.imageDetection.enabled;
+  imageReportChannelId = data.imageDetection.reportChannelId;
+  imageTolerance = data.imageDetection.tolerance;
+  imageError = null;
+}
 
 const slowRulesJson = $derived(JSON.stringify(slowRules));
 const toleranceOptions = [
@@ -157,26 +245,23 @@ $effect(() => {
         method="POST"
         action="?/saveLinkSpam"
         use:resolve={(a) => (linkResolve = a)}
-        use:enhance={() => {
-          savingLink = true;
-          return async ({ result, update }) => {
-            savingLink = false;
-            if (result.type === "success") {
-              linkResolve?.trigger("ok");
-              toastStore.push("link spam saved", "ok");
-            } else {
-              linkResolve?.trigger("fail");
-              toastStore.push("save failed, retry", "fail");
-            }
-            await update({ reset: false });
-          };
-        }}
+        use:enhance={enhanceSave({
+          setSaving: (v) => (savingLink = v),
+          resolve: () => linkResolve,
+          okMessage: "link spam saved",
+          setError: (e) => (linkError = e),
+        })}
       >
         <input type="hidden" name="enabled" value={linkSpamEnabled ? "on" : ""} />
+
+        {#if linkError && !linkError.field}
+          <Alert variant="error">{linkError.message}</Alert>
+        {/if}
 
         <FormField
           label="max links per window"
           description="a member posting more than this many links inside the time window triggers action."
+          error={linkError?.field === "maxLinks" ? linkError.message : undefined}
         >
           <Input type="number" bind:value={linkSpamMaxLinks} />
           <input type="hidden" name="maxLinks" value={linkSpamMaxLinks} />
@@ -185,6 +270,7 @@ $effect(() => {
         <FormField
           label="window (seconds)"
           description="how long the counter looks back for spam patterns."
+          error={linkError?.field === "windowSeconds" ? linkError.message : undefined}
         >
           <Input type="number" bind:value={linkSpamWindowSeconds} />
           <input type="hidden" name="windowSeconds" value={linkSpamWindowSeconds} />
@@ -204,6 +290,10 @@ $effect(() => {
         </FormField>
 
         <div class="actions">
+          {#if linkDirty}<span class="unsaved">unsaved changes</span>{/if}
+          {#if linkDirty}
+            <Button type="button" variant="ghost" size="sm" onclick={resetLink}>reset</Button>
+          {/if}
           <Button type="submit" variant="primary" disabled={savingLink} echo>
             {savingLink ? "saving" : "save link spam"}
           </Button>
@@ -225,37 +315,42 @@ $effect(() => {
         method="POST"
         action="?/saveMentionSpam"
         use:resolve={(a) => (mentionResolve = a)}
-        use:enhance={() => {
-          savingMention = true;
-          return async ({ result, update }) => {
-            savingMention = false;
-            if (result.type === "success") {
-              mentionResolve?.trigger("ok");
-              toastStore.push("mention spam saved", "ok");
-            } else {
-              mentionResolve?.trigger("fail");
-              toastStore.push("save failed, retry", "fail");
-            }
-            await update({ reset: false });
-          };
-        }}
+        use:enhance={enhanceSave({
+          setSaving: (v) => (savingMention = v),
+          resolve: () => mentionResolve,
+          okMessage: "mention spam saved",
+          setError: (e) => (mentionError = e),
+        })}
       >
         <input type="hidden" name="enabled" value={mentionSpamEnabled ? "on" : ""} />
+
+        {#if mentionError && !mentionError.field}
+          <Alert variant="error">{mentionError.message}</Alert>
+        {/if}
 
         <FormField
           label="max mentions per window"
           description="a member mentioning more people than this in the window triggers action."
+          error={mentionError?.field === "maxMentions" ? mentionError.message : undefined}
         >
           <Input type="number" bind:value={mentionSpamMaxMentions} />
           <input type="hidden" name="maxMentions" value={mentionSpamMaxMentions} />
         </FormField>
 
-        <FormField label="window (seconds)" description="how long the counter looks back.">
+        <FormField
+          label="window (seconds)"
+          description="how long the counter looks back."
+          error={mentionError?.field === "windowSeconds" ? mentionError.message : undefined}
+        >
           <Input type="number" bind:value={mentionSpamWindowSeconds} />
           <input type="hidden" name="windowSeconds" value={mentionSpamWindowSeconds} />
         </FormField>
 
         <div class="actions">
+          {#if mentionDirty}<span class="unsaved">unsaved changes</span>{/if}
+          {#if mentionDirty}
+            <Button type="button" variant="ghost" size="sm" onclick={resetMention}>reset</Button>
+          {/if}
           <Button type="submit" variant="primary" disabled={savingMention} echo>
             {savingMention ? "saving" : "save mention spam"}
           </Button>
@@ -277,23 +372,19 @@ $effect(() => {
         method="POST"
         action="?/savePerUserSlow"
         use:resolve={(a) => (slowResolve = a)}
-        use:enhance={() => {
-          savingSlow = true;
-          return async ({ result, update }) => {
-            savingSlow = false;
-            if (result.type === "success") {
-              slowResolve?.trigger("ok");
-              toastStore.push("user slow roles saved", "ok");
-            } else {
-              slowResolve?.trigger("fail");
-              toastStore.push("save failed, retry", "fail");
-            }
-            await update({ reset: false });
-          };
-        }}
+        use:enhance={enhanceSave({
+          setSaving: (v) => (savingSlow = v),
+          resolve: () => slowResolve,
+          okMessage: "user slow roles saved",
+          setError: (e) => (slowError = e),
+        })}
       >
         <input type="hidden" name="enabled" value={perUserSlowEnabled ? "on" : ""} />
         <input type="hidden" name="rules" value={slowRulesJson} />
+
+        {#if slowError}
+          <Alert variant="error">{slowError.message}</Alert>
+        {/if}
 
         <div class="slow-builder">
           <FormField label="slow role" description="members with this role get a per-user cooldown.">
@@ -327,6 +418,10 @@ $effect(() => {
         {/if}
 
         <div class="actions">
+          {#if slowDirty}<span class="unsaved">unsaved changes</span>{/if}
+          {#if slowDirty}
+            <Button type="button" variant="ghost" size="sm" onclick={resetSlow}>reset</Button>
+          {/if}
           <Button type="submit" variant="primary" disabled={savingSlow} echo>
             {savingSlow ? "saving" : "save user slow roles"}
           </Button>
@@ -351,22 +446,18 @@ $effect(() => {
         method="POST"
         action="?/saveImageDetection"
         use:resolve={(a) => (imageResolve = a)}
-        use:enhance={() => {
-          savingImageSettings = true;
-          return async ({ result, update }) => {
-            savingImageSettings = false;
-            if (result.type === "success") {
-              imageResolve?.trigger("ok");
-              toastStore.push("image detection saved", "ok");
-            } else {
-              imageResolve?.trigger("fail");
-              toastStore.push("save failed, retry", "fail");
-            }
-            await update({ reset: false });
-          };
-        }}
+        use:enhance={enhanceSave({
+          setSaving: (v) => (savingImageSettings = v),
+          resolve: () => imageResolve,
+          okMessage: "image detection saved",
+          setError: (e) => (imageError = e),
+        })}
       >
         <input type="hidden" name="enabled" value={imageDetectionEnabled ? "on" : ""} />
+
+        {#if imageError}
+          <Alert variant="error">{imageError.message}</Alert>
+        {/if}
 
         <div class="image-settings-grid">
           <FormField label="report channel" description="where banned-image detections get reported first.">
@@ -386,6 +477,10 @@ $effect(() => {
         </div>
 
         <div class="actions">
+          {#if imageDirty}<span class="unsaved">unsaved changes</span>{/if}
+          {#if imageDirty}
+            <Button type="button" variant="ghost" size="sm" onclick={resetImage}>reset</Button>
+          {/if}
           <Button type="submit" variant="primary" disabled={savingImageSettings} echo>
             {savingImageSettings ? "saving" : "save image detection"}
           </Button>
@@ -581,10 +676,20 @@ $effect(() => {
   .actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: var(--space-xs);
     margin-top: var(--space-sm);
     padding-top: var(--space-sm);
     border-top: 1px solid var(--line);
+  }
+  /* Marker sits left; save/reset stay right-aligned. */
+  .unsaved {
+    margin-right: auto;
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .slow-builder {
     display: grid;
