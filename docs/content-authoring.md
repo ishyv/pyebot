@@ -1,8 +1,11 @@
 # RPG Content Authoring
 
-The extended RPG catalog is defined in `src/content/packs/default.ts`. That
-file is seed/catalog data for authoring and validation, not the live dashboard
-editing path.
+The seed catalog is defined in `src/content/packs/default.ts`. It currently
+ships **items only** — the `locations`, `dropTables`, and `recipes` sections
+were trimmed (2026-05-27) because the active runtime never read them. That file
+is seed/catalog data for authoring and validation, not the live dashboard
+editing path. The authoring helpers below still type-check those sections if you
+re-introduce them, but gameplay content lives in `src/features/rpg/content/**`.
 
 The embedded dashboard edits the active RPG runtime snapshot through the bot
 bridge and persists it to Mongo as `rpg_content.active`. Keep dashboard changes

@@ -128,5 +128,5 @@ Current public authoring surface:
 - framework `Ctx` plus `component(...)` for typed component persistence
 - feature toggles stored in `guild_features.overrides` by feature id
 - active RPG runtime content in `src/features/rpg/content/**`
-- extended catalog content in `src/content/packs/default.ts`
+- seed item catalog in `src/content/packs/default.ts` (gameplay content in `src/features/rpg/content/**`)
 - `DISCORD_TOKEN` as the single Discord token environment key

@@ -8,8 +8,10 @@ This audit tracks current refactor pressure after the latest-only cleanup.
   automod, economy, roles, and new-users. Keep `panelDispatcher.ts` simple;
   split repeated parser/mutation decisions inside the affected panel instead
   of building a generic panel framework.
-- Economy and RPG flows still have large service surfaces. Keep content data in
-  `src/content/packs/default.ts` and keep feature code focused on behavior.
+- Economy and RPG flows still have large service surfaces. The seed catalog
+  `src/content/packs/default.ts` ships **items only**; gameplay content
+  (locations, drop tables, recipes) lives in `src/features/rpg/content/**`. Keep
+  feature code focused on behavior.
 - Storage adapters are starter utilities for now. The bundled full bot uses
   Mongo-backed `World` components and feature repositories.
 - Guild schema defaults are product behavior. Missing current fields can be

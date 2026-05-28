@@ -1,5 +1,37 @@
 # Decision Log
 
+## 2026-05-27 - Trim del catálogo semilla: el pack ahora es items-only
+
+**Cambio:** `src/content/packs/default.ts` pasó de 14,395 a ~2,133 líneas. Se vaciaron las secciones
+`locations`, `dropTables` y `recipes` (ahora `{}`) y se borraron los 4 type exports derivados
+(`DefaultItemId`/`DefaultRecipeId`/`DefaultLocationId`/`DefaultDropTableId`). Solo se conserva
+`items`, lo único que el runtime consume.
+
+**Motivo (evidencia):** El único consumidor del pack es `rpg/content/runtime.ts:64`, que lee **solo**
+`DEFAULT_CONTENT_PACK.items` para sembrar `runtimeItems`. Las locations/tools/recipes de gameplay
+están hardcodeadas en `defaultSnapshot()` (mismo archivo), no en el pack. Las ~12,260 líneas de
+locations/dropTables/recipes y los 4 type exports no tenían **ningún** call-site (`rg` vacío). Eran
+datos de autoría sin cablear: peso muerto en runtime y en el árbol.
+
+**Alternativas (rechazadas):** (a) *Reconciliar* — hacer que el runtime lea del catálogo y borrar el
+`defaultSnapshot()` duplicado: arregla el split-brain pero es un cambio de modelo de datos mayor y
+queda como iniciativa aparte. (b) *Dejarlo* — respetar la política previa ("keep content data in
+default.ts"): descartado porque esos datos no se usan y contradicen el north star de borrar peso
+muerto. El dueño eligió el trim.
+
+**Impacto:** `defineContentPack` sigue satisfecho (acepta `{}` en esas claves, `authoring.ts:111-118`).
+Las docs que llamaban al pack "extended catalog" se actualizaron a "items-only"
+(`content-authoring.md`, `rpg-content-dashboard.md`, `migration-notes.md`, `codebase-audit.md`,
+`README.md`, `webapp/README.md`). Los helpers de autoría (`defineRecipes`, `defineLocations`,
+`defineDropTables`) se conservan para re-introducir contenido tipado más adelante.
+
+**Riesgos:** Bajo. Se descartan datos de autoría no cableados; si se quieren recuperar, están en el
+historial de git. No cambia comportamiento de runtime (los items sembrados son idénticos).
+
+**Cómo verificar:** `bun run typecheck`; `bun test src/features/rpg src/db` (167 pass / 0 fail);
+`rg "DEFAULT_CONTENT_PACK\.(locations|recipes|dropTables)|Default(Item|Recipe|Location|DropTable)Id" src`
+→ vacío; `bun run start` siembra `runtimeItems` desde `.items`.
+
 ## 2026-05-25 - Single-community scope: global per-user keying is intentional
 
 **Cambio:** tx-v2 es un bot **single-community** (un servidor principal / federación que comparte

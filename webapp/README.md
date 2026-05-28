@@ -142,8 +142,8 @@ the bridge, every `/guilds/**` loader throws "Bot bridge not registered."
 bridge as the rest of the dashboard. The bot validates and persists that
 snapshot to Mongo as `rpg_content.active`, then refreshes the live runtime maps.
 
-The source pack at `src/content/packs/default.ts` is seed/catalog authoring
-data. It is not edited by this dashboard route. Gate `/rpg` with
+The source pack at `src/content/packs/default.ts` is seed data (items only). It
+is not edited by this dashboard route. Gate `/rpg` with
 `BOT_OWNER_IDS` (empty → 403 for all) to keep it out of view.
 
 ---

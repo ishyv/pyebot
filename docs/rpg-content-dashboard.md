@@ -5,7 +5,8 @@ The supported UI for editing RPG content is the embedded dashboard route at
 bridge in `src/webapp/bot-bridge/rpg-content.ts`, and persists validated
 snapshots to Mongo as `rpg_content.active`.
 
-`src/content/packs/default.ts` remains source-controlled seed/catalog data.
+`src/content/packs/default.ts` remains source-controlled seed data (items only
+since 2026-05-27).
 Edit that file in normal TypeScript changes when changing the built-in catalog.
 Do not add another source-pack editor unless the runtime model is deliberately
 changed first.
