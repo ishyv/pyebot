@@ -59,7 +59,7 @@ export const actions: Actions = {
   saveLinkSpam: async ({ params, request, locals }) => {
     const data = await request.formData();
     const patch = parseAutomodPatch(data, "linkSpam");
-    if (!patch.ok) return fail(400, { section: "linkSpam", error: patch.error });
+    if (!patch.ok) return fail(400, { section: "linkSpam", field: patch.field, error: patch.error });
     const result = await getBridge().saveAutomod(
       params.guildId,
       patch.value,
@@ -71,7 +71,7 @@ export const actions: Actions = {
   saveMentionSpam: async ({ params, request, locals }) => {
     const data = await request.formData();
     const patch = parseAutomodPatch(data, "mentionSpam");
-    if (!patch.ok) return fail(400, { section: "mentionSpam", error: patch.error });
+    if (!patch.ok) return fail(400, { section: "mentionSpam", field: patch.field, error: patch.error });
     const result = await getBridge().saveAutomod(
       params.guildId,
       patch.value,
@@ -83,7 +83,7 @@ export const actions: Actions = {
   savePerUserSlow: async ({ params, request, locals }) => {
     const data = await request.formData();
     const patch = parseAutomodPatch(data, "perUserSlow");
-    if (!patch.ok) return fail(400, { section: "perUserSlow", error: patch.error });
+    if (!patch.ok) return fail(400, { section: "perUserSlow", field: patch.field, error: patch.error });
     const result = await getBridge().saveAutomod(
       params.guildId,
       patch.value,
@@ -97,7 +97,7 @@ export const actions: Actions = {
       return fail(401, { section: "imageDetection", error: "Authentication required" });
     const data = await request.formData();
     const patch = parseAutomodPatch(data, "imageDetection");
-    if (!patch.ok) return fail(400, { section: "imageDetection", error: patch.error });
+    if (!patch.ok) return fail(400, { section: "imageDetection", field: patch.field, error: patch.error });
     const result = await getBridge().saveAutomod(
       params.guildId,
       patch.value,

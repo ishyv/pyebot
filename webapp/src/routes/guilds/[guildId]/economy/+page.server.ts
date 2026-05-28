@@ -18,7 +18,7 @@ export const actions: Actions = {
   saveDaily: async ({ params, request, locals }) => {
     const data = await request.formData();
     const patch = parseDailyEconomyPatch(data);
-    if (!patch.ok) return fail(400, { section: "daily", error: patch.error });
+    if (!patch.ok) return fail(400, { section: "daily", field: patch.field, error: patch.error });
     const result = await getBridge().saveEconomy(
       params.guildId,
       { daily: patch.value },
@@ -30,7 +30,7 @@ export const actions: Actions = {
   saveWork: async ({ params, request, locals }) => {
     const data = await request.formData();
     const patch = parseWorkEconomyPatch(data);
-    if (!patch.ok) return fail(400, { section: "work", error: patch.error });
+    if (!patch.ok) return fail(400, { section: "work", field: patch.field, error: patch.error });
     const result = await getBridge().saveEconomy(
       params.guildId,
       { work: patch.value },
@@ -42,7 +42,7 @@ export const actions: Actions = {
   saveTax: async ({ params, request, locals }) => {
     const data = await request.formData();
     const patch = parseTaxEconomyPatch(data);
-    if (!patch.ok) return fail(400, { section: "tax", error: patch.error });
+    if (!patch.ok) return fail(400, { section: "tax", field: patch.field, error: patch.error });
     const result = await getBridge().saveEconomyTax(
       params.guildId,
       patch.value,

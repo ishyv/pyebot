@@ -55,7 +55,7 @@ export const actions: Actions = {
     if (!locals.session) return fail(401, { actionError: "Authentication required" });
     const data = await request.formData();
     const action = parseModerationAction(data, locals.session.userId);
-    if (!action.ok) return fail(400, { actionError: action.error });
+    if (!action.ok) return fail(400, { actionError: action.error, actionField: action.field });
     const result = await getBridge().runModerationAction(params.guildId, action.value);
     if (result.isErr()) return fail(403, { actionError: result.error.message });
     return { actionSuccess: true };

@@ -8,7 +8,9 @@ import type {
   ModerationBridgeAction,
 } from "$shared/bridge-types";
 
-type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
+type ParseResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; field?: string };
 
 interface PerUserSlowRulePatch {
   readonly enabled: boolean;
@@ -24,8 +26,8 @@ function ok<T>(value: T): ParseResult<T> {
   return { ok: true, value };
 }
 
-function err<T>(error: string): ParseResult<T> {
-  return { ok: false, error };
+function err<T>(error: string, field?: string): ParseResult<T> {
+  return { ok: false, error, field };
 }
 
 export function text(value: FormDataEntryValue | null): string | null {
@@ -37,7 +39,7 @@ export function text(value: FormDataEntryValue | null): string | null {
 function finiteNumber(data: FormData, key: string, fallback: number): ParseResult<number> {
   const raw = data.get(key);
   const value = raw === null || String(raw).trim() === "" ? fallback : Number(raw);
-  if (!Number.isFinite(value)) return err(`${key} must be numeric.`);
+  if (!Number.isFinite(value)) return err(`${key} must be numeric.`, key);
   return ok(value);
 }
 
@@ -45,21 +47,21 @@ function nonNegativeInt(data: FormData, key: string, fallback: number): ParseRes
   const parsed = finiteNumber(data, key, fallback);
   if (!parsed.ok) return parsed;
   const value = Math.trunc(parsed.value);
-  if (value < 0) return err(`${key} must be non-negative.`);
+  if (value < 0) return err(`${key} must be non-negative.`, key);
   return ok(value);
 }
 
 function positiveInt(data: FormData, key: string, fallback: number): ParseResult<number> {
   const parsed = nonNegativeInt(data, key, fallback);
   if (!parsed.ok) return parsed;
-  if (parsed.value < 1) return err(`${key} must be at least 1.`);
+  if (parsed.value < 1) return err(`${key} must be at least 1.`, key);
   return ok(parsed.value);
 }
 
 function rate(data: FormData, key: string, fallback: number): ParseResult<number> {
   const parsed = finiteNumber(data, key, fallback);
   if (!parsed.ok) return parsed;
-  if (parsed.value < 0 || parsed.value > 1) return err(`${key} must be between 0 and 1.`);
+  if (parsed.value < 0 || parsed.value > 1) return err(`${key} must be between 0 and 1.`, key);
   return ok(parsed.value);
 }
 

@@ -56,17 +56,29 @@ describe("dashboard form parsers", () => {
     expect(parsed).toEqual({ ok: false, error: "Unknown moderation action" });
   });
 
-  test("rejects non-numeric economy values", () => {
+  test("rejects non-numeric economy values and reports the field", () => {
     expect(parseDailyEconomyPatch(form({ reward: "lots" }))).toEqual({
       ok: false,
       error: "reward must be numeric.",
+      field: "reward",
     });
   });
 
-  test("rejects out-of-range tax rates", () => {
+  test("rejects out-of-range tax rates and reports the field", () => {
     expect(parseTaxEconomyPatch(form({ rate: "2" }))).toEqual({
       ok: false,
       error: "rate must be between 0 and 1.",
+      field: "rate",
+    });
+  });
+
+  test("reports the offending field for nested numeric failures", () => {
+    // cooldownHours is the second field parsed; the failure must still name it
+    // so the dashboard can place the error inline rather than on the first field.
+    expect(parseDailyEconomyPatch(form({ reward: "5", cooldownHours: "0" }))).toEqual({
+      ok: false,
+      error: "cooldownHours must be at least 1.",
+      field: "cooldownHours",
     });
   });
 
