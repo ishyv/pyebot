@@ -127,8 +127,10 @@ export const OffersConfigSchema = z
   .object({
     reviewChannelId: z.string().nullable().catch(null),
     approvedChannelId: z.string().nullable().catch(null),
+    // Empty array = anyone may submit; populated = only holders of listed roles.
+    allowedRoleIds: z.array(z.string()).catch(() => []),
   })
-  .catch(() => ({ reviewChannelId: null, approvedChannelId: null }));
+  .catch(() => ({ reviewChannelId: null, approvedChannelId: null, allowedRoleIds: [] }));
 
 export const CountingConfigSchema = z
   .object({
@@ -188,3 +190,4 @@ export type RoleLimitRecord = z.infer<typeof RoleLimitSchema>;
 export type ReputationConfig = z.infer<typeof ReputationConfigSchema>;
 export type TopsConfig = z.infer<typeof TopsConfigSchema>;
 export type CountingConfig = z.infer<typeof CountingConfigSchema>;
+export type OffersConfig = z.infer<typeof OffersConfigSchema>;
