@@ -136,7 +136,7 @@ export async function showOneInputModal(
  */
 export function renderChannelPairPanel(
   session: PanelState,
-  panelId: "tickets" | "offers",
+  panelId: "tickets",
   title: string,
   selectedField: string | undefined,
   fields: readonly { value: string; label: string }[],
