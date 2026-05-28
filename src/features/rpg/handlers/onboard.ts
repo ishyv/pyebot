@@ -51,7 +51,13 @@ export async function handleOnboard(interaction: ButtonInteraction, ctx: Ctx): P
         necklace: null,
       },
     });
-  } catch {
+  } catch (e) {
+    console.error(
+      "Error while trying to set user rpg profile",
+      interaction.user.id,
+      interaction,
+      e,
+    );
     await interaction.editReply({ content: "Failed to set your path. Please try again." });
     return;
   }

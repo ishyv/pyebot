@@ -57,7 +57,10 @@ function toButton(raw: RawButton): PreviewButton {
 }
 
 function toThumbnail(raw: RawThumbnail): PreviewThumbnail {
-  return { url: str(raw.media?.url), alt: typeof raw.description === "string" ? raw.description : null };
+  return {
+    url: str(raw.media?.url),
+    alt: typeof raw.description === "string" ? raw.description : null,
+  };
 }
 
 function normalize(component: RawComponent): PreviewNode {
@@ -156,7 +159,10 @@ export function parsePayloadJson(text: string): ParseResult {
   try {
     value = JSON.parse(text);
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? `invalid json: ${err.message}` : "invalid json." };
+    return {
+      ok: false,
+      error: err instanceof Error ? `invalid json: ${err.message}` : "invalid json.",
+    };
   }
   return parsePayload(value);
 }

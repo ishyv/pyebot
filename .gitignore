@@ -37,10 +37,13 @@ AGENTS.md
 
 bun.lock
 
-# cai 
+# cai
 history.json
 tasks.json
 __file_log
 
+# Playwright MCP session data
+.playwright-mcp/
 
-bun.lock
+# Scratch screenshots / one-off images
+playground-*.png
