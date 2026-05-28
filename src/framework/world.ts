@@ -59,6 +59,35 @@ function cacheKey(collection: string, id: Entity): string {
 }
 
 /**
+ * Build the update document for an upsert-style patch.
+ *
+ * MongoDB rejects an update where the same path appears in both `$setOnInsert`
+ * and `$set` — error 40, ConflictingUpdateOperators. Critically, it validates
+ * this at parse time, for BOTH the insert and update paths, not only on insert.
+ * Because every component field carries a Zod `.default()`, the defaults we seed
+ * on insert always overlap the caller's patch, so a naive `findOneAndUpdate`
+ * throws for every patch.
+ *
+ * We resolve the overlap by letting the patch win: any key present in `patch` is
+ * dropped from the insert defaults. On insert the `$set` supplies that field; on
+ * update `$setOnInsert` is ignored anyway. An empty patch yields an update with
+ * no `$set` (MongoDB rejects an empty `$set`), behaving like a pure ensure.
+ */
+export function buildPatchUpdate(
+  id: Entity,
+  defaults: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Document {
+  const setOnInsert: Record<string, unknown> = { _id: id };
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!(key in patch)) setOnInsert[key] = value;
+  }
+  const update: Document = { $setOnInsert: setOnInsert };
+  if (Object.keys(patch).length > 0) update.$set = patch;
+  return update;
+}
+
+/**
  * The framework-wide World. Created once at boot via `World.create()`.
  */
 export class World {
@@ -135,12 +164,14 @@ export class World {
   async patchDirect<T>(id: Entity, component: Component<T>, patch: Partial<T>): Promise<T> {
     const col = await this.col(component);
     const defaults = this.defaults(component, id);
+    const update = buildPatchUpdate(
+      id,
+      defaults as Record<string, unknown>,
+      patch as Record<string, unknown>,
+    );
     const res = await col.findOneAndUpdate(
       { _id: id } as MongoFilter<Document & { _id: Entity }>,
-      {
-        $setOnInsert: { _id: id, ...(defaults as object) },
-        $set: patch as Document,
-      } as Document,
+      update,
       { upsert: true, returnDocument: "after" },
     );
     const doc = (res && (res as { value?: unknown }).value) ?? (res as unknown);
