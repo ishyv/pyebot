@@ -36,9 +36,9 @@ import {
   OFFER_CREATE_MODAL_ID,
   OFFER_REJECT_MODAL_PREFIX,
   OFFER_REJECT_PREFIX,
+  type OfferError,
   rejectOffer,
   requestChanges,
-  type OfferError,
 } from "./service";
 
 function isModerator(interaction: ButtonInteraction): boolean {
@@ -149,7 +149,12 @@ export default class OffersHandlers {
       contact: interaction.fields.getTextInputValue("contact") || null,
     };
 
-    const result = await createOffer(guild, interaction.user.id, interaction.user.username, details);
+    const result = await createOffer(
+      guild,
+      interaction.user.id,
+      interaction.user.username,
+      details,
+    );
 
     if (result.isErr()) {
       const err = result.error as OfferError;

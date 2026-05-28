@@ -9,7 +9,12 @@ import type { ComponentInteraction } from "@/core/feature";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
 import { applyGuildConfigPaths } from "../configMutations";
 import { channelMention, coreChannelValue, roleMention } from "../panelHelpers";
-import { makePanelCustomId, panelContainer, type PanelPayload, type PanelState } from "../panelRuntime";
+import {
+  makePanelCustomId,
+  type PanelPayload,
+  type PanelState,
+  panelContainer,
+} from "../panelRuntime";
 
 const CHANNEL_FIELDS = [
   { value: "channels.core.offersReview", label: "Review channel" },
