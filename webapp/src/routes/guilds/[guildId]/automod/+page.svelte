@@ -5,6 +5,7 @@ import {
   Button,
   Badge,
   ConfirmDialog,
+  EmptyState,
   Input,
   PageHeader,
   Panel,
@@ -568,7 +569,10 @@ $effect(() => {
       </div>
 
       {#if data.bannedImages.length === 0}
-        <p class="empty">no active banned images.</p>
+        <EmptyState
+          title="no banned images"
+          description="upload an image above to start blocking re-posts of it."
+        />
       {:else}
         <div class="image-list">
           {#each data.bannedImages as record (record.id)}
@@ -754,10 +758,6 @@ $effect(() => {
     color: var(--text-soft);
     font-family: var(--font-mono);
     font-size: 0.82rem;
-  }
-  .empty {
-    margin: var(--space-sm) 0 0;
-    color: var(--text-soft);
   }
   .image-list {
     display: grid;

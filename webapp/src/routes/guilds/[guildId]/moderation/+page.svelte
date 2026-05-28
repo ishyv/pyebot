@@ -6,6 +6,7 @@ import {
   Button,
   ConfirmDialog,
   CornerBrackets,
+  EmptyState,
   Input,
   Label,
   PageHeader,
@@ -286,7 +287,10 @@ $effect(() => {
 
 
       {#if data.cases.length === 0}
-        <p class="empty">no cases recorded.</p>
+        <EmptyState
+          title="no cases recorded"
+          description="moderation actions you run will appear here."
+        />
       {:else}
         <Table columns={caseColumns} rows={caseRows} />
         <div class="row-actions-grid">
@@ -352,7 +356,7 @@ $effect(() => {
       {#snippet header()}<Label color="muted">open and recent appeal records</Label>{/snippet}
 
       {#if data.appeals.length === 0}
-        <p class="empty">no appeals found.</p>
+        <EmptyState title="no appeals" description="submitted appeals will appear here for review." />
       {:else}
         <Table columns={appealColumns} rows={appealRows} />
         <div class="row-actions-grid">
@@ -432,7 +436,6 @@ $effect(() => {
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .empty { margin: var(--space-sm) 0 0; color: var(--text-soft); }
   .row-actions-grid { display: grid; gap: var(--space-xs); margin-top: var(--space-sm); }
   .row-edit {
     display: grid;

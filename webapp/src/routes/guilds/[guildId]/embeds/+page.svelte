@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   ConfirmDialog,
+  EmptyState,
   Input,
   PageHeader,
   Panel,
@@ -74,7 +75,7 @@ function scheduleLabel(hours: number | null): string {
     <Panel>
       {#snippet header()}<span class="panel-title">saved embeds</span>{/snippet}
       {#if data.embeds.length === 0}
-        <p class="empty">no embeds yet. create one above to get started.</p>
+        <EmptyState title="no embeds yet" description="create one above to get started." />
       {:else}
         <ul class="list">
           {#each data.embeds as embed (embed.name)}
@@ -189,12 +190,6 @@ function scheduleLabel(hours: number | null): string {
     color: var(--text-soft);
     font-family: var(--font-body);
     font-size: 0.92rem;
-  }
-  .empty {
-    margin: 0;
-    color: var(--text-soft);
-    font-family: var(--font-body);
-    font-size: 0.95rem;
   }
   .list {
     list-style: none;
