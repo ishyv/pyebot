@@ -1,16 +1,7 @@
 <script lang="ts">
-import {
-  Badge,
-  Button,
-  EmptyState,
-  Input,
-  Label,
-  PageHeader,
-  Panel,
-  Stack,
-  toastStore,
-} from "@hyvnt/hyvui";
+import { Badge, Button, EmptyState, Input, Label, PageHeader, Panel, Stack } from "@hyvnt/hyvui";
 import { enhance } from "$app/forms";
+import { enhanceSave } from "$lib/forms";
 import RolePicker from "$lib/components/RolePicker.svelte";
 import type { PageData } from "./$types";
 
@@ -60,15 +51,10 @@ $effect(() => {
             class="role-row"
             method="POST"
             action="?/save"
-            use:enhance={() => {
-              return async ({ result, update }) => {
-                toastStore.push(
-                  result.type === "success" ? `${managed.key} saved` : "save failed",
-                  result.type === "success" ? "ok" : "fail",
-                );
-                await update({ reset: false });
-              };
-            }}
+            use:enhance={enhanceSave({
+              setSaving: () => {},
+              okMessage: `${managed.key} saved`,
+            })}
           >
             <input type="hidden" name="roleId" value={managed.key} />
 

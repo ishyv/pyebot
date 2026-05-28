@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { ResolveStatus } from "@hyvnt/hyvui";
 import {
+  Alert,
   Badge,
   Button,
   ConfirmDialog,
@@ -22,6 +23,7 @@ import { enhance } from "$app/forms";
 import { page } from "$app/state";
 import ChannelSelect from "$lib/components/ChannelSelect.svelte";
 import FormField from "$lib/components/FormField.svelte";
+import { enhanceSave, type FieldError, isDirty } from "$lib/forms";
 import RolePicker from "$lib/components/RolePicker.svelte";
 import type { PageData } from "./$types";
 
@@ -47,7 +49,28 @@ let quarantineRoleId = $state(initial.quarantineRoleId);
 let verifiedRoleId = $state(initial.verifiedRoleId);
 
 let savingSettings = $state(false);
+let settingsError = $state<FieldError | null>(null);
 let settingsResolve: { trigger: (s: ResolveStatus) => void } | undefined;
+
+const settingsDirty = $derived(
+  isDirty(
+    { logChannelId, appealsChannelId, quarantineRoleId, verifiedRoleId },
+    {
+      logChannelId: data.values.logChannelId,
+      appealsChannelId: data.values.appealsChannelId,
+      quarantineRoleId: data.values.quarantineRoleId,
+      verifiedRoleId: data.values.verifiedRoleId,
+    },
+  ),
+);
+
+function resetSettings(): void {
+  logChannelId = data.values.logChannelId;
+  appealsChannelId = data.values.appealsChannelId;
+  quarantineRoleId = data.values.quarantineRoleId;
+  verifiedRoleId = data.values.verifiedRoleId;
+  settingsError = null;
+}
 
 // Action form
 let actionType = $state("warn");
@@ -138,21 +161,16 @@ $effect(() => {
         method="POST"
         action="?/save"
         use:resolve={(a) => (settingsResolve = a)}
-        use:enhance={() => {
-          savingSettings = true;
-          return async ({ result, update }) => {
-            savingSettings = false;
-            if (result.type === "success") {
-              settingsResolve?.trigger("ok");
-              toastStore.push("moderation saved", "ok");
-            } else {
-              settingsResolve?.trigger("fail");
-              toastStore.push("save failed, retry", "fail");
-            }
-            await update({ reset: false });
-          };
-        }}
+        use:enhance={enhanceSave({
+          setSaving: (v) => (savingSettings = v),
+          resolve: () => settingsResolve,
+          okMessage: "moderation saved",
+          setError: (e) => (settingsError = e),
+        })}
       >
+        {#if settingsError}
+          <Alert variant="error">{settingsError.message}</Alert>
+        {/if}
         <FormField label="mod log channel" description="bans, mutes, warns, and kicks are logged here.">
           <ChannelSelect
             name="logChannelId"
@@ -190,6 +208,10 @@ $effect(() => {
         </FormField>
 
         <div class="actions">
+          {#if settingsDirty}<span class="unsaved">unsaved changes</span>{/if}
+          {#if settingsDirty}
+            <Button type="button" variant="ghost" size="sm" onclick={resetSettings}>reset</Button>
+          {/if}
           <Button type="submit" variant="primary" disabled={savingSettings} echo>
             {savingSettings ? "saving" : "save moderation"}
           </Button>
@@ -396,10 +418,19 @@ $effect(() => {
   .actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: var(--space-xs);
     margin-top: var(--space-sm);
     padding-top: var(--space-sm);
     border-top: 1px solid var(--line);
+  }
+  .unsaved {
+    margin-right: auto;
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .empty { margin: var(--space-sm) 0 0; color: var(--text-soft); }
   .row-actions-grid { display: grid; gap: var(--space-xs); margin-top: var(--space-sm); }

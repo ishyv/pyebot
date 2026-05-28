@@ -1,9 +1,10 @@
 <script lang="ts">
 import type { ResolveStatus } from "@hyvnt/hyvui";
-import { Button, PageHeader, Panel, resolve, Stack, toastStore } from "@hyvnt/hyvui";
+import { Alert, Button, PageHeader, Panel, resolve, Stack } from "@hyvnt/hyvui";
 import { enhance } from "$app/forms";
 import ChannelSelect from "$lib/components/ChannelSelect.svelte";
 import FormField from "$lib/components/FormField.svelte";
+import { enhanceSave, type FieldError, isDirty } from "$lib/forms";
 import type { PageData } from "./$types";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 
 const { data }: Props = $props();
 let saving = $state(false);
+let error = $state<FieldError | null>(null);
 let resolveAction: { trigger: (s: ResolveStatus) => void } | undefined;
 
 const fields = [
@@ -48,6 +50,15 @@ let values = $state<Record<string, string>>(buildValues());
 $effect(() => {
   values = buildValues();
 });
+
+// Dirty against the loader value; the $effect above reseeds `values` after a
+// successful save, so the marker clears on its own.
+const dirty = $derived(isDirty(values, buildValues()));
+
+function reset(): void {
+  values = buildValues();
+  error = null;
+}
 </script>
 
 <Stack gap="var(--space-lg)">
@@ -58,19 +69,16 @@ $effect(() => {
       method="POST"
       action="?/save"
       use:resolve={(a) => (resolveAction = a)}
-      use:enhance={() => {
-        saving = true;
-        return async ({ result, update }) => {
-          saving = false;
-          resolveAction?.trigger(result.type === "success" ? "ok" : "fail");
-          toastStore.push(
-            result.type === "success" ? "channels saved" : "save failed, retry",
-            result.type === "success" ? "ok" : "fail",
-          );
-          await update({ reset: false });
-        };
-      }}
+      use:enhance={enhanceSave({
+        setSaving: (v) => (saving = v),
+        resolve: () => resolveAction,
+        okMessage: "channels saved",
+        setError: (e) => (error = e),
+      })}
     >
+      {#if error}
+        <Alert variant="error">{error.message}</Alert>
+      {/if}
       {#each fields as field (field.key)}
         <FormField label={field.label} description={field.description}>
           <ChannelSelect
@@ -84,6 +92,10 @@ $effect(() => {
       {/each}
 
       <div class="actions">
+        {#if dirty}<span class="unsaved">unsaved changes</span>{/if}
+        {#if dirty}
+          <Button type="button" variant="ghost" size="sm" onclick={reset}>reset</Button>
+        {/if}
         <Button type="submit" variant="primary" disabled={saving} echo>
           {saving ? "saving" : "save channels"}
         </Button>
@@ -96,9 +108,18 @@ $effect(() => {
   .actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: var(--space-xs);
     margin-top: var(--space-sm);
     padding-top: var(--space-sm);
     border-top: 1px solid var(--line);
+  }
+  .unsaved {
+    margin-right: auto;
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 </style>
