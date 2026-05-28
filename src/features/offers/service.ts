@@ -9,7 +9,15 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type Guild as DjsGuild } from "discord.js";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  type Guild as DjsGuild,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} from "discord.js";
 import { z } from "zod";
 import { createLogger } from "@/core/logger";
 import { ErrResult, OkResult, type Result } from "@/core/result";
@@ -65,11 +73,82 @@ const ACTIVE_STATUSES: OfferStatus[] = ["PENDING_REVIEW", "CHANGES_REQUESTED"];
 
 const offerStore = new MongoStore("offers", OfferSchema);
 
-// ─── Button customId constants ────────────────────────────────────────────────
-
+// ─── customId constants ───────────────────────────────────────────────────────
+// Button prefixes carry the offerId as a suffix: `offer:approve:{offerId}`
 export const OFFER_APPROVE_PREFIX = "offer:approve:";
 export const OFFER_REJECT_PREFIX = "offer:reject:";
 export const OFFER_CHANGES_PREFIX = "offer:changes:";
+// Modal prefixes follow the same suffix convention for reject/changes.
+export const OFFER_REJECT_MODAL_PREFIX = "offer:reject-modal:";
+export const OFFER_CHANGES_MODAL_PREFIX = "offer:changes-modal:";
+// Fixed id — no offerId needed; the author is read from the modal interaction.
+export const OFFER_CREATE_MODAL_ID = "offer:create-modal";
+
+/** Five-field modal shown to the user when they run /offer create. */
+export function buildCreateModal(): ModalBuilder {
+  const input = (
+    id: string,
+    label: string,
+    style: TextInputStyle,
+    required: boolean,
+    maxLength: number,
+  ) =>
+    new ActionRowBuilder<TextInputBuilder>().addComponents(
+      new TextInputBuilder()
+        .setCustomId(id)
+        .setLabel(label)
+        .setStyle(style)
+        .setRequired(required)
+        .setMaxLength(maxLength),
+    );
+
+  return new ModalBuilder()
+    .setCustomId(OFFER_CREATE_MODAL_ID)
+    .setTitle("Submit an Offer")
+    .addComponents(
+      input("title", "Title", TextInputStyle.Short, true, 100),
+      input("description", "Description", TextInputStyle.Paragraph, true, 1000),
+      input("requirements", "Requirements (optional)", TextInputStyle.Paragraph, false, 500),
+      input("salary", "Salary / Compensation (optional)", TextInputStyle.Short, false, 200),
+      input("contact", "Contact info (optional)", TextInputStyle.Short, false, 200),
+    );
+}
+
+/** Single-field modal for a moderator to enter a rejection reason. */
+export function buildRejectModal(offerId: string): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${OFFER_REJECT_MODAL_PREFIX}${offerId}`)
+    .setTitle("Reject Offer")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("reason")
+          .setLabel("Rejection reason")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setMinLength(10)
+          .setMaxLength(500),
+      ),
+    );
+}
+
+/** Single-field modal for a moderator to describe needed changes. */
+export function buildChangesModal(offerId: string): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(`${OFFER_CHANGES_MODAL_PREFIX}${offerId}`)
+    .setTitle("Request Changes")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("note")
+          .setLabel("Changes needed")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setMinLength(10)
+          .setMaxLength(500),
+      ),
+    );
+}
 
 function buildReviewButtons(offerId: string, disabled = false): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -149,6 +228,7 @@ export class OfferError extends Error {
       | "NOT_FOUND"
       | "INVALID_STATUS"
       | "NO_REVIEW_CHANNEL"
+      | "FORBIDDEN"
       | "DB_ERROR",
   ) {
     super(message);
@@ -156,7 +236,7 @@ export class OfferError extends Error {
   }
 }
 
-async function findActiveByAuthor(
+export async function findActiveByAuthor(
   guildId: string,
   authorId: string,
 ): Promise<Result<Offer | null>> {
@@ -179,6 +259,18 @@ export async function createOffer(
   if (existingRes.isErr()) return ErrResult(existingRes.error);
   if (existingRes.unwrap()) {
     return ErrResult(new OfferError("You already have an active offer.", "ACTIVE_OFFER_EXISTS"));
+  }
+
+  // Role gate — skip when allowedRoleIds is empty (open submission).
+  const guildCfgRes = await getGuild(guild.id);
+  const allowedRoles = guildCfgRes.isOk()
+    ? (guildCfgRes.unwrap()?.offersConfig?.allowedRoleIds ?? [])
+    : [];
+  if (allowedRoles.length > 0) {
+    const member = await guild.members.fetch(authorId).catch(() => null);
+    if (!member || !allowedRoles.some((r) => member.roles.cache.has(r))) {
+      return ErrResult(new OfferError("You don't have permission to submit offers.", "FORBIDDEN"));
+    }
   }
 
   const { reviewChannelId } = await getChannels(guild.id);
@@ -386,8 +478,8 @@ export async function requestChanges(
   return OkResult(updated);
 }
 
-export async function withdrawOffer(guildId: string, authorId: string): Promise<Result<boolean>> {
-  const res = await findActiveByAuthor(guildId, authorId);
+export async function withdrawOffer(guild: DjsGuild, authorId: string): Promise<Result<boolean>> {
+  const res = await findActiveByAuthor(guild.id, authorId);
   if (res.isErr()) return ErrResult(res.error);
 
   const offer = res.unwrap();
@@ -395,6 +487,9 @@ export async function withdrawOffer(guildId: string, authorId: string): Promise<
 
   const updated: Offer = { ...offer, status: "WITHDRAWN", updatedAt: new Date() };
   await offerStore.set(offer._id, updated);
+  // Mark the review card as WITHDRAWN and disable its buttons so moderators
+  // don't act on a submission that no longer exists.
+  await updateReviewMessage(guild, offer, "WITHDRAWN", null, true);
   return OkResult(true);
 }
 

@@ -66,11 +66,11 @@ async function handleCreate(c: Extract<OfferCtx, { subcommand: "create" }>) {
 async function handleWithdraw(c: Extract<OfferCtx, { subcommand: "withdraw" }>) {
   await c.ctx.respond.defer({ visibility: "ephemeral" });
 
-  if (!c.guildId) {
+  if (!c.guild) {
     return { content: "This command can only be used in a server." };
   }
 
-  const result = await withdrawOffer(c.guildId, c.userId);
+  const result = await withdrawOffer(c.guild, c.userId);
 
   if (result.isErr()) {
     return v2Message(
