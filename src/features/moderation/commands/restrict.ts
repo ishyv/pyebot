@@ -72,7 +72,7 @@ export default command("restrict")
       return { content: "That user is not a member of this server." };
     }
 
-    const result = await restrict(guild, moderator, targetMember, type, roleId, reason);
+    const result = await restrict(guild, moderator, targetMember, roleId, reason);
 
     if (result.isErr()) {
       return { content: `Failed: ${result.error.message}` };

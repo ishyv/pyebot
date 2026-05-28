@@ -295,7 +295,6 @@ export function createModerationBridge(
             guild,
             moderator,
             targetMember,
-            "all",
             action.roleId,
             action.reason,
           );

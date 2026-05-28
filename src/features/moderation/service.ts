@@ -545,7 +545,6 @@ export async function restrict(
   guild: Guild,
   moderator: GuildMember,
   target: GuildMember,
-  _restrictionType: "forums" | "voice" | "jobs" | "all",
   roleId: string,
   reason: string,
 ): Promise<Result<ModerationResult, ModerationError>> {
