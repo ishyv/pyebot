@@ -332,17 +332,21 @@ async function handleCollect(interaction: ChatInputCommandInteraction, ctx: Ctx)
   );
 }
 
+type TycoonHandler = (interaction: ChatInputCommandInteraction, ctx: Ctx) => Promise<void>;
+const dispatch: Record<string, TycoonHandler> = {
+  play: handlePlay,
+  charter: handleCharter,
+  collect: handleCollect,
+  upgrade: handleUpgrade,
+  automate: handleAutomate,
+  mode: handleMode,
+  exchange: handleExchange,
+  leaderboard: handleLeaderboard,
+};
+
 export default data
   .help({ hints: ["/tycoon play", "/tycoon collect", "/tycoon upgrade"] })
   .autocomplete(autocomplete)
   .run(async (c) => {
-    const { interaction, ctx } = c;
-    if (c.subcommand === "play") await handlePlay(interaction, ctx);
-    else if (c.subcommand === "charter") await handleCharter(interaction, ctx);
-    else if (c.subcommand === "collect") await handleCollect(interaction, ctx);
-    else if (c.subcommand === "upgrade") await handleUpgrade(interaction, ctx);
-    else if (c.subcommand === "automate") await handleAutomate(interaction, ctx);
-    else if (c.subcommand === "mode") await handleMode(interaction, ctx);
-    else if (c.subcommand === "exchange") await handleExchange(interaction, ctx);
-    else if (c.subcommand === "leaderboard") await handleLeaderboard(interaction, ctx);
+    await dispatch[c.subcommand ?? ""]?.(c.interaction, c.ctx);
   });

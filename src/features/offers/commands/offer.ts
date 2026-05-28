@@ -92,10 +92,11 @@ async function handleWithdraw(c: Extract<OfferCtx, { subcommand: "withdraw" }>) 
   );
 }
 
-export default data.help({ hints: [] }).run(async (c) => {
-  if (c.subcommand === "create") return handleCreate(c);
-  if (c.subcommand === "withdraw") return handleWithdraw(c);
-  if (!(await assertPanelPermission(c.interaction))) return undefined;
-  await openAdminPanel(c.interaction, "offers");
-  return undefined;
-});
+export default data
+  .help({ hints: [] })
+  .handle("create", handleCreate)
+  .handle("withdraw", handleWithdraw)
+  .run(async (c) => {
+    if (!(await assertPanelPermission(c.interaction))) return undefined;
+    await openAdminPanel(c.interaction, "offers");
+  });

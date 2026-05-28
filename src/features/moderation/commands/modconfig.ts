@@ -51,107 +51,82 @@ export default command("modconfig")
       .string("duration", "Auto-mute duration (e.g. 1h, 30m, 1d) — wired in Phase 4b"),
   )
   .help({ hints: ["/modset status", "/mod help"] })
-  .run(async (c) => {
-    const { guildId } = c;
-
-    if (c.subcommand === "modlog") {
-      const channel = c.options.channel;
-
-      if (channel.type !== ChannelType.GuildText) {
-        return { content: "The channel must be a text channel." };
-      }
-
-      const result = await updateGuildPaths(guildId, {
-        "channels.core.modlog": { channelId: channel.id },
-      });
-
-      if (result.isErr()) {
-        return v2Message(container("danger", text("## Failed\nCould not update mod log channel.")));
-      }
-
-      return v2Message(
-        container("ok", text(`## Mod Log Channel Set\nMod log channel set to <#${channel.id}>.`)),
-      );
+  .handle("modlog", async (c) => {
+    const channel = c.options.channel;
+    if (channel.type !== ChannelType.GuildText) {
+      return { content: "The channel must be a text channel." };
     }
+    const result = await updateGuildPaths(c.guildId, {
+      "channels.core.modlog": { channelId: channel.id },
+    });
+    if (result.isErr()) {
+      return v2Message(container("danger", text("## Failed\nCould not update mod log channel.")));
+    }
+    return v2Message(
+      container("ok", text(`## Mod Log Channel Set\nMod log channel set to <#${channel.id}>.`)),
+    );
+  })
+  .handle("restrict-roles", async (c) => {
+    const type = c.options.type as "forums" | "voice" | "jobs" | "all";
+    const role = c.options.role;
+    const result = await updateGuildPaths(c.guildId, {
+      [`moderation.restrictionRoles.${type}`]: role.id,
+    });
+    if (result.isErr()) {
+      return v2Message(container("danger", text("## Failed\nCould not update restriction role.")));
+    }
+    return v2Message(
+      container(
+        "ok",
+        text(`## Restriction Role Set\nRestriction role for **${type}** set to <@&${role.id}>.`),
+      ),
+    );
+  })
+  .handle("escalation", async (c) => {
+    const enabled = c.options.action === "enable";
+    const threshold = c.options.threshold;
+    const durationStr = c.options.duration;
 
-    if (c.subcommand === "restrict-roles") {
-      const type = c.options.type as "forums" | "voice" | "jobs" | "all";
-      const role = c.options.role;
-
-      const result = await updateGuildPaths(guildId, {
-        [`moderation.restrictionRoles.${type}`]: role.id,
-      });
-
-      if (result.isErr()) {
+    let durationMs: number | null = null;
+    if (durationStr !== null) {
+      durationMs = parseDuration(durationStr);
+      if (durationMs === null) {
         return v2Message(
-          container("danger", text("## Failed\nCould not update restriction role.")),
-        );
-      }
-
-      return v2Message(
-        container(
-          "ok",
-          text(`## Restriction Role Set\nRestriction role for **${type}** set to <@&${role.id}>.`),
-        ),
-      );
-    }
-
-    if (c.subcommand === "escalation") {
-      const enabled = c.options.action === "enable";
-      const threshold = c.options.threshold;
-      const durationStr = c.options.duration;
-
-      let durationMs: number | null = null;
-      if (durationStr !== null) {
-        durationMs = parseDuration(durationStr);
-        if (durationMs === null) {
-          return v2Message(
-            container(
-              "danger",
-              text(
-                "## Invalid Duration\nInvalid duration. Valid formats: 10s, 5m, 2h, 3d, 1w (maximum 28 days)",
-              ),
+          container(
+            "danger",
+            text(
+              "## Invalid Duration\nInvalid duration. Valid formats: 10s, 5m, 2h, 3d, 1w (maximum 28 days)",
             ),
-          );
-        }
-      }
-
-      const paths: Record<string, unknown> = {
-        "moderation.escalation.enabled": enabled,
-      };
-
-      if (threshold !== null) {
-        paths["moderation.escalation.warnThreshold"] = threshold;
-      }
-
-      if (durationMs !== null) {
-        paths["moderation.escalation.muteDurationMs"] = durationMs;
-      }
-
-      const result = await updateGuildPaths(guildId, paths);
-
-      if (result.isErr()) {
-        return v2Message(
-          container("danger", text("## Failed\nCould not update escalation settings.")),
+          ),
         );
       }
+    }
 
-      const escalationLines = [
-        threshold !== null ? `**Warn Threshold:** ${threshold}` : null,
-        durationMs !== null ? `**Mute Duration:** ${msToHuman(durationMs)}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
+    const paths: Record<string, unknown> = { "moderation.escalation.enabled": enabled };
+    if (threshold !== null) paths["moderation.escalation.warnThreshold"] = threshold;
+    if (durationMs !== null) paths["moderation.escalation.muteDurationMs"] = durationMs;
 
+    const result = await updateGuildPaths(c.guildId, paths);
+    if (result.isErr()) {
       return v2Message(
-        container(
-          enabled ? "ok" : "mute",
-          text(
-            `## Escalation Settings Updated\nAuto-escalation is now **${enabled ? "enabled" : "disabled"}**.`,
-          ),
-          ...(escalationLines ? [separator("sm"), text(escalationLines)] : []),
-        ),
+        container("danger", text("## Failed\nCould not update escalation settings.")),
       );
     }
-    return undefined;
+
+    const escalationLines = [
+      threshold !== null ? `**Warn Threshold:** ${threshold}` : null,
+      durationMs !== null ? `**Mute Duration:** ${msToHuman(durationMs)}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return v2Message(
+      container(
+        enabled ? "ok" : "mute",
+        text(
+          `## Escalation Settings Updated\nAuto-escalation is now **${enabled ? "enabled" : "disabled"}**.`,
+        ),
+        ...(escalationLines ? [separator("sm"), text(escalationLines)] : []),
+      ),
+    );
   });

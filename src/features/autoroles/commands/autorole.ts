@@ -405,34 +405,20 @@ function formatDuration(ms: number): string {
   return `${ms / 60_000}m`;
 }
 
+type AutoroleHandler = (interaction: ChatInputCommandInteraction, ctx: Ctx) => Promise<void>;
+const dispatch: Record<string, AutoroleHandler> = {
+  "prompt:reaction": (i, c) => handlePrompt(i, c, "reaction"),
+  "prompt:button": (i, c) => handlePrompt(i, c, "button"),
+  "attach:reaction": (i, c) => handleAttach(i, c, "reaction"),
+  "attach:button": (i, c) => handleAttach(i, c, "button"),
+  create: handleCreate,
+  delete: handleDelete,
+  list: handleList,
+  enable: (i, c) => handleToggle(i, c, true),
+  disable: (i, c) => handleToggle(i, c, false),
+};
+
 export default data.help({ hints: [] }).run(async (c) => {
-  const { interaction, ctx } = c;
-  if (c.subcommandGroup === "prompt") {
-    await handlePrompt(interaction, ctx, c.subcommand);
-    return;
-  }
-  if (c.subcommandGroup === "attach") {
-    await handleAttach(interaction, ctx, c.subcommand);
-    return;
-  }
-  if (c.subcommand === "create") {
-    await handleCreate(interaction, ctx);
-    return;
-  }
-  if (c.subcommand === "delete") {
-    await handleDelete(interaction, ctx);
-    return;
-  }
-  if (c.subcommand === "list") {
-    await handleList(interaction, ctx);
-    return;
-  }
-  if (c.subcommand === "enable") {
-    await handleToggle(interaction, ctx, true);
-    return;
-  }
-  if (c.subcommand === "disable") {
-    await handleToggle(interaction, ctx, false);
-    return;
-  }
+  const key = c.subcommandGroup ? `${c.subcommandGroup}:${c.subcommand}` : (c.subcommand ?? "");
+  await dispatch[key]?.(c.interaction, c.ctx);
 });

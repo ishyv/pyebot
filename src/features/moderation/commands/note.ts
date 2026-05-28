@@ -22,39 +22,23 @@ export default command("note")
       .integer("index", "Note index (1-based)", { required: true, min: 1 }),
   )
   .help({ hints: ["/cases"] })
-  .run(async (c) => {
-    const { guildId, userId } = c;
-
-    if (c.subcommand === "add") {
-      const { user: targetUser, note } = c.options;
-      const result = await addNote(targetUser.id, guildId, note, userId);
-      if (result.isErr()) {
-        return { content: `Failed: ${result.error.message}` };
-      }
-      return { content: `Note added for ${targetUser.tag}.` };
-    }
-
-    if (c.subcommand === "list") {
-      const { user: targetUser } = c.options;
-      const result = await getNotes(targetUser.id, guildId);
-      if (result.isErr()) {
-        return { content: "Failed to fetch notes." };
-      }
-      const notes = result.unwrap();
-      if (notes.length === 0) {
-        return { content: `No notes on **${targetUser.tag}**.` };
-      }
-      return renderNoteList(targetUser.tag, notes);
-    }
-
-    if (c.subcommand === "delete") {
-      const { user: targetUser, index } = c.options;
-      const zeroIndex = index - 1; // convert to 0-based
-      const result = await deleteNote(targetUser.id, guildId, zeroIndex);
-      if (result.isErr()) {
-        return { content: `Failed: ${result.error.message}` };
-      }
-      return { content: `Note ${index} deleted.` };
-    }
-    return undefined;
+  .handle("add", async (c) => {
+    const { user: targetUser, note } = c.options;
+    const result = await addNote(targetUser.id, c.guildId, note, c.userId);
+    if (result.isErr()) return { content: `Failed: ${result.error.message}` };
+    return { content: `Note added for ${targetUser.tag}.` };
+  })
+  .handle("list", async (c) => {
+    const { user: targetUser } = c.options;
+    const result = await getNotes(targetUser.id, c.guildId);
+    if (result.isErr()) return { content: "Failed to fetch notes." };
+    const notes = result.unwrap();
+    if (notes.length === 0) return { content: `No notes on **${targetUser.tag}**.` };
+    return renderNoteList(targetUser.tag, notes);
+  })
+  .handle("delete", async (c) => {
+    const { user: targetUser, index } = c.options;
+    const result = await deleteNote(targetUser.id, c.guildId, index - 1); // convert to 0-based
+    if (result.isErr()) return { content: `Failed: ${result.error.message}` };
+    return { content: `Note ${index} deleted.` };
   });

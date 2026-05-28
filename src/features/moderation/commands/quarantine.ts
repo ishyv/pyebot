@@ -18,42 +18,33 @@ export default command("quarantine")
     s.user("user", "Member to release", { required: true }),
   )
   .help({ hints: ["/cases"] })
-  .run(async (c) => {
-    const { guild, userId } = c;
-
-    const targetUser = c.options.user;
+  .handle("add", async (c) => {
+    const { user: targetUser, reason } = c.options;
     const [moderator, targetMember] = await Promise.all([
-      guild.members.fetch(userId),
-      guild.members.fetch(targetUser.id).catch(() => null),
+      c.guild.members.fetch(c.userId),
+      c.guild.members.fetch(targetUser.id).catch(() => null),
     ]);
-
-    if (!targetMember) {
-      return { content: "That user is not a member of this server." };
-    }
-
-    if (c.subcommand === "add") {
-      const { reason } = c.options;
-      const result = await quarantine(guild, moderator, targetMember, reason);
-      if (result.isErr()) {
-        return { content: `Failed: ${result.error.message}` };
-      }
-      return renderModlogCase({ result: result.unwrap() });
-    }
-
-    if (c.subcommand === "release") {
-      const result = await release(guild, moderator, targetMember);
-      if (result.isErr()) {
-        return { content: `Failed: ${result.error.message}` };
-      }
-      const { restoredRoles } = result.unwrap();
-      return v2Message(
-        container(
-          "ok",
-          text(
-            `**${targetUser.tag}** released from quarantine.\n**Roles restored:** ${restoredRoles}`,
-          ),
+    if (!targetMember) return { content: "That user is not a member of this server." };
+    const result = await quarantine(c.guild, moderator, targetMember, reason);
+    if (result.isErr()) return { content: `Failed: ${result.error.message}` };
+    return renderModlogCase({ result: result.unwrap() });
+  })
+  .handle("release", async (c) => {
+    const { user: targetUser } = c.options;
+    const [moderator, targetMember] = await Promise.all([
+      c.guild.members.fetch(c.userId),
+      c.guild.members.fetch(targetUser.id).catch(() => null),
+    ]);
+    if (!targetMember) return { content: "That user is not a member of this server." };
+    const result = await release(c.guild, moderator, targetMember);
+    if (result.isErr()) return { content: `Failed: ${result.error.message}` };
+    const { restoredRoles } = result.unwrap();
+    return v2Message(
+      container(
+        "ok",
+        text(
+          `**${targetUser.tag}** released from quarantine.\n**Roles restored:** ${restoredRoles}`,
         ),
-      );
-    }
-    return undefined;
+      ),
+    );
   });

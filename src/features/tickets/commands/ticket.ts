@@ -177,11 +177,12 @@ async function handleSetup(c: Extract<TicketCtx, { subcommand: "setup" }>) {
   );
 }
 
-export default data.help({ hints: [] }).run(async (c) => {
-  if (c.subcommand === "open") return handleOpen(c);
-  if (c.subcommand === "close") return handleClose(c);
-  if (c.subcommand === "setup") return handleSetup(c);
-  if (!(await assertPanelPermission(c.interaction))) return undefined;
-  await openAdminPanel(c.interaction, "tickets");
-  return undefined;
-});
+export default data
+  .help({ hints: [] })
+  .handle("open", handleOpen)
+  .handle("close", handleClose)
+  .handle("setup", handleSetup)
+  .run(async (c) => {
+    if (!(await assertPanelPermission(c.interaction))) return undefined;
+    await openAdminPanel(c.interaction, "tickets");
+  });

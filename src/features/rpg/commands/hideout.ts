@@ -1,6 +1,7 @@
 import { adjustBalance, getBalance } from "@/features/economy/mutations";
 import { getRpgProfile, patchRpgProfile } from "@/features/rpg/profile";
 import { command } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { coins } from "@/utils/fmt";
 
@@ -56,6 +57,24 @@ function hideoutHelpV2() {
   );
 }
 
+/** Fetch profile + wallet together. Returns null (with a ready response) when profile is missing. */
+async function loadHideoutData(ctx: Ctx, userId: string) {
+  const profile = await getRpgProfile(ctx, userId).catch(() => null);
+  if (!profile) return null;
+  const balance = await getBalance(ctx, userId, "coins");
+  const stashSize = profile.stashSize ?? 20;
+  return { profile, balance, stashSize, upgrade: getUpgradeCost(stashSize) };
+}
+
+const NO_PROFILE = v2Message(
+  container(
+    "mute",
+    text(
+      "## No Profile Found\nYou haven't started your RPG journey. Use `/rpg-profile` to begin.\n-# Ashenmoor · Hideout",
+    ),
+  ),
+);
+
 const data = command("hideout")
   .description("Your Hideout: heal, upgrade your stash, and check your standing.")
   .subcommand("heal", "Pay the Therapist to restore HP. Costs 5 coins per HP.", (s) =>
@@ -68,39 +87,20 @@ const data = command("hideout")
   .subcommand("help", "Learn how healing, stash upgrades, and expeditions fit together.")
   .defer("public");
 
-export default data.help({ hints: ["/expedition", "/balance"] }).run(async (c) => {
-  const { ctx, userId } = c;
+export default data
+  .help({ hints: ["/expedition", "/balance"] })
+  .handle("help", () => hideoutHelpV2())
+  .handle("status", async (c) => {
+    const data = await loadHideoutData(c.ctx, c.userId);
+    if (!data) return NO_PROFILE;
+    const { profile, balance, stashSize, upgrade } = data;
 
-  if (c.subcommand === "help") {
-    return hideoutHelpV2();
-  }
-
-  const profile = await getRpgProfile(ctx, userId).catch(() => null);
-  if (!profile) {
-    return v2Message(
-      container(
-        "mute",
-        text(
-          "## No Profile Found\nYou haven't started your RPG journey. Use `/rpg-profile` to begin.\n-# Ashenmoor · Hideout",
-        ),
-      ),
-    );
-  }
-
-  const balance = await getBalance(ctx, userId, "coins");
-  const stashSize = profile.stashSize ?? 20;
-  const upgrade = getUpgradeCost(stashSize);
-
-  // ── STATUS ─────────────────────────────────────────────────────────────
-  if (c.subcommand === "status") {
     const hpBar = hpBarStr(profile.hpCurrent, 100);
     const healable = Math.min(100 - profile.hpCurrent, Math.floor(balance / HEAL_COST_PER_HP));
     const healCost = healable * HEAL_COST_PER_HP;
-
     const stashText = upgrade
       ? `Current max: **${stashSize}** slots\nUpgrade to **${upgrade.nextMax}** costs **${coins(upgrade.cost)}**`
       : `**${stashSize}** slots — *fully upgraded*`;
-
     const healNote =
       profile.hpCurrent >= 100
         ? "*You are at full health.*"
@@ -120,10 +120,12 @@ export default data.help({ hints: ["/expedition", "/balance"] }).run(async (c) =
         ),
       ),
     );
-  }
+  })
+  .handle("heal", async (c) => {
+    const data = await loadHideoutData(c.ctx, c.userId);
+    if (!data) return NO_PROFILE;
+    const { profile, balance } = data;
 
-  // ── HEAL ───────────────────────────────────────────────────────────────
-  if (c.subcommand === "heal") {
     if (profile.hpCurrent >= 100) {
       return v2Message(
         container(
@@ -149,14 +151,13 @@ export default data.help({ hints: ["/expedition", "/balance"] }).run(async (c) =
       );
     }
 
-    // Clamp to what they can afford and what's needed
     toHeal = Math.min(toHeal, maxAffordable, 100 - profile.hpCurrent);
     const totalCost = toHeal * HEAL_COST_PER_HP;
     const newHp = profile.hpCurrent + toHeal;
 
     try {
-      await patchRpgProfile(ctx, userId, { hpCurrent: newHp });
-      await adjustBalance(ctx, userId, "coins", -totalCost);
+      await patchRpgProfile(c.ctx, c.userId, { hpCurrent: newHp });
+      await adjustBalance(c.ctx, c.userId, "coins", -totalCost);
     } catch {
       return { content: "Failed to save healing. Please try again." };
     }
@@ -173,47 +174,50 @@ export default data.help({ hints: ["/expedition", "/balance"] }).run(async (c) =
         ),
       ),
     );
-  }
+  })
+  .handle("stash_upgrade", async (c) => {
+    const data = await loadHideoutData(c.ctx, c.userId);
+    if (!data) return NO_PROFILE;
+    const { balance, stashSize, upgrade } = data;
 
-  // ── STASH UPGRADE ──────────────────────────────────────────────────────
-  if (!upgrade) {
+    if (!upgrade) {
+      return v2Message(
+        container(
+          "mute",
+          text(
+            `## 📦 Stash — Fully Upgraded\nYour stash holds **${stashSize} slots**. There are no further expansions available.\n\n*The clerk's ledger has no line for this.*\n\n-# Ashenmoor · Hideout`,
+          ),
+        ),
+      );
+    }
+
+    if (balance < upgrade.cost) {
+      return v2Message(
+        container(
+          "danger",
+          text(
+            `## 📦 Insufficient Funds\nExpanding from **${stashSize}** to **${upgrade.nextMax}** slots costs **${coins(upgrade.cost)}**.\n\nYou have **${coins(balance)}**. You are short by **${coins(upgrade.cost - balance)}**.\n\n*The clerk doesn't blink. Coin or go home.*\n\n-# Ashenmoor · Hideout`,
+          ),
+        ),
+      );
+    }
+
+    try {
+      await patchRpgProfile(c.ctx, c.userId, { stashSize: upgrade.nextMax });
+      await adjustBalance(c.ctx, c.userId, "coins", -upgrade.cost);
+    } catch {
+      return { content: "Failed to save stash upgrade. Please try again." };
+    }
+
+    const quote =
+      STASH_QUOTES[Math.floor(Math.random() * STASH_QUOTES.length)] ?? STASH_QUOTES[0] ?? "";
+
     return v2Message(
       container(
-        "mute",
+        "ok",
         text(
-          `## 📦 Stash — Fully Upgraded\nYour stash holds **${stashSize} slots**. There are no further expansions available.\n\n*The clerk's ledger has no line for this.*\n\n-# Ashenmoor · Hideout`,
+          `## 📦 Stash Expanded\n*${quote}*\n\nPaid **${coins(upgrade.cost)}** to expand stash capacity.\n\n**New Capacity:** ${upgrade.nextMax} slots\n**Remaining Balance:** ${coins(balance - upgrade.cost)}\n\n-# Ashenmoor · Hideout`,
         ),
       ),
     );
-  }
-
-  if (balance < upgrade.cost) {
-    return v2Message(
-      container(
-        "danger",
-        text(
-          `## 📦 Insufficient Funds\nExpanding from **${stashSize}** to **${upgrade.nextMax}** slots costs **${coins(upgrade.cost)}**.\n\nYou have **${coins(balance)}**. You are short by **${coins(upgrade.cost - balance)}**.\n\n*The clerk doesn't blink. Coin or go home.*\n\n-# Ashenmoor · Hideout`,
-        ),
-      ),
-    );
-  }
-
-  try {
-    await patchRpgProfile(ctx, userId, { stashSize: upgrade.nextMax });
-    await adjustBalance(ctx, userId, "coins", -upgrade.cost);
-  } catch {
-    return { content: "Failed to save stash upgrade. Please try again." };
-  }
-
-  const quote =
-    STASH_QUOTES[Math.floor(Math.random() * STASH_QUOTES.length)] ?? STASH_QUOTES[0] ?? "";
-
-  return v2Message(
-    container(
-      "ok",
-      text(
-        `## 📦 Stash Expanded\n*${quote}*\n\nPaid **${coins(upgrade.cost)}** to expand stash capacity.\n\n**New Capacity:** ${upgrade.nextMax} slots\n**Remaining Balance:** ${coins(balance - upgrade.cost)}\n\n-# Ashenmoor · Hideout`,
-      ),
-    ),
-  );
-});
+  });

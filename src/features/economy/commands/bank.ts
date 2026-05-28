@@ -125,8 +125,8 @@ async function handleWithdraw(
   }
 }
 
-export default data.help({ hints: ["/balance", "/work"] }).run(async (c) => {
-  if (c.subcommand === "balance") return handleBalance(c);
-  if (c.subcommand === "deposit") return handleDeposit(c);
-  return handleWithdraw(c);
-});
+export default data
+  .help({ hints: ["/balance", "/work"] })
+  .handle("balance", handleBalance)
+  .handle("deposit", handleDeposit)
+  .handle("withdraw", handleWithdraw);

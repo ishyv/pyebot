@@ -276,11 +276,11 @@ async function handlePreview(c: Extract<EmbedCtx, { subcommand: "preview" }>): P
 // Export
 // ---------------------------------------------------------------------------
 
-export default data.help({ hints: [] }).run(async (c) => {
-  if (c.subcommand === "create") return handleCreate(c);
-  if (c.subcommand === "edit") return handleEdit(c);
-  if (c.subcommand === "delete") return handleDelete(c);
-  if (c.subcommand === "list") return handleList(c);
-  if (c.subcommand === "send") return handleSend(c);
-  return handlePreview(c);
-});
+export default data
+  .help({ hints: [] })
+  .handle("create", handleCreate)
+  .handle("edit", handleEdit)
+  .handle("delete", handleDelete)
+  .handle("list", handleList)
+  .handle("send", handleSend)
+  .handle("preview", handlePreview);

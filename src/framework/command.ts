@@ -445,6 +445,7 @@ export interface CommandDsl<S extends DslState = DslState> {
     name: N,
     handler: (
       c: Extract<RunContextFor<S>, { subcommand: N; subcommandGroup: null }>,
+      // biome-ignore lint/suspicious/noConfusingVoidType: Handlers may respond directly and return nothing.
     ) => MaybePromise<CommandResponse | void>,
   ): CommandDsl<S>;
   run(handler: RunContextHandler<S>): CommandDsl<S>;
@@ -610,6 +611,7 @@ export interface CommandGroupDsl<GS extends GroupSubState = never> {
    */
   handle<N extends GS["name"]>(
     name: N,
+    // biome-ignore lint/suspicious/noConfusingVoidType: Handlers may respond directly and return nothing.
     handler: (c: GroupRunContext<GS, N>) => MaybePromise<CommandResponse | void>,
   ): CommandGroupDsl<GS>;
 }
@@ -779,10 +781,7 @@ class CommandBuilder {
   }
 
   cooldown(duration: number | string, scope: CooldownScope = "user"): this {
-    const durationMs =
-      typeof duration === "number"
-        ? duration
-        : parseDuration(duration);
+    const durationMs = typeof duration === "number" ? duration : parseDuration(duration);
     if (durationMs === null || durationMs <= 0) {
       throw new Error(
         `Invalid cooldown duration "${duration}". Use a positive number (ms) or a string like "24h", "30m", "7d".`,
@@ -870,13 +869,16 @@ class CommandBuilder {
     return this;
   }
 
-  handle(name: string, handler: RunHandler): this {
-    this.subHandlers.set(name, handler);
-    return this;
-  }
-
   build(factory: (self: CommandBuilder) => CommandBuilder): CommandBuilder {
     return factory(this);
+  }
+
+  handle(name: string, handler: RunHandler): this {
+    // Finalize autocomplete state so the module is usable without a trailing
+    // .run() when all subcommands have inline .handle() registrations.
+    if (!this.autocompleteDeclared) this.autocomplete = undefined;
+    this.subHandlers.set(name, handler);
+    return this;
   }
 
   run(handler: RunHandler): this {
@@ -933,7 +935,8 @@ class CommandBuilder {
       const subGroup = getSubcommandGroup(interaction, false);
       const subName = getSubcommand(interaction, false);
       const dispatchKey = subGroup ? `${subGroup}:${subName}` : (subName ?? "");
-      const handler = (dispatchKey ? this.subHandlers.get(dispatchKey) : undefined) ?? this.runHandler;
+      const handler =
+        (dispatchKey ? this.subHandlers.get(dispatchKey) : undefined) ?? this.runHandler;
       const response = await handler?.(context);
       if (response !== undefined) await ctx.respond.send(response);
       // Record cooldowns only after a successful (non-throwing) handler return.

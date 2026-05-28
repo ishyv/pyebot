@@ -28,46 +28,38 @@ export default command("lockdown")
       .string("reason", "Reason"),
   )
   .help({ hints: ["/mod help"] })
-  .run(async (c) => {
-    const { guild, interaction } = c;
+  .handle("on", async (c) => {
+    const reason = c.options.reason ?? "Server lockdown";
+    return setEveryoneSendMessages(c.guild, c.interaction.user.tag, false, reason);
+  })
+  .handle("off", (c) =>
+    setEveryoneSendMessages(c.guild, c.interaction.user.tag, null, "Lockdown lifted"),
+  )
+  .handle("channel", async (c) => {
+    const channel = c.options.channel as TextChannel | NewsChannel;
+    const { action } = c.options;
+    const reason = c.options.reason ?? (action === "lock" ? "Channel locked" : "Channel unlocked");
+    const deny = action === "lock" ? false : null;
 
-    if (c.subcommand === "on") {
-      const reason = c.options.reason ?? "Server lockdown";
-      return setEveryoneSendMessages(guild, interaction.user.tag, false, reason);
-    }
-
-    if (c.subcommand === "off") {
-      return setEveryoneSendMessages(guild, interaction.user.tag, null, "Lockdown lifted");
-    }
-
-    if (c.subcommand === "channel") {
-      const channel = c.options.channel as TextChannel | NewsChannel;
-      const action = c.options.action;
-      const reason =
-        c.options.reason ?? (action === "lock" ? "Channel locked" : "Channel unlocked");
-      const deny = action === "lock" ? false : null;
-
-      try {
-        await channel.permissionOverwrites.edit(
-          guild.roles.everyone,
-          { SendMessages: deny },
-          { reason: `${reason} — by ${interaction.user.tag}` },
-        );
-      } catch {
-        return { content: "Failed to update channel permissions." };
-      }
-
-      const isLocking = action === "lock";
-      return v2Message(
-        container(
-          isLocking ? "danger" : "ok",
-          text(
-            `**${isLocking ? "🔒 Channel Locked" : "🔓 Channel Unlocked"}** — <#${channel.id}>\n**Reason:** ${reason}`,
-          ),
-        ),
+    try {
+      await channel.permissionOverwrites.edit(
+        c.guild.roles.everyone,
+        { SendMessages: deny },
+        { reason: `${reason} — by ${c.interaction.user.tag}` },
       );
+    } catch {
+      return { content: "Failed to update channel permissions." };
     }
-    return undefined;
+
+    const isLocking = action === "lock";
+    return v2Message(
+      container(
+        isLocking ? "danger" : "ok",
+        text(
+          `**${isLocking ? "🔒 Channel Locked" : "🔓 Channel Unlocked"}** — <#${channel.id}>\n**Reason:** ${reason}`,
+        ),
+      ),
+    );
   });
 
 async function setEveryoneSendMessages(

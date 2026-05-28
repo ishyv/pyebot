@@ -132,11 +132,12 @@ function handleClearMemory(c: Extract<AiCtx, { subcommand: "clear-memory" }>) {
   );
 }
 
-export default data.help({ hints: ["/context"] }).run(async (c) => {
-  if (c.subcommand === "set-provider") return handleSetProvider(c);
-  if (c.subcommand === "set-model") return handleSetModel(c);
-  if (c.subcommand === "clear-memory") return handleClearMemory(c);
-  if (!(await assertPanelPermission(c.interaction))) return undefined;
-  await openAdminPanel(c.interaction, "ai");
-  return undefined;
-});
+export default data
+  .help({ hints: ["/context"] })
+  .handle("set-provider", handleSetProvider)
+  .handle("set-model", handleSetModel)
+  .handle("clear-memory", handleClearMemory)
+  .run(async (c) => {
+    if (!(await assertPanelPermission(c.interaction))) return undefined;
+    await openAdminPanel(c.interaction, "ai");
+  });

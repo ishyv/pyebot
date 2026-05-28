@@ -151,7 +151,9 @@ describe("command DSL", () => {
       });
     const { ctx: ctx1, calls: calls1 } = fakeCtx();
     await errCmd.execute(fakeInteraction(), ctx1);
-    expect(calls1).toEqual([{ method: "send", payload: { content: "Failed: insufficient funds" } }]);
+    expect(calls1).toEqual([
+      { method: "send", payload: { content: "Failed: insufficient funds" } },
+    ]);
 
     // Ok path: unwrap returns the value normally
     const okCmd = command("balance")
@@ -318,7 +320,9 @@ describe("command DSL", () => {
     expect(invocations).toBe(1); // still 1 — handler NOT called again
     expect(calls.at(-1)).toMatchObject({
       method: "send",
-      payload: expect.objectContaining({ content: expect.stringContaining("You can use this again") }),
+      payload: expect.objectContaining({
+        content: expect.stringContaining("You can use this again"),
+      }),
     });
   });
 
@@ -341,8 +345,7 @@ describe("command DSL", () => {
     const makeInteraction = (sub: string, hasBan: boolean) =>
       fakeInteraction({
         memberPermissions: {
-          has: (perm: bigint) =>
-            perm === PermissionFlagsBits.BanMembers ? hasBan : true,
+          has: (perm: bigint) => (perm === PermissionFlagsBits.BanMembers ? hasBan : true),
         },
         options: {
           getString: () => null,

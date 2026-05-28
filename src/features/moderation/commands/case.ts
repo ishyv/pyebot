@@ -20,48 +20,29 @@ export default command("case")
     s.integer("id", "Case ID", { required: true }),
   )
   .help({ hints: ["/cases"] })
-  .run(async (c) => {
-    const { guildId } = c;
-
-    if (c.subcommand === "view") {
-      const { id: caseId } = c.options;
-      const result = await getCaseById(guildId, caseId);
-      if (result.isErr()) {
-        return { content: "Failed to look up case." };
-      }
-      const found = result.unwrap();
-      if (!found) {
-        return { content: `Case #${caseId} not found.` };
-      }
-      return renderCaseView(found.entry, found.userId, caseId);
-    }
-
-    if (c.subcommand === "edit") {
-      const { id: caseId, reason: newReason } = c.options;
-      const found = await getCaseById(guildId, caseId);
-      const foundEntry = found.isErr() ? null : found.unwrap();
-      if (!foundEntry) {
-        return { content: `Case #${caseId} not found.` };
-      }
-      const result = await editCase(foundEntry.userId, guildId, caseId, newReason);
-      if (result.isErr()) {
-        return { content: `Failed: ${result.error.message}` };
-      }
-      return { content: `Case #${caseId} reason updated.` };
-    }
-
-    if (c.subcommand === "delete") {
-      const { id: caseId } = c.options;
-      const found = await getCaseById(guildId, caseId);
-      const foundEntry = found.isErr() ? null : found.unwrap();
-      if (!foundEntry) {
-        return { content: `Case #${caseId} not found.` };
-      }
-      const result = await deleteCase(foundEntry.userId, guildId, caseId);
-      if (result.isErr()) {
-        return { content: `Failed: ${result.error.message}` };
-      }
-      return { content: `Case #${caseId} deleted.` };
-    }
-    return undefined;
+  .handle("view", async (c) => {
+    const { id: caseId } = c.options;
+    const result = await getCaseById(c.guildId, caseId);
+    if (result.isErr()) return { content: "Failed to look up case." };
+    const found = result.unwrap();
+    if (!found) return { content: `Case #${caseId} not found.` };
+    return renderCaseView(found.entry, found.userId, caseId);
+  })
+  .handle("edit", async (c) => {
+    const { id: caseId, reason: newReason } = c.options;
+    const found = await getCaseById(c.guildId, caseId);
+    const foundEntry = found.isErr() ? null : found.unwrap();
+    if (!foundEntry) return { content: `Case #${caseId} not found.` };
+    const result = await editCase(foundEntry.userId, c.guildId, caseId, newReason);
+    if (result.isErr()) return { content: `Failed: ${result.error.message}` };
+    return { content: `Case #${caseId} reason updated.` };
+  })
+  .handle("delete", async (c) => {
+    const { id: caseId } = c.options;
+    const found = await getCaseById(c.guildId, caseId);
+    const foundEntry = found.isErr() ? null : found.unwrap();
+    if (!foundEntry) return { content: `Case #${caseId} not found.` };
+    const result = await deleteCase(foundEntry.userId, c.guildId, caseId);
+    if (result.isErr()) return { content: `Failed: ${result.error.message}` };
+    return { content: `Case #${caseId} deleted.` };
   });
