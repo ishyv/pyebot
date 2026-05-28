@@ -236,7 +236,7 @@ function scheduleLabel(hours: number | null): string {
     display: flex;
     gap: var(--space-2xs);
   }
-  @media (max-width: 640px) {
+  @media (max-width: 40rem) {
     .row {
       grid-template-columns: 1fr;
       align-items: flex-start;

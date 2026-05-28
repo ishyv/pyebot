@@ -631,6 +631,9 @@ onMount(() => {
     grid-template-columns: 1fr 1fr;
     gap: var(--space-sm);
   }
+  @media (max-width: 40rem) {
+    .two-col { grid-template-columns: 1fr; }
+  }
 
   .chip-row {
     display: flex;

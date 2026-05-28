@@ -713,7 +713,7 @@ $effect(() => {
     display: inline-flex;
     gap: var(--space-2xs);
   }
-  @media (max-width: 860px) {
+  @media (max-width: 48rem) {
     .slow-builder,
     .slow-rule,
     .image-settings-grid,

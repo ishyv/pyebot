@@ -124,7 +124,7 @@ $effect(() => {
     text-transform: uppercase;
     color: var(--text-soft);
   }
-  @media (max-width: 760px) {
+  @media (max-width: 48rem) {
     .role-row { grid-template-columns: 1fr; }
   }
 </style>

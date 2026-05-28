@@ -412,7 +412,7 @@ $effect(() => {
     border: 1px solid var(--line);
   }
   .row-buttons { display: inline-flex; gap: var(--space-2xs); }
-  @media (max-width: 760px) {
+  @media (max-width: 48rem) {
     .grid-2, .row-edit { grid-template-columns: 1fr; }
     .row-buttons { justify-content: flex-start; }
   }
