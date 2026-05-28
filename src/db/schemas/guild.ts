@@ -125,12 +125,10 @@ export const TopsConfigSchema = z
 
 export const OffersConfigSchema = z
   .object({
-    reviewChannelId: z.string().nullable().catch(null),
-    approvedChannelId: z.string().nullable().catch(null),
     // Empty array = anyone may submit; populated = only holders of listed roles.
     allowedRoleIds: z.array(z.string()).catch(() => []),
   })
-  .catch(() => ({ reviewChannelId: null, approvedChannelId: null, allowedRoleIds: [] }));
+  .catch(() => ({ allowedRoleIds: [] }));
 
 export const CountingConfigSchema = z
   .object({
