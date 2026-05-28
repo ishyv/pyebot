@@ -1,12 +1,10 @@
 /**
- * messageCreate handler — AI responds to @mentions.
+ * AI message handler — responds to @mentions and replies to prior AI messages.
  *
- * Responds when:
- *   - The bot is directly @mentioned
- *   - The user is replying to a previous AI message
+ * Export: handleAiMessage(message, botId) — called by the root handlers.ts via @Listen.
  */
 
-import type { Client, Message } from "discord.js";
+import type { Message } from "discord.js";
 import { createLogger } from "@/core/logger";
 import { generateResponse } from "@/features/ai/service";
 
@@ -62,53 +60,49 @@ function splitLongMessage(text: string, maxLen = 1900): string[] {
   return chunks;
 }
 
-export function register(client: Client): void {
-  client.on("messageCreate", async (message: Message) => {
-    try {
-      if (message.author.bot) return;
-      if (!client.user) return;
+export async function handleAiMessage(message: Message, botId: string): Promise<void> {
+  try {
+    if (message.author.bot) return;
 
-      const botId = client.user.id;
-      const mentioned = message.mentions.has(botId);
-      const { shouldReply, quotedText } = await resolveReplyContext(message, botId);
+    const mentioned = message.mentions.has(botId);
+    const { shouldReply, quotedText } = await resolveReplyContext(message, botId);
 
-      if (!mentioned && !shouldReply) return;
+    if (!mentioned && !shouldReply) return;
 
-      const rawContent = stripBotMention(message.content, botId);
-      const userMessage = [quotedText ? `[Context: ${quotedText}]` : "", rawContent]
-        .filter(Boolean)
-        .join("\n");
+    const rawContent = stripBotMention(message.content, botId);
+    const userMessage = [quotedText ? `[Context: ${quotedText}]` : "", rawContent]
+      .filter(Boolean)
+      .join("\n");
 
-      if (!userMessage.trim()) {
-        await message.reply({ content: "Yes?" });
-        return;
-      }
-
-      if ("sendTyping" in message.channel) {
-        await (message.channel as { sendTyping(): Promise<void> }).sendTyping().catch(() => null);
-      }
-
-      const result = await generateResponse({
-        guildId: message.guildId,
-        userId: message.author.id,
-        message: userMessage,
-      });
-
-      const text = result.text.trim() || "I have nothing to say.";
-      const chunks = splitLongMessage(text);
-
-      for (let i = 0; i < chunks.length; i++) {
-        const content = i === chunks.length - 1 ? markAIMessage(chunks[i]) : chunks[i];
-        if (i === 0) {
-          await message.reply({ content });
-        } else if ("send" in message.channel) {
-          await (message.channel as { send(opts: { content: string }): Promise<unknown> }).send({
-            content,
-          });
-        }
-      }
-    } catch (err) {
-      log.error("Error in AI messageCreate handler", err);
+    if (!userMessage.trim()) {
+      await message.reply({ content: "Yes?" });
+      return;
     }
-  });
+
+    if ("sendTyping" in message.channel) {
+      await (message.channel as { sendTyping(): Promise<void> }).sendTyping().catch(() => null);
+    }
+
+    const result = await generateResponse({
+      guildId: message.guildId,
+      userId: message.author.id,
+      message: userMessage,
+    });
+
+    const text = result.text.trim() || "I have nothing to say.";
+    const chunks = splitLongMessage(text);
+
+    for (let i = 0; i < chunks.length; i++) {
+      const content = i === chunks.length - 1 ? markAIMessage(chunks[i]) : chunks[i];
+      if (i === 0) {
+        await message.reply({ content });
+      } else if ("send" in message.channel) {
+        await (message.channel as { send(opts: { content: string }): Promise<unknown> }).send({
+          content,
+        });
+      }
+    }
+  } catch (err) {
+    log.error("Error in AI messageCreate handler", err);
+  }
 }

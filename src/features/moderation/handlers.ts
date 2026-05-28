@@ -1,13 +1,14 @@
 /**
  * Moderation feature component handlers.
  *
- * Routes button and modal interactions for the appeals workflow:
- *   - "mod:appeal:"         → appeal button in ban DM (shows modal)
- *   - "mod:appeal-submit:"  → appeal modal submit (creates record + thread)
- *   - "appeal:review:"      → review button on queue message (ephemeral panel)
- *   - "appeal:approve:"     → approve button on review panel (shows modal)
- *   - "appeal:deny:"        → deny button on review panel (shows modal)
- *   - "appeal:info:"        → request-info button on review panel (shows modal)
+ * Routes button and modal interactions:
+ *   - "mod:verify:"        → verification gate button (assigns verified role)
+ *   - "mod:appeal:"        → appeal button in ban DM (shows modal)
+ *   - "mod:appeal-submit:" → appeal modal submit (creates record + thread)
+ *   - "appeal:review:"     → review button on queue message (ephemeral panel)
+ *   - "appeal:approve:"    → approve button on review panel (shows modal)
+ *   - "appeal:deny:"       → deny button on review panel (shows modal)
+ *   - "appeal:info:"       → request-info button on review panel (shows modal)
  *   - "appeal:approve-modal:" → approve modal submit (writes PARDON, DMs user)
  *   - "appeal:deny-modal:"    → deny modal submit (DMs user)
  *   - "appeal:info-modal:"    → info-request modal submit (DMs user, posts in thread)
@@ -37,8 +38,14 @@ import {
   handleAppealInfoSubmit,
   handleAppealReview,
 } from "./handlers/appealReview";
+import { handleVerifyButton, VERIFY_PREFIX } from "./handlers/verifyButton";
 
 export default class ModerationHandlers {
+  @Handle(VERIFY_PREFIX)
+  async onVerifyButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
+    await handleVerifyButton(interaction);
+  }
+
   @Handle(APPEAL_BUTTON_PREFIX)
   async onAppealButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
     await handleAppealButton(interaction);

@@ -1,14 +1,26 @@
-import { type Client, Events, type GuildMember, type Message } from "discord.js";
+import {
+  type ButtonInteraction,
+  type Client,
+  Events,
+  type GuildMember,
+  type Message,
+} from "discord.js";
 import { TempRoleGrant, tempRoleGrantId } from "@/components/temp-role-grant";
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import { MemberJoined } from "@/events/member-joined";
 import { recordAutomodSystemCase } from "@/features/moderation/service";
-import { Listen, On } from "@/framework";
+import { Handle, Listen, On } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { detectAiClassificationSignals } from "./aiDetector";
 import { detectBannedImageSignals } from "./bannedImages";
 import { detectCrossChannelSpam } from "./crossChannelSpam";
+import {
+  handleRaidDismiss,
+  handleRaidLockdown,
+  RAID_DISMISS_PREFIX,
+  RAID_LOCKDOWN_PREFIX,
+} from "./handlers/raidAlert";
 import { detectMentionSpam } from "./mentionSpam";
 import {
   evaluatePerUserSlow,
@@ -37,6 +49,16 @@ const log = createLogger("automod:handlers");
 
 export default class AutomodHandlers {
   private expiryTimer: ReturnType<typeof setInterval> | null = null;
+
+  @Handle(RAID_LOCKDOWN_PREFIX)
+  async onRaidLockdown(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
+    await handleRaidLockdown(interaction);
+  }
+
+  @Handle(RAID_DISMISS_PREFIX)
+  async onRaidDismiss(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
+    await handleRaidDismiss(interaction);
+  }
 
   @On(MemberJoined)
   async onMemberJoined(event: MemberJoined, ctx: Ctx): Promise<void> {
