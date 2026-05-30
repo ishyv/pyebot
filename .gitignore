@@ -17,7 +17,6 @@ coverage/
 
 # Superpowers specs, plans, and design docs
 docs/superpowers/
-docs/ai
 
 
 # Local refactor planning scratchpad
@@ -32,10 +31,9 @@ plans/
 /webapp/.svelte-kit/
 /webapp/node_modules/
 
-CLAUDE.md
-AGENTS.md
-
-bun.lock
+# Agent/contributor instructions and engineering docs are versioned on purpose
+# (CLAUDE.md, AGENTS.md, docs/ai/**) so any agent or teammate works from the
+# same source of truth. bun.lock is committed for reproducible installs.
 
 # cai
 history.json

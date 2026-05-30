@@ -58,19 +58,20 @@ descriptor metadata is a type error.
 
 ```ts
 // src/features/hello/commands/hello.ts
-import { SlashCommandBuilder } from "discord.js";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
+import { container, section, v2Message } from "@/ui/v2";
 
-export default defineCommand({
-  data: new SlashCommandBuilder()
-    .setName("hello")
-    .setDescription("Say hello"),
-  help: { hints: ["Replies with a small greeting."] },
-  async execute(interaction) {
-    await interaction.reply("Hello.");
-  },
-});
+export default command("hello")
+  .description("Say hello")
+  .help({ hints: ["Replies with a small greeting."] })
+  .run(async ({ user }) =>
+    v2Message(container("ok", section(`Hello, ${user.username}.`))),
+  );
 ```
+
+Commands use the fluent `command(name)` DSL (typed options, `.run()` returns the
+response payload) — not `defineCommand` or a raw `SlashCommandBuilder`. See
+`docs/framework-authoring.md` for the full surface.
 
 tx is latest-only: old feature module objects, old env aliases, old JSON content packs, and old persisted data shapes are not supported.
 

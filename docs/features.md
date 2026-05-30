@@ -30,22 +30,22 @@ The descriptor shape is exact: `id`, `name`, `description`, and optional
 `defaultEnabled`. Commands, handlers, dashboard config, gates, and arbitrary
 metadata do not belong in `defineFeature`.
 
-Then add command modules under `commands/`:
+Then add command modules under `commands/`, built with the `command(name)` DSL
+(full reference in [Framework Authoring](./framework-authoring.md)):
 
 ```ts
 // src/features/polls/commands/poll.ts
-import { SlashCommandBuilder } from "discord.js";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
+import { container, section, v2Message } from "@/ui/v2";
 
-export default defineCommand({
-  data: new SlashCommandBuilder()
-    .setName("poll")
-    .setDescription("Create a poll"),
-  help: { hints: ["Add poll options after creating the prompt."] },
-  async execute(interaction) {
-    await interaction.reply("Poll created.");
-  },
-});
+export default command("poll")
+  .description("Create a poll")
+  .string("question", "What are we voting on?", { required: true })
+  .guildOnly()
+  .help({ hints: ["Add poll options after creating the prompt."] })
+  .run(async ({ options }) =>
+    v2Message(container("ok", section(`## ${options.question}`))),
+  );
 ```
 
 Feature toggles are keyed by the descriptor `id` and stored in the

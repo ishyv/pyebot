@@ -40,38 +40,65 @@ metadata are rejected by TypeScript and belong in their own feature files.
 
 ## Commands
 
-Command files live in `commands/*.ts` and default-export `defineCommand(...)`.
-The loader rejects malformed command modules at boot instead of silently
-skipping them.
+Command files live in `commands/*.ts` and default-export a command built with the
+fluent `command(name)` DSL from `@/framework`. There is no `defineCommand` and no raw
+`SlashCommandBuilder`: options are declared on the builder, and the typed `.run()`
+handler **returns** the response payload. The loader rejects malformed command modules
+at boot instead of silently skipping them.
 
 ```ts
-import { SlashCommandBuilder } from "discord.js";
-import { defineCommand } from "@/framework";
+import { command } from "@/framework";
+import { container, section, v2Message } from "@/ui/v2";
 
-export default defineCommand({
-  data: new SlashCommandBuilder()
-    .setName("poll")
-    .setDescription("Create a poll"),
-  help: { hints: ["Use the generated buttons to vote."] },
-  async execute(interaction, ctx) {
+export default command("poll")
+  .description("Create a poll")
+  .string("question", "What are we voting on?", { required: true })
+  .guildOnly()
+  .defer("ephemeral")            // or "public"; omit for an immediate reply
+  .help({ hints: ["Use the generated buttons to vote."] })
+  .run(async ({ ctx, user, options }) => {
     ctx.logger.info("Creating poll");
-    await ctx.respond.send({ content: "Poll created." });
-  },
-});
+    return v2Message(container("ok", section(`## ${options.question}`)));
+  });
+```
+
+Option builders: `.string/.integer/.boolean/.user/.channel/.role(name, description, settings?)`.
+Pass `{ required: true }` to make a value non-optional in the typed `options` object.
+`.guildOnly()` narrows `ctx.guild` to non-null inside `.run`.
+
+### Subcommands
+
+Declare subcommands with `.subcommand(name, description, build)` and handle each with
+`.handle(name, ...)`, which gives `c.options` typed to that subcommand only. Group with
+`.group(...)`. Route by name — never branch on `if (c.subcommand === "x")` (see AGENTS.md).
+
+```ts
+export default command("note")
+  .description("Manage user notes")
+  .subcommand("add", "Add a note", (s) =>
+    s.user("user", "Who", { required: true }).string("text", "Note", { required: true }),
+  )
+  .handle("add", async (c) => {
+    const { user, text } = c.options; // typed to the "add" subcommand
+    return v2Message(container("ok", section(`Noted ${user.username}: ${text}`)));
+  });
 ```
 
 ## Responding
 
-Reply to commands through `ctx.respond`, not the raw `interaction` methods:
+Prefer **returning** a `v2Message(...)` payload from `.run()` / `.handle()` — the framework
+turns the return value into the reply, choosing reply-vs-edit-deferred from interaction state,
+and pre-validating the payload (content length, embed/component limits, Components V2 ceiling).
+
+For multi-step flows, reach for `ctx.respond`:
 
 - `ctx.respond.defer({ visibility: "ephemeral" })` — acknowledge early for slow work
-  (omit `visibility` for a public reply).
+  (or use the DSL sugar `.defer("ephemeral" | "public")`).
 - `ctx.respond.send(payload)` — reply, edit the deferred reply, or follow up, chosen
-  automatically from the interaction's current state.
+  automatically from the interaction's current state. Returns a `Result` instead of throwing.
 - `ctx.respond.fail(payload)` — like `send` but forces the message ephemeral; use for errors.
+- `c.unwrap(result)` — unwrap a `Result` or short-circuit `.run()` with a mapped error message.
 
-`ctx.respond` tracks the deferred/replied lifecycle, returns a `Result` instead of throwing,
-and pre-validates the payload (content length, embed/component limits, Components V2 ceiling).
 Reach for the raw `interaction` API only when the responder can't express the intent —
 e.g. a component handler editing its own message via `interaction.update()` /
 `interaction.deferUpdate()`, or posting a *public* `interaction.followUp()` while keeping an
