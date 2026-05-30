@@ -85,10 +85,13 @@ function levenshtein(a: string, b: string): number {
 
 async function checkForAlt(member: GuildMember): Promise<void> {
   const guildResult = await getGuild(member.guild.id);
-  if (guildResult.isErr() || !guildResult.unwrap()) return;
+  if (guildResult.isErr()) return;
+  const guild = guildResult.unwrap();
+  if (!guild) return;
 
-  const modConfig = guildResult.unwrap()!.moderation;
-  if (!modConfig.altDetectionEnabled || !modConfig.modLogChannelId) return;
+  const modConfig = guild.moderation;
+  const { altDetectionEnabled, modLogChannelId } = modConfig;
+  if (!altDetectionEnabled || !modLogChannelId) return;
 
   // Ensure we have a fresh-ish ban cache
   if (!recentBanCache.has(member.guild.id)) {
@@ -127,7 +130,7 @@ async function checkForAlt(member: GuildMember): Promise<void> {
     }
 
     if (signals.length >= 2) {
-      await postAltAlert(member, ban.userId, signals, modConfig.modLogChannelId!);
+      await postAltAlert(member, ban.userId, signals, modLogChannelId);
       return; // Only fire once per join
     }
   }
@@ -147,20 +150,19 @@ async function postAltAlert(
       (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24),
     );
 
-    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
-    await (channel as TextChannel).send(
-      v2Message(
-        container(
-          "warn",
-          section(
-            `## Possible Alt Account Detected\nA newly joined member matches signals of a previously banned user. **No action has been taken — this requires manual review.**\n\n**New Member:** <@${member.id}> (${member.user.tag})\n**Account Age:** ${accountAge} day${accountAge === 1 ? "" : "s"}\n**Suspected Original:** <@${suspectedOriginalId}>`,
-            thumb(member.user.displayAvatarURL(), member.user.tag),
-          ),
-          separator("sm"),
-          text(`**Matching Signals**\n${signals.map((s) => `• ${s}`).join("\n")}`),
+    const altPayload = v2Message(
+      container(
+        "warn",
+        section(
+          `## Possible Alt Account Detected\nA newly joined member matches signals of a previously banned user. **No action has been taken — this requires manual review.**\n\n**New Member:** <@${member.id}> (${member.user.tag})\n**Account Age:** ${accountAge} day${accountAge === 1 ? "" : "s"}\n**Suspected Original:** <@${suspectedOriginalId}>`,
+          thumb(member.user.displayAvatarURL(), member.user.tag),
         ),
-      ) as any,
+        separator("sm"),
+        text(`**Matching Signals**\n${signals.map((s) => `• ${s}`).join("\n")}`),
+      ),
     );
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+    await (channel as TextChannel).send(altPayload as any);
   } catch (err) {
     log.error("Failed to post alt alert", err);
   }

@@ -347,7 +347,8 @@ export async function startTrivia(
     throw new MinigameError("ACCOUNT_INACTIVE", "Your economy account is not active");
   }
 
-  const question = TRIVIA_QUESTIONS[Math.floor(Math.random() * TRIVIA_QUESTIONS.length)]!;
+  const question = TRIVIA_QUESTIONS[Math.floor(Math.random() * TRIVIA_QUESTIONS.length)];
+  if (!question) throw new MinigameError("ACCOUNT_INACTIVE", "No trivia questions available");
   const sessionKey = `${userId}:${guildId}`;
   const session: TriviaSession = {
     questionId: question.id,

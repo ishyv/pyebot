@@ -170,7 +170,8 @@ export async function acceptQuest(
   const existing = await questProgressStore.get(docId);
   if (existing.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", existing.error.message));
 
-  if (existing.unwrap() && !existing.unwrap()!.rewardsClaimed) {
+  const existingQuest = existing.unwrap();
+  if (existingQuest && !existingQuest.rewardsClaimed) {
     return ErrResult(
       new QuestError("QUEST_ALREADY_ACTIVE", "This quest is already active or completed"),
     );

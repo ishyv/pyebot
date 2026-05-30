@@ -135,11 +135,12 @@ export async function handleAppealReview(interaction: ButtonInteraction): Promis
 
   const actionRow = row(approveBtn, denyBtn, infoBtn);
 
+  const replyComponents = historyContainer
+    ? [detailContainer, separator("sm"), historyContainer, actionRow]
+    : [detailContainer, actionRow];
   await interaction.reply({
-    // biome-ignore lint/suspicious/noExplicitAny: V2 components valid at runtime; discord.js types lag.
-    components: historyContainer
-      ? ([detailContainer, separator("sm"), historyContainer, actionRow] as any)
-      : ([detailContainer, actionRow] as any),
+    // biome-ignore lint/suspicious/noExplicitAny: V2 component builders are valid at runtime; discord.js types lag.
+    components: replyComponents as any,
     flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
   });
 }
@@ -234,17 +235,14 @@ export async function handleAppealApproveSubmit(
     .fetch(appeal.threadId)
     .catch(() => null)) as ThreadChannel | null;
   if (thread) {
-    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
-    await thread
-      .send(
-        v2Message(
-          container(
-            "ok",
-            text(`✅ **Appeal approved** by <@${interaction.user.id}>\n**Reason:** ${reason}`),
-          ),
-        ) as any,
-      )
-      .catch(() => null);
+    const approvedPayload = v2Message(
+      container(
+        "ok",
+        text(`✅ **Appeal approved** by <@${interaction.user.id}>\n**Reason:** ${reason}`),
+      ),
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime; discord.js send types lag.
+    await thread.send(approvedPayload as any).catch(() => null);
     await thread.setArchived(true).catch(() => null);
   }
 
@@ -344,17 +342,14 @@ export async function handleAppealDenySubmit(interaction: ModalSubmitInteraction
     .fetch(appeal.threadId)
     .catch(() => null)) as ThreadChannel | null;
   if (thread) {
-    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
-    await thread
-      .send(
-        v2Message(
-          container(
-            "danger",
-            text(`❌ **Appeal denied** by <@${interaction.user.id}>\n**Reason:** ${reason}`),
-          ),
-        ) as any,
-      )
-      .catch(() => null);
+    const deniedPayload = v2Message(
+      container(
+        "danger",
+        text(`❌ **Appeal denied** by <@${interaction.user.id}>\n**Reason:** ${reason}`),
+      ),
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime; discord.js send types lag.
+    await thread.send(deniedPayload as any).catch(() => null);
     await thread.setArchived(true).catch(() => null);
   }
 
@@ -433,19 +428,16 @@ export async function handleAppealInfoSubmit(interaction: ModalSubmitInteraction
     .fetch(appeal.threadId)
     .catch(() => null)) as ThreadChannel | null;
   if (thread) {
-    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
-    await thread
-      .send(
-        v2Message(
-          container(
-            "warn",
-            text(
-              `**<@${interaction.user.id}> requested more information:**\n${question}\n\n-# <@${appeal.userId}> — please check your DMs or respond in this thread.`,
-            ),
-          ),
-        ) as any,
-      )
-      .catch(() => null);
+    const infoPayload = v2Message(
+      container(
+        "warn",
+        text(
+          `**<@${interaction.user.id}> requested more information:**\n${question}\n\n-# <@${appeal.userId}> — please check your DMs or respond in this thread.`,
+        ),
+      ),
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime; discord.js send types lag.
+    await thread.send(infoPayload as any).catch(() => null);
   }
 
   // DM user with the question — best-effort

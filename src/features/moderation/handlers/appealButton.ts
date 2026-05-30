@@ -21,6 +21,7 @@ import {
   type ModalActionRowComponentBuilder,
   ModalBuilder,
   type ModalSubmitInteraction,
+  type TextChannel,
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
@@ -135,8 +136,9 @@ export async function handleAppealSubmit(interaction: ModalSubmitInteraction): P
     return;
   }
 
-  // Create private thread for moderator discussion
-  const thread = await (appealsChannel as any).threads
+  // Create private thread for moderator discussion.
+  // Guarded above: "threads" in appealsChannel ensures this is a TextChannel.
+  const thread = await (appealsChannel as TextChannel).threads
     .create({
       name: `Appeal — @${interaction.user.username} · Case #${caseId}`,
       autoArchiveDuration: 10080, // 7 days
@@ -171,24 +173,23 @@ export async function handleAppealSubmit(interaction: ModalSubmitInteraction): P
   }
 
   // Post context card in thread
-  // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime.
-  await thread.send(
-    v2Message(
-      container(
-        "info",
-        text(
-          [
-            `## Appeal — Case #${caseId}`,
-            `**User:** <@${interaction.user.id}> (\`${interaction.user.username}\`)`,
-            `**Submitted:** <t:${Math.floor(Date.now() / 1000)}:F>`,
-            "",
-            "**Appeal reason:**",
-            reason,
-          ].join("\n"),
-        ),
+  const contextCard = v2Message(
+    container(
+      "info",
+      text(
+        [
+          `## Appeal — Case #${caseId}`,
+          `**User:** <@${interaction.user.id}> (\`${interaction.user.username}\`)`,
+          `**Submitted:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+          "",
+          "**Appeal reason:**",
+          reason,
+        ].join("\n"),
       ),
-    ) as any,
+    ),
   );
+  // biome-ignore lint/suspicious/noExplicitAny: V2 payload valid at runtime; discord.js send types lag.
+  await thread.send(contextCard as any);
 
   await syncQueueMessage(guild, interaction.client);
 

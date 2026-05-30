@@ -71,12 +71,13 @@ export async function processCountingMessage(
   if (deps.configuredChannelId === null || message.channelId !== deps.configuredChannelId)
     return "ignored";
 
-  return countingLocks.run(`${message.guildId}:${message.channelId}`, async () => {
-    const stateResult = await deps.stateRepository.getState(message.guildId!, message.channelId);
-    const state =
-      stateResult.isOk() && stateResult.unwrap()
-        ? stateResult.unwrap()!
-        : createDefaultCountingState(message.guildId!, message.channelId);
+  // guildId is non-null: guarded by `message.guildId === null` check above.
+  const guildId = message.guildId;
+
+  return countingLocks.run(`${guildId}:${message.channelId}`, async () => {
+    const stateResult = await deps.stateRepository.getState(guildId, message.channelId);
+    const stateDoc = stateResult.isOk() ? stateResult.unwrap() : null;
+    const state = stateDoc ?? createDefaultCountingState(guildId, message.channelId);
 
     if (state.lastUserId === message.authorId) {
       await resetCount(message, deps, state, "same-user-repeat");

@@ -23,8 +23,8 @@ describe("decorators", () => {
   it("@On records the event class and method name", () => {
     const meta = getOnMetadata(new Sample());
     expect(meta.length).toBe(1);
-    expect(meta[0]!.event).toBe(FakeEvent);
-    expect(meta[0]!.methodKey).toBe("onFake");
+    expect(meta[0]?.event).toBe(FakeEvent);
+    expect(meta[0]?.methodKey).toBe("onFake");
   });
 
   it("@Handle records the prefix and method name", () => {

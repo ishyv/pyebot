@@ -45,34 +45,38 @@ function makeCtx(
     return wallets.get(id) ?? null;
   }
   function ensureWallet(id: string) {
-    if (!wallets.has(id)) wallets.set(id, { balances: {} });
-    return wallets.get(id)!;
+    const existing = wallets.get(id);
+    if (existing) return existing;
+    const fresh = { balances: {} };
+    wallets.set(id, fresh);
+    return fresh;
   }
   function getAccount(id: string) {
     return accounts.get(id) ?? null;
   }
   function ensureAccountDoc(id: string) {
-    if (!accounts.has(id)) {
-      accounts.set(id, {
-        status: "ok",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastActivityAt: new Date(),
-        version: 0,
-      });
-    }
-    return accounts.get(id)!;
+    const existing = accounts.get(id);
+    if (existing) return existing;
+    const fresh = {
+      status: "ok" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastActivityAt: new Date(),
+      version: 0,
+    };
+    accounts.set(id, fresh);
+    return fresh;
   }
 
   return {
     async get(id: string, component: unknown) {
-      if (component === UserCurrency) return getWallet(id) as any;
-      if (component === EconomyAccount) return getAccount(id) as any;
+      if (component === UserCurrency) return getWallet(id);
+      if (component === EconomyAccount) return getAccount(id);
       return null;
     },
     async ensure(id: string, component: unknown) {
-      if (component === UserCurrency) return ensureWallet(id) as any;
-      if (component === EconomyAccount) return ensureAccountDoc(id) as any;
+      if (component === UserCurrency) return ensureWallet(id);
+      if (component === EconomyAccount) return ensureAccountDoc(id);
       throw new Error("Unknown component in test ctx");
     },
     async patch(id: string, component: unknown, patchOrFn: unknown) {
@@ -98,11 +102,11 @@ function makeCtx(
       return [];
     },
     async emit() {},
-    client: null as any,
-    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as any,
-    cooldowns: null as any,
-    locks: null as any,
-    sessions: null as any,
+    client: null,
+    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    cooldowns: null,
+    locks: null,
+    sessions: null,
     interaction: null,
   } as unknown as Ctx;
 }

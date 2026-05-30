@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "discord.js";
+import type { V2Payload } from "@/ui/views";
 import { getImportantMessage, markImportant, unmarkImportant } from "./importantMessages";
 
 function fakeMessage(id: string): Message {
@@ -7,7 +8,7 @@ function fakeMessage(id: string): Message {
 }
 
 const noopRestore = async () => ({
-  payload: { components: [], flags: 0 } as any,
+  payload: { components: [], flags: 0 } as unknown as V2Payload,
   onRestored: async () => {},
 });
 

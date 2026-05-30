@@ -34,9 +34,11 @@ export function registerVerification(client: Client): void {
 
 async function onMemberJoin(member: GuildMember): Promise<void> {
   const guildResult = await getGuild(member.guild.id);
-  if (guildResult.isErr() || !guildResult.unwrap()) return;
+  if (guildResult.isErr()) return;
+  const guild = guildResult.unwrap();
+  if (!guild) return;
 
-  const config = guildResult.unwrap()!.moderation.verification;
+  const config = guild.moderation.verification;
   if (!config.enabled) return;
 
   const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
@@ -79,18 +81,17 @@ async function postVerifyPrompt(member: GuildMember, channelId: string): Promise
         .setStyle(ButtonStyle.Success),
     );
 
-    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
-    await (channel as TextChannel).send(
-      v2Message(
-        container(
-          "info",
-          text(
-            `## Welcome! Please verify to access the server.\n<@${member.id}>, click the button below to confirm you're human and gain access.`,
-          ),
-          verifyRow,
+    const verifyPayload = v2Message(
+      container(
+        "info",
+        text(
+          `## Welcome! Please verify to access the server.\n<@${member.id}>, click the button below to confirm you're human and gain access.`,
         ),
-      ) as any,
+        verifyRow,
+      ),
     );
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+    await (channel as TextChannel).send(verifyPayload as any);
   } catch (err) {
     log.error("Failed to post verify prompt", err);
   }

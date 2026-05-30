@@ -53,7 +53,8 @@ export async function handleRaidLockdown(interaction: ButtonInteraction): Promis
     return;
   }
 
-  const textChannels = interaction.guild.channels.cache.filter(
+  const guild = interaction.guild;
+  const textChannels = guild.channels.cache.filter(
     (c) => c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement,
   );
 
@@ -62,7 +63,7 @@ export async function handleRaidLockdown(interaction: ButtonInteraction): Promis
     [...textChannels.values()].map(async (c) => {
       try {
         await (c as TextChannel).permissionOverwrites.edit(
-          interaction.guild!.roles.everyone,
+          guild.roles.everyone,
           { SendMessages: false },
           { reason: `Raid lockdown — actioned by ${interaction.user.tag}` },
         );

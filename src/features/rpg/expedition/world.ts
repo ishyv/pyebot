@@ -105,9 +105,11 @@ const NODE_FLAVOR: Partial<Record<MaterialId, readonly string[]>> = {
 function nodeInfoFor(itemId: MaterialId): { display: string; flavor: string } {
   const display = MATERIALS[itemId].name;
   const flavors = NODE_FLAVOR[itemId];
-  const flavor = flavors
-    ? flavors[Math.floor(Math.random() * flavors.length)]!
-    : "Something of interest catches your eye.";
+  const fallback = "Something of interest catches your eye.";
+  const flavor =
+    flavors && flavors.length > 0
+      ? (flavors[Math.floor(Math.random() * flavors.length)] ?? fallback)
+      : fallback;
   return { display, flavor };
 }
 
@@ -122,7 +124,8 @@ export function generateNodes(biome: Biome, depth: Depth): ExpeditionNode[] {
   const count = 3 + Math.floor(Math.random() * 3); // 3–5
   const nodes: ExpeditionNode[] = [];
   for (let i = 0; i < count; i++) {
-    const itemId = candidates[Math.floor(Math.random() * candidates.length)]!;
+    const itemId = candidates[Math.floor(Math.random() * candidates.length)];
+    if (!itemId) continue;
     const { display, flavor } = nodeInfoFor(itemId);
     nodes.push({ id: String(i), itemId, display, flavor });
   }

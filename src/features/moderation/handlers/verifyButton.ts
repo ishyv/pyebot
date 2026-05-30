@@ -55,8 +55,11 @@ export async function handleVerifyButton(interaction: ButtonInteraction): Promis
     await interaction.editReply({ content: "Failed to load server config." });
     return;
   }
+  const guild = guildResult.unwrap();
+  // Safety: unwrap() is non-null — guarded above; TypeScript can't narrow through the combined check.
+  if (!guild) return;
 
-  const roleId = guildResult.unwrap()!.moderation.verification.roleId;
+  const roleId = guild.moderation.verification.roleId;
   if (!roleId) {
     await interaction.editReply({
       content: "Verification role is not configured. Please contact a moderator.",

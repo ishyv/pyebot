@@ -288,7 +288,10 @@ export function determineWinner(session: ActiveCombatSession): string | null {
 
 /** Build final CombatResult from a completed session. */
 export function buildCombatResult(session: ActiveCombatSession): CombatResult {
-  const winnerId = determineWinner(session)!;
+  const winnerId = determineWinner(session);
+  if (winnerId === null) {
+    throw new Error(`buildCombatResult called on incomplete session ${session.id}`);
+  }
   const loserId = winnerId === session.p1Id ? session.p2Id : session.p1Id;
 
   return {

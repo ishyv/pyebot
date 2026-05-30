@@ -10,10 +10,10 @@ export default class EconomyHandlers {
   @Handle(TRIVIA_BUTTON_PREFIX)
   async triviaAnswer(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
     const parts = interaction.customId.slice(TRIVIA_BUTTON_PREFIX.length).split(":");
-    const answerIndex = parseInt(parts[parts.length - 1]!, 10);
+    const answerIndex = parseInt(parts.at(-1) ?? "", 10);
     const sessionKey = parts.slice(0, -1).join(":");
 
-    if (isNaN(answerIndex)) {
+    if (Number.isNaN(answerIndex)) {
       await interaction.reply({ content: "Invalid trivia button.", flags: MessageFlags.Ephemeral });
       return;
     }
@@ -47,6 +47,7 @@ export default class EconomyHandlers {
             ),
           );
 
+      // biome-ignore lint/suspicious/noExplicitAny: V2 component builders valid at runtime; discord.js editReply types lag.
       await interaction.editReply({ ...payload, components: payload.components as any[] });
     } catch (err) {
       const msg = err instanceof MinigameError ? err.message : "An error occurred.";

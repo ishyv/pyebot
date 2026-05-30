@@ -304,8 +304,8 @@ export async function updatePanelMessage(
   interaction: ComponentInteraction,
   payload: PanelPayload,
 ): Promise<void> {
-  // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in MessageEditOptions types.
   const options: MessageEditOptions & MessageCreateOptions = {
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not yet in MessageEditOptions types.
     components: [payload.container, ...payload.actionRows] as any,
     flags: MessageFlags.IsComponentsV2,
   };

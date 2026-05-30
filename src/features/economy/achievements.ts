@@ -260,8 +260,9 @@ export async function incrementProgress(
     // Get or create progress
     let current = 0;
     const existing = await achievementProgressStore.get(docId);
-    if (existing.isOk() && existing.unwrap()) {
-      current = existing.unwrap()!.progress;
+    const existingDoc = existing.isOk() ? existing.unwrap() : null;
+    if (existingDoc) {
+      current = existingDoc.progress;
     }
 
     const newProgress = Math.min(current + amount, definition.target);

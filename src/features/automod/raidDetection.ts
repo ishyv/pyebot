@@ -62,9 +62,11 @@ export function registerRaidDetection(client: Client): void {
 
 async function onMemberJoin(member: GuildMember): Promise<void> {
   const guildResult = await getGuild(member.guild.id);
-  if (guildResult.isErr() || !guildResult.unwrap()) return;
+  if (guildResult.isErr()) return;
+  const guild = guildResult.unwrap();
+  if (!guild) return;
 
-  const config = guildResult.unwrap()!.automod.raidDetection;
+  const config = guild.automod.raidDetection;
   if (!config.enabled) return;
 
   const now = Date.now();
@@ -137,22 +139,21 @@ async function postRaidAlert(
         .setStyle(ButtonStyle.Secondary),
     );
 
-    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
-    await (channel as TextChannel).send(
-      v2Message(
-        container(
-          "danger",
-          text("## Raid Suspected"),
-          separator("sm"),
-          text(
-            `**Joins in last 60s:** ${entries.length}\n**New accounts (<threshold age):** ${newAccountCount}\n**Recent Members:** ${userList + overflow}`,
-          ),
-          separator("sm"),
-          text("-# Use the buttons below to respond."),
-          alertRow,
+    const alertPayload = v2Message(
+      container(
+        "danger",
+        text("## Raid Suspected"),
+        separator("sm"),
+        text(
+          `**Joins in last 60s:** ${entries.length}\n**New accounts (<threshold age):** ${newAccountCount}\n**Recent Members:** ${userList + overflow}`,
         ),
-      ) as any,
+        separator("sm"),
+        text("-# Use the buttons below to respond."),
+        alertRow,
+      ),
     );
+    // biome-ignore lint/suspicious/noExplicitAny: V2 ContainerBuilder is valid at runtime but not in discord.js MessageCreateOptions types.
+    await (channel as TextChannel).send(alertPayload as any);
   } catch (err) {
     log.error("Failed to post raid alert", err);
   }

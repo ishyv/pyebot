@@ -37,9 +37,11 @@ export async function checkSlowmode(message: Message): Promise<void> {
   if (managedSlowmodes.has(message.channelId)) return; // already under managed slowmode
 
   const guildResult = await getGuild(message.guild.id);
-  if (guildResult.isErr() || !guildResult.unwrap()) return;
+  if (guildResult.isErr()) return;
+  const guild = guildResult.unwrap();
+  if (!guild) return;
 
-  const config = guildResult.unwrap()!.automod.slowmode;
+  const config = guild.automod.slowmode;
   if (!config.enabled) return;
 
   const now = Date.now();

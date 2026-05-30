@@ -19,8 +19,8 @@ export default command("eco-profile")
       ctx.get(target.id, UserCurrency),
     ]);
 
-    const handCoins = wallet?.balances["coins"] ?? 0;
-    const bankCoins = wallet?.bankBalances["coins"] ?? 0;
+    const handCoins = wallet?.balances.coins ?? 0;
+    const bankCoins = wallet?.bankBalances.coins ?? 0;
 
     const statusAccent: AccentKey =
       account.status === "ok" ? "ok" : account.status === "blocked" ? "warn" : "danger";

@@ -11,7 +11,7 @@ export default command("balance")
   .run(async ({ ctx, user, options }) => {
     const target = options.user ?? user;
     const wallet = await ctx.get(target.id, UserCurrency);
-    const balance = wallet?.balances["coins"] ?? 0;
+    const balance = wallet?.balances.coins ?? 0;
 
     return v2Message(
       container(

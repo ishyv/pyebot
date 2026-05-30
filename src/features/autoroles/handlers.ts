@@ -123,7 +123,10 @@ export default class AutoroleHandlers {
       return;
     }
 
-    const hasRole = member.roles.cache.has(rules[0]!.roleId);
+    // rules.length > 0 is guaranteed above; TypeScript still widens array index to T | undefined.
+    const primaryRoleId = rules[0]?.roleId;
+    if (!primaryRoleId) return;
+    const hasRole = member.roles.cache.has(primaryRoleId);
     if (hasRole) {
       await revokeRules(ctx, member, rules);
       await interaction.reply({ content: "Role removed.", flags: MessageFlags.Ephemeral });

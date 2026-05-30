@@ -209,12 +209,13 @@ async function getChannels(guildId: string): Promise<{
   approvedChannelId: string | null;
 }> {
   const res = await getGuild(guildId);
-  if (res.isErr() || !res.unwrap()) return { reviewChannelId: null, approvedChannelId: null };
-
-  const core = res.unwrap()!.channels.core;
+  if (res.isErr()) return { reviewChannelId: null, approvedChannelId: null };
+  const guild = res.unwrap();
+  if (!guild) return { reviewChannelId: null, approvedChannelId: null };
+  const core = guild.channels.core;
   return {
-    reviewChannelId: core["offersReview"]?.channelId ?? null,
-    approvedChannelId: core["approvedOffers"]?.channelId ?? null,
+    reviewChannelId: core.offersReview?.channelId ?? null,
+    approvedChannelId: core.approvedOffers?.channelId ?? null,
   };
 }
 

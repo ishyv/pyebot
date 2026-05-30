@@ -26,7 +26,7 @@ export async function sendModLog(
     const guildData = guildResult.unwrap();
     if (!guildData) return;
 
-    const channelId = guildData.channels.core["modlog"]?.channelId;
+    const channelId = guildData.channels.core.modlog?.channelId;
     if (!channelId) return;
 
     const channel = await guild.channels.fetch(channelId).catch(() => null);
