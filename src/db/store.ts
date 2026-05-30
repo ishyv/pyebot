@@ -9,7 +9,14 @@
  *   `const users = new MongoStore("users", UserSchema);`
  */
 
-import type { Collection, Document, Filter, FindOptions, UpdateFilter } from "mongodb";
+import type {
+  Collection,
+  Document,
+  Filter,
+  FindOptions,
+  MatchKeysAndValues,
+  UpdateFilter,
+} from "mongodb";
 import type { ZodSchema } from "zod";
 import { getDb } from "@/core/db";
 import { createLogger } from "@/core/logger";
@@ -73,8 +80,11 @@ export class MongoStore<T extends Document & { _id: string }> {
     // Detect guildId-keyed schemas (guild config) and pre-populate it so the parsed default
     // uses the correct key. Works for ZodObject; silently skips for wrapped schemas.
     try {
-      const schemaAny = this.schema as any;
-      const shape = schemaAny.shape ?? schemaAny._def?.shape;
+      const schemaInternals = this.schema as unknown as {
+        shape?: Record<string, unknown>;
+        _def?: { shape?: Record<string, unknown> };
+      };
+      const shape = schemaInternals.shape ?? schemaInternals._def?.shape;
       if (shape && typeof shape === "object" && "guildId" in shape) {
         raw.guildId = id;
       }
@@ -93,7 +103,7 @@ export class MongoStore<T extends Document & { _id: string }> {
   private parse(doc: unknown): T {
     const parsed = this.schema.safeParse(doc);
     if (parsed.success) return parsed.data;
-    const id = (doc as any)?._id ?? "unknown";
+    const id = documentId(doc);
     console.error(`[MongoStore:${this.collectionName}] invalid document`, {
       id,
       error: parsed.error,
@@ -116,8 +126,8 @@ export class MongoStore<T extends Document & { _id: string }> {
       const col = await this.collection();
       const defaults = { ...this.getDefault(id), ...initial };
       const update = buildSafeUpsertUpdate<T>(
-        { $setOnInsert: defaults as any },
-        defaults as any,
+        { $setOnInsert: defaults as MatchKeysAndValues<T> },
+        defaults as Record<string, unknown>,
         new Date(),
         { setUpdatedAt: false },
       );
@@ -136,7 +146,11 @@ export class MongoStore<T extends Document & { _id: string }> {
     try {
       const col = await this.collection();
       const defaults = this.getDefault(id);
-      const update = buildSafeUpsertUpdate<T>({ $set: patch as any }, defaults, new Date());
+      const update = buildSafeUpsertUpdate<T>(
+        { $set: patch as MatchKeysAndValues<T> },
+        defaults,
+        new Date(),
+      );
       const res = await col.findOneAndUpdate({ _id: id } as Filter<T>, update as UpdateFilter<T>, {
         upsert: true,
         returnDocument: "after",
@@ -170,7 +184,7 @@ export class MongoStore<T extends Document & { _id: string }> {
       const col = await this.collection();
       const res = await col.findOneAndUpdate(
         { _id: id, ...expected } as Filter<T>,
-        { $set: { ...next, updatedAt: new Date() } as any },
+        { $set: { ...next, updatedAt: new Date() } as MatchKeysAndValues<T> },
         { returnDocument: "after" },
       );
       return OkResult(res ? this.parse(res) : null);
@@ -197,7 +211,7 @@ export class MongoStore<T extends Document & { _id: string }> {
     try {
       const col = await this.collection();
       if (options.pipeline) {
-        await col.updateOne({ _id: id } as Filter<T>, options.pipeline as any, {
+        await col.updateOne({ _id: id } as Filter<T>, options.pipeline, {
           upsert: options.upsert,
         });
       } else {

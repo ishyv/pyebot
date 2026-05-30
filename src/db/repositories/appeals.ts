@@ -50,7 +50,7 @@ export async function updateAppeal(
  * Returns an empty array on any error rather than throwing.
  */
 export async function getPendingAppeals(guildId: string): Promise<Appeal[]> {
-  const result = await store.find({ guildId, status: "pending" } as any);
+  const result = await store.find({ guildId, status: "pending" });
   if (result.isErr()) return [];
   return result.unwrap();
 }

@@ -129,19 +129,21 @@ export function buildSafeUpsertUpdate<TSchema>(
 
   if (shouldSetUpdatedAt && !hasCurrentDate) nextSet.updatedAt = now;
 
-  const nextUpdate: UpdateFilter<TSchema> = { ...update };
+  // The update operators ($set/$setOnInsert) are simpler to rewrite through a
+  // plain record view than MongoDB's UpdateFilter generic; cast back once on return.
+  const nextUpdate: Record<string, unknown> = { ...update };
 
   if (Object.keys(nextSet).length > 0) {
-    (nextUpdate as any).$set = nextSet;
-  } else if ((nextUpdate as any).$set) {
-    delete (nextUpdate as any).$set;
+    nextUpdate.$set = nextSet;
+  } else if (nextUpdate.$set) {
+    delete nextUpdate.$set;
   }
 
   if (prunedSetOnInsert && Object.keys(prunedSetOnInsert).length > 0) {
-    (nextUpdate as any).$setOnInsert = prunedSetOnInsert;
-  } else if ((nextUpdate as any).$setOnInsert) {
-    delete (nextUpdate as any).$setOnInsert;
+    nextUpdate.$setOnInsert = prunedSetOnInsert;
+  } else if (nextUpdate.$setOnInsert) {
+    delete nextUpdate.$setOnInsert;
   }
 
-  return nextUpdate;
+  return nextUpdate as UpdateFilter<TSchema>;
 }

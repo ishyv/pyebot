@@ -44,14 +44,16 @@ describe("collectTouchedPaths", () => {
 describe("buildSafeUpsertUpdate", () => {
   test("adds updatedAt to $set by default", () => {
     const result = buildSafeUpsertUpdate({ $set: { name: "test" } }, {}, new Date("2025-01-01"));
-    expect((result as any).$set.updatedAt).toEqual(new Date("2025-01-01"));
+    expect((result as Record<string, Record<string, unknown>>).$set.updatedAt).toEqual(
+      new Date("2025-01-01"),
+    );
   });
 
   test("does not add updatedAt when setUpdatedAt is false", () => {
     const result = buildSafeUpsertUpdate({ $setOnInsert: { _id: "x" } }, {}, new Date(), {
       setUpdatedAt: false,
     });
-    expect((result as any).$set?.updatedAt).toBeUndefined();
+    expect((result as Record<string, Record<string, unknown>>).$set?.updatedAt).toBeUndefined();
   });
 
   test("merges defaults into $setOnInsert", () => {
@@ -60,7 +62,9 @@ describe("buildSafeUpsertUpdate", () => {
       { defaultField: "value" },
       new Date(),
     );
-    expect((result as any).$setOnInsert?.defaultField).toBe("value");
+    expect((result as Record<string, Record<string, unknown>>).$setOnInsert?.defaultField).toBe(
+      "value",
+    );
   });
 
   test("does not add updatedAt when $currentDate.updatedAt is present", () => {
@@ -69,6 +73,6 @@ describe("buildSafeUpsertUpdate", () => {
       {},
       new Date("2025-01-01"),
     );
-    expect((result as any).$set?.updatedAt).toBeUndefined();
+    expect((result as Record<string, Record<string, unknown>>).$set?.updatedAt).toBeUndefined();
   });
 });
