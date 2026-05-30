@@ -48,6 +48,13 @@ This gives:
 - autocomplete
 - no runtime parser for data already shipped with the code
 
+> Note: the example above is the pattern for content that is *genuinely* static.
+> This repo's RPG catalogs (`LOCATIONS`, `MATERIALS`, `TOOLS`, …) are **not** that
+> case — they are runtime-mutable maps loaded from a Zod-validated Mongo snapshot
+> (the "Untrusted external data" case below), so their IDs are `string` narrowed
+> at the boundary with `parseXId`, not `keyof typeof`. Reach for `as const
+> satisfies` only when the data truly never changes at runtime.
+
 ### Untrusted external data
 
 Use Zod when data comes from:

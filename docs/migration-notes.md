@@ -7,7 +7,7 @@ content loading, env parsing, or schema parsing.
 Current boundaries:
 
 - Features are `src/features/<id>/` folders discovered by `bootstrapFramework`.
-- Feature descriptors use `defineFeature`; commands use `defineCommand`.
+- Feature descriptors use `defineFeature`; commands use the `command(name)` DSL.
 - Feature toggles live in `guild_features.overrides`; old embedded
   guild-document feature data is unsupported and ignored.
 - Active RPG runtime content lives in `src/features/rpg/content/**`.

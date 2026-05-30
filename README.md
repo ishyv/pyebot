@@ -124,7 +124,7 @@ tx does not preserve compatibility with previous framework versions. When the fr
 Current public authoring surface:
 
 - `defineFeature({ id, name, description, defaultEnabled })`; no gates, config, commands, handlers, or arbitrary metadata in the descriptor
-- `defineCommand({ data, help, execute, autocomplete })`
+- the `command(name)` DSL (typed options, `.run()` / `.handle()` returning the response payload)
 - `handlers.ts` classes using `@Handle`, `@Listen`, and `@On`
 - framework `Ctx` plus `component(...)` for typed component persistence
 - feature toggles stored in `guild_features.overrides` by feature id

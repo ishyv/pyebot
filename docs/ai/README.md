@@ -18,7 +18,10 @@ This folder defines the engineering taste of the project:
 1. `engineering-principles.md`
 2. `typescript-typing-and-validation.md`
 3. `refactor-protocol.md`
-4. `content-registry-refactor-plan.md`
+
+For how RPG content is actually structured (runtime-mutable maps seeded from
+static TypeScript, edited via the dashboard), see `docs/content-authoring.md`
+and `docs/rpg-content-dashboard.md`.
 
 ## Default agent behavior
 

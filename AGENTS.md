@@ -123,9 +123,13 @@ Code here should read as if a careful human teammate wrote it — not as machine
 
 ## Files to read before refactors
 
-Read these before modifying RPG/content/gathering systems:
+Read these before a non-trivial refactor:
 
 - `docs/ai/engineering-principles.md`
 - `docs/ai/typescript-typing-and-validation.md`
 - `docs/ai/refactor-protocol.md`
-- `docs/ai/content-registry-refactor-plan.md`
+
+Before modifying RPG content/gathering specifically, also read
+`docs/content-authoring.md` and `docs/rpg-content-dashboard.md` — content is
+runtime-mutable (static TS seeds a Mongo-backed snapshot the dashboard edits),
+not compile-time constants.

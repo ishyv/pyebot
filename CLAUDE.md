@@ -60,9 +60,9 @@ Repositories in `src/db/repositories/` instantiate stores and add query helpers.
 
 ### RPG content (`src/features/rpg/content/`)
 
-Typed compile-time catalogs (`LOCATIONS`, `TOOLS`, `MATERIALS`, `CRAFTING_RECIPES`, `PROCESSING_RECIPES`) — each defined `as const satisfies Record<string, Def>` so IDs are derived (`type LocationId = keyof typeof LOCATIONS`). Each catalog exports a `parseXId` boundary helper to narrow untrusted Discord input once at the command/handler edge; domain functions receive typed IDs and read the constant directly.
+The content modules expose live, typed maps — `LOCATIONS`, `MATERIALS`, `TOOLS`, and the recipe maps — plus a `parseXId` boundary helper per catalog (`parseLocationId`, `parseMaterialId`, `parseToolId`, `parseCraftingRecipeId`, `parseProcessingInputId`). IDs are plain `string` (e.g. `type LocationId = string`); narrow an untrusted Discord string **once** at the command/handler edge with the matching `parseXId`, then pass the typed ID inward — domain functions index the live map directly and never re-validate.
 
-This is the **only** RPG content source — there is no runtime content-pack loader. If JSON-based content needs to be added later, it should validate with Zod at load time and merge into the same typed records before domain code runs.
+These maps are **runtime-mutable**, not compile-time constants. Static TypeScript (`src/features/rpg/content/runtime.ts`, seeded from `src/content/packs/default.ts` items) is the boot seed/fallback; the embedded dashboard validates edits with Zod and persists a snapshot to Mongo (`rpg_content.active`) that replaces the live maps. Command code can't tell whether content came from source or Mongo, which is the point. There is **no** external JSON/JSON5 content-pack loader, and the seed catalog ships items only — see `docs/content-authoring.md` and `docs/rpg-content-dashboard.md` before changing content.
 
 ### Feature modules (`src/features/<name>/`)
 
