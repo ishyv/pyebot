@@ -8,9 +8,7 @@ import type {
   ModerationBridgeAction,
 } from "$shared/bridge-types";
 
-type ParseResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string; field?: string };
+type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string; field?: string };
 
 interface PerUserSlowRulePatch {
   readonly enabled: boolean;

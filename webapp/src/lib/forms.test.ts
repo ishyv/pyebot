@@ -17,7 +17,10 @@ describe("interpretSaveResult", () => {
   test("surfaces the server error and field on failure", () => {
     expect(
       interpretSaveResult(
-        { type: "failure", data: { error: "cooldownHours must be at least 1.", field: "cooldownHours" } },
+        {
+          type: "failure",
+          data: { error: "cooldownHours must be at least 1.", field: "cooldownHours" },
+        },
         "saved",
       ),
     ).toEqual({ ok: false, message: "cooldownHours must be at least 1.", field: "cooldownHours" });
