@@ -140,6 +140,9 @@ export class PanelSessionRegistry {
       this.sessions.delete(sessionId);
       return null;
     }
+    // WHY: every successful interaction extends the session. Admin panels are
+    // private workflows; timing out while actively editing config is worse UX
+    // than keeping the in-memory state alive for a few more minutes.
     session.updatedAt = Date.now();
     return session;
   }
@@ -282,11 +285,20 @@ export function commandPanelReply(payload: PanelPayload): InteractionReplyOption
   };
 }
 
+/**
+ * Send the initial admin panel response, preserving Discord's ACK state.
+ *
+ * Commands may already be deferred by the command DSL. In that case flags are
+ * removed for `editReply` because Discord does not allow changing ephemeral
+ * state on an edit.
+ */
 export async function respondToPanelCommand(
   interaction: ChatInputCommandInteraction,
   payload: InteractionReplyOptions,
 ): Promise<void> {
   if (interaction.deferred) {
+    // WHY: ephemeral-ness was fixed by the original defer/reply. Passing flags
+    // to editReply is invalid/noisy for this payload shape.
     const { flags: _flags, ...editPayload } = payload;
     await interaction.editReply(editPayload);
     return;
@@ -300,6 +312,12 @@ export async function respondToPanelCommand(
   await interaction.reply(payload);
 }
 
+/**
+ * Replace the visible panel message after a component or modal interaction.
+ *
+ * Side effects: calls `interaction.update`, `deferUpdate`, or edits the backing
+ * message depending on what Discord allows for the interaction subtype.
+ */
 export async function updatePanelMessage(
   interaction: ComponentInteraction,
   payload: PanelPayload,
@@ -317,6 +335,8 @@ export async function updatePanelMessage(
 
   // Modal submits cannot use interaction.update(), so edit the original panel
   // message after acknowledging the modal interaction.
+  // RISK: if the original message is gone, there is nothing to edit. The caller
+  // already handled the modal response path; this function simply stops there.
   if (!interaction.deferred && !interaction.replied && "deferUpdate" in interaction) {
     await interaction.deferUpdate();
   }
@@ -327,6 +347,7 @@ export async function updatePanelMessage(
   }
 }
 
+/** Reply with an ephemeral panel error without disturbing the panel message. */
 export async function replyPanelError(
   interaction: ComponentInteraction,
   content: string,
@@ -339,6 +360,12 @@ export async function replyPanelError(
   }
 }
 
+/**
+ * Create a short-lived admin panel session and send the first rendered panel.
+ *
+ * The session is intentionally in-memory only. Persistent guild config changes
+ * are saved by panel action handlers, not by the session object itself.
+ */
 export async function openPanelFromCommand(
   interaction: ChatInputCommandInteraction,
   panelId: PanelId,

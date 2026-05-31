@@ -1,3 +1,14 @@
+/**
+ * Cross-message link spam counter backed by MongoDB update pipelines.
+ *
+ * AutoMod needs a rolling count per guild+user that survives process restarts
+ * and multiple message events. The pipeline prunes old timestamps and appends
+ * new ones atomically so concurrent messages do not lose increments.
+ *
+ * Boundary: this module stores primitive timestamps only. Policy decisions stay
+ * in the signal detectors so the persistence shape does not know punishment
+ * rules.
+ */
 import { getDb } from "@/core/db";
 import { createLogger } from "@/core/logger";
 
@@ -10,12 +21,11 @@ interface LinkTrackDoc {
 }
 
 /**
- * Records `count` new link events for the given guild+user key,
- * filters out timestamps older than `windowMs`, and returns
- * the total count of timestamps in the window (including new ones).
+ * Records `count` new link events for the given guild+user key.
  *
- * Uses an atomic MongoDB update pipeline (requires MongoDB 4.2+).
- * Upserts — creates the document if it doesn't exist.
+ * Filters out timestamps older than `windowMs` and returns the total count in
+ * the window, including the new events. Uses an atomic MongoDB update pipeline
+ * (requires MongoDB 4.2+) and upserts when the key does not exist.
  */
 export async function recordLinks(
   guildId: string,
@@ -28,7 +38,8 @@ export async function recordLinks(
   const now = Date.now();
   const cutoff = now - windowMs;
 
-  // Build an array of `count` new timestamp values
+  // WHY: duplicate timestamp values are intentional. We count links, not
+  // messages, so one message with N links must append N entries.
   const newTimestamps = Array.from({ length: count }, () => now);
 
   const result = await db.collection<LinkTrackDoc>("automod_link_tracking").findOneAndUpdate(

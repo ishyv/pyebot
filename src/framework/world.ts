@@ -133,12 +133,24 @@ export class World {
   // These are used by `forInteraction()`'s cached view, by background jobs,
   // and by the migration script. Most feature code goes through Ctx.
 
+  /**
+   * Read one component document without touching any interaction cache.
+   *
+   * Used by background jobs and by `InteractionCtx` cache misses. Malformed
+   * persisted documents throw here because component schemas are the DB boundary.
+   */
   async getDirect<T>(id: Entity, component: Component<T>): Promise<T | null> {
     const col = await this.col(component);
     const doc = await col.findOne({ _id: id } as MongoFilter<Document & { _id: Entity }>);
     return doc ? this.parse(component, doc, id) : null;
   }
 
+  /**
+   * Return an existing component or create one from schema defaults.
+   *
+   * Side effects: may upsert into Mongo. The schema must be able to parse `{}`;
+   * otherwise this component cannot be safely auto-created.
+   */
   async ensureDirect<T>(id: Entity, component: Component<T>): Promise<T> {
     const col = await this.col(component);
     const defaults = this.defaults(component, id);
@@ -161,6 +173,12 @@ export class World {
     );
   }
 
+  /**
+   * Apply a partial update, creating the component from defaults if missing.
+   *
+   * The update document is built through `buildPatchUpdate()` so defaults and
+   * caller patches do not collide in MongoDB's `$setOnInsert` parser.
+   */
   async patchDirect<T>(id: Entity, component: Component<T>, patch: Partial<T>): Promise<T> {
     const col = await this.col(component);
     const defaults = this.defaults(component, id);
@@ -284,6 +302,9 @@ class InteractionCtx implements Ctx {
   ): Promise<void> {
     let partial: Partial<T>;
     if (typeof patch === "function") {
+      // WHY: functional patches must see the same per-interaction cached value
+      // that later reads will see. The returned DB value replaces the cache so
+      // command code has read-your-own-write behavior within one interaction.
       const current = await this.ensure(id, component);
       partial = (patch as (c: T) => Partial<T>)(current);
     } else {

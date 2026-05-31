@@ -1,3 +1,24 @@
+/**
+ * Public slash-command authoring DSL and runtime executor.
+ *
+ * This file is the boundary between feature-authored commands and discord.js.
+ * Feature modules describe command shape with `command(name)`; the builder
+ * produces both the Discord slash-command JSON and the `CommandModule` runtime
+ * object consumed by the loader/bootstrap.
+ *
+ * Key invariants:
+ * - Option and subcommand declarations refine the handler context type.
+ * - `.guildOnly()` narrows guild fields in `.run()` and disables DM usage.
+ * - The framework owns defer/send/error mapping through `ctx.respond`.
+ * - Inline `.handle()` dispatch is preferred for typed subcommand options;
+ *   legacy `if (c.subcommand === "...")` routing is intentionally banned.
+ *
+ * Gotchas:
+ * - The type-level builder state is compile-time only. Runtime validation still
+ *   comes from Discord's option resolver and the local payload/permission gates.
+ * - `.run()` may still be used as a fallback for subcommands without `.handle()`
+ *   because several migrated commands route to existing handler functions.
+ */
 import {
   type APIApplicationCommandOptionChoice,
   type ApplicationCommandOptionAllowedChannelTypes,
@@ -887,6 +908,9 @@ class CommandBuilder {
         });
         return;
       }
+      // WHY: defer happens before permission/cooldown checks when requested by
+      // the command contract, because Discord's ACK deadline is external to our
+      // app. Later gates then edit the deferred response through `ctx.respond`.
       if (this.deferVisibility) await ctx.respond.defer({ visibility: this.deferVisibility });
       // Per-subcommand permission gate
       if (this.permissionSpecs.length > 0 && interaction.memberPermissions) {
@@ -923,7 +947,9 @@ class CommandBuilder {
         (dispatchKey ? this.subHandlers.get(dispatchKey) : undefined) ?? this.runHandler;
       const response = await handler?.(context);
       if (response !== undefined) await ctx.respond.send(response);
-      // Record cooldowns only after a successful (non-throwing) handler return.
+      // WHY: cooldowns are recorded only after a successful handler return. A
+      // command that fails validation, short-circuits through `c.unwrap()`, or
+      // throws before doing work should not consume the user's attempt.
       for (const spec of this.cooldownSpecs) {
         const scopeId = this.cooldownScopeId(interaction, spec.scope);
         if (scopeId) ctx.cooldowns.set(scopeId, `${this.data.name}:${spec.scope}`, spec.durationMs);
@@ -953,6 +979,8 @@ class CommandBuilder {
     // Options are extracted lazily on first access: a handler that early-returns
     // (e.g. a guild guard) never pays for extraction, and Discord's required-option
     // guarantee is only consulted when the value is actually read.
+    // RISK: eager extraction would make guard-only handlers depend on option
+    // resolver behavior even when the guard response is the only intended work.
     let optionsCache: Readonly<Record<string, unknown>> | undefined;
     const readOptions = (): Readonly<Record<string, unknown>> => {
       if (optionsCache === undefined) {

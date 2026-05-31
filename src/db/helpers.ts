@@ -1,8 +1,13 @@
 /**
- * Pure utility functions for constructing and normalising MongoDB update documents.
- * Does not open connections or perform queries — all functions are synchronous and side-effect free.
+ * Pure utilities for constructing safe MongoDB update documents.
  *
- * Used by MongoStore (store.ts) and the atomic transition pattern (transition.ts).
+ * MongoDB rejects upserts when the same path is touched by both `$set` and
+ * `$setOnInsert`, even if the conflicting branch would not run for the current
+ * document. These helpers normalize update documents before they cross the DB
+ * boundary so repository code can merge schema defaults with caller patches.
+ *
+ * Side effects: none. These functions do not open connections or mutate their
+ * inputs; callers own persistence and schema validation.
  */
 
 import type { UpdateFilter } from "mongodb";
@@ -61,6 +66,8 @@ export function collectTouchedPaths(update: UpdateFilter<unknown>): Set<string> 
     if (UPDATE_OPERATORS_EXCLUDED_FROM_TOUCH.has(operator)) continue;
     if (!isRecord(payload)) continue;
     if (operator === "$rename") {
+      // WHY: both old and new names are unsafe for insert defaults. Preserving
+      // either in `$setOnInsert` can still create conflicting update paths.
       for (const [from, to] of Object.entries(payload)) {
         if (from) touched.add(from);
         if (typeof to === "string" && to) touched.add(to);
@@ -104,6 +111,9 @@ export function pruneConflictsFromSetOnInsert(
  * - Injecting `updatedAt: now` into `$set` (unless `setUpdatedAt: false` or `$currentDate.updatedAt` is present)
  * - Merging `defaults` into `$setOnInsert`
  * - Pruning `$setOnInsert` fields that conflict with explicit update paths
+ *
+ * Returns a new update object. `defaults` should be trusted schema defaults,
+ * not arbitrary user input.
  */
 export function buildSafeUpsertUpdate<TSchema>(
   update: UpdateFilter<TSchema>,
@@ -129,8 +139,9 @@ export function buildSafeUpsertUpdate<TSchema>(
 
   if (shouldSetUpdatedAt && !hasCurrentDate) nextSet.updatedAt = now;
 
-  // The update operators ($set/$setOnInsert) are simpler to rewrite through a
-  // plain record view than MongoDB's UpdateFilter generic; cast back once on return.
+  // WHY: MongoDB's generic `UpdateFilter` is stricter than the dynamic operator
+  // rewrite. Keep the messy cast at the boundary instead of spreading casts
+  // through every repository call site.
   const nextUpdate: Record<string, unknown> = { ...update };
 
   if (Object.keys(nextSet).length > 0) {

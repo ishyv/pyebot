@@ -1,5 +1,18 @@
+/**
+ * Admin-authored embed script runner.
+ *
+ * Scripts are stored as JavaScript function expressions that receive a small
+ * `ScriptContext` and return an embed-shaped object. This is a trust-boundary
+ * compromise for server admins: output is validated, globals are not passed in,
+ * but the runner is not a CPU sandbox.
+ *
+ * RISK: synchronous infinite loops cannot be interrupted by the async timeout.
+ * Do not expose this to untrusted users or broaden the context with process,
+ * filesystem, network, or Bun globals.
+ */
 import { z } from "zod";
 
+/** Stable data made available to an embed script. */
 export interface ScriptContext {
   guild: { id: string; name: string; memberCount: number };
   channel: { id: string; name: string };
@@ -8,6 +21,7 @@ export interface ScriptContext {
   time: string; // "HH:MM" UTC
 }
 
+/** Validated subset of embed fields a script may override. */
 export interface ScriptOutput {
   title?: string | null;
   description?: string | null;
@@ -43,6 +57,8 @@ const ScriptOutputSchema = z.object({
 export async function runScript(script: string, ctx: ScriptContext): Promise<ScriptOutput> {
   const execution = new Promise<ScriptOutput>((resolve, reject) => {
     try {
+      // WHY: the script must be an expression that evaluates to a callable. We
+      // pass only `ctx`; any additional capability must be explicit in this file.
       const result = new Function("ctx", `"use strict"; return (${script})(ctx);`)(ctx);
       Promise.resolve(result)
         .then((value) => {

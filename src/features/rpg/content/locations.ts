@@ -4,6 +4,10 @@
  * The dashboard can replace the runtime map after validation. Command code
  * narrows raw Discord strings with the helpers below before entering domain
  * logic.
+ *
+ * RISK: these IDs are not `keyof typeof LOCATIONS` because the map is
+ * runtime-mutable. Treat `LocationId` as trusted only after `parseLocationId`
+ * or `parseLocationForAction` succeeds.
  */
 
 import type { GatherAction } from "./actions";
@@ -20,6 +24,7 @@ export interface LocationDef extends RuntimeLocationDef {
 
 export const LOCATIONS = runtimeLocations as Record<string, LocationDef>;
 
+/** Runtime content ID after boundary narrowing. */
 export type LocationId = string;
 
 /** Convenience shape for command-side rendering: location with its ID attached. */
@@ -56,5 +61,7 @@ export function locationsForAction(action: GatherAction): readonly LocationView[
       entries.push({ ...def, id });
     }
   }
+  // WHY: command UI should remain stable across dashboard edits that only
+  // change names/materials. Tier is the authored progression order.
   return entries.sort((a, b) => a.requiredTier - b.requiredTier);
 }

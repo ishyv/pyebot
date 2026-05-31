@@ -1,12 +1,18 @@
 /**
- * Generic MongoDB data layer with Zod schema validation.
- * Every document read is validated against the schema. Missing documents can be
- * created from defaults; malformed existing documents are returned as errors so
- * bad persisted state is not silently normalized.
- * All methods return Result<T> rather than throwing.
+ * Generic MongoDB repository adapter with Zod schema validation.
  *
- * Used by all feature repositories. Construct one instance per collection:
- *   `const users = new MongoStore("users", UserSchema);`
+ * This is the older Result-returning data layer used by repository modules and
+ * legacy adapters. New component-backed feature code generally goes through
+ * `World`/`Ctx`, but this class still owns collections that have not migrated.
+ *
+ * Invariants:
+ * - Single-document reads validate strictly and return `Err` on malformed data.
+ * - Batch reads skip malformed rows so one corrupt listing/config does not hide
+ *   every valid row in a browse/list view.
+ * - Upserts merge schema defaults through `buildSafeUpsertUpdate()` to avoid
+ *   MongoDB `$set` / `$setOnInsert` path conflicts.
+ *
+ * Side effects: every public method may open the shared Mongo connection.
  */
 
 import type {
@@ -79,6 +85,9 @@ export class MongoStore<T extends Document & { _id: string }> {
     const raw: Record<string, unknown> = { _id: id };
     // Detect guildId-keyed schemas (guild config) and pre-populate it so the parsed default
     // uses the correct key. Works for ZodObject; silently skips for wrapped schemas.
+    // RISK: this is schema-introspection compatibility glue. If guild defaults
+    // stop parsing from `{ _id }`, remove the special case with a migration plan
+    // instead of teaching more shapes to this helper.
     try {
       const schemaInternals = this.schema as unknown as {
         shape?: Record<string, unknown>;
@@ -111,6 +120,7 @@ export class MongoStore<T extends Document & { _id: string }> {
     throw new Error(`Invalid ${this.collectionName} document ${id}`);
   }
 
+  /** Read one document. Returns `Ok(null)` for absence and `Err` for DB/schema failures. */
   async get(id: string): Promise<Result<T | null>> {
     try {
       const col = await this.collection();
@@ -121,6 +131,12 @@ export class MongoStore<T extends Document & { _id: string }> {
     }
   }
 
+  /**
+   * Read-or-create one document from schema defaults plus optional initial data.
+   *
+   * `initial` wins over defaults on insert. Existing documents are not patched
+   * by `initial`; callers that need mutation should use `patch`.
+   */
   async ensure(id: string, initial?: Partial<T>): Promise<Result<T>> {
     try {
       const col = await this.collection();
@@ -142,6 +158,12 @@ export class MongoStore<T extends Document & { _id: string }> {
     }
   }
 
+  /**
+   * Partially update a document and create it from defaults when absent.
+   *
+   * Returns the committed document from Mongo, not the caller's patch, so CAS
+   * and defaults are visible to the caller.
+   */
   async patch(id: string, patch: Partial<T>): Promise<Result<T>> {
     try {
       const col = await this.collection();
@@ -175,6 +197,12 @@ export class MongoStore<T extends Document & { _id: string }> {
     }
   }
 
+  /**
+   * Compare-and-swap update.
+   *
+   * Returns `Ok(null)` when `expected` no longer matches. Callers use that to
+   * distinguish a real infrastructure failure from a normal concurrency miss.
+   */
   async replaceIfMatch(
     id: string,
     expected: Partial<T>,
@@ -203,6 +231,13 @@ export class MongoStore<T extends Document & { _id: string }> {
     }
   }
 
+  /**
+   * Update raw dot-paths or a Mongo update pipeline.
+   *
+   * This is the escape hatch for admin/config surfaces that edit nested guild
+   * settings. Callers own path correctness; schema validation happens on later
+   * reads through the normal store parser.
+   */
   async updatePaths(
     id: string,
     paths: Record<string, unknown>,
@@ -234,6 +269,12 @@ export class MongoStore<T extends Document & { _id: string }> {
     }
   }
 
+  /**
+   * Find multiple documents, skipping malformed rows with a warning.
+   *
+   * Used by list/browse views where partial availability beats failing the
+   * whole command because one persisted row is corrupt.
+   */
   async find(filter: Filter<T>, options?: FindOptions<T>): Promise<Result<T[]>> {
     try {
       const col = await this.collection();

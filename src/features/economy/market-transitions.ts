@@ -1,3 +1,14 @@
+/**
+ * Pure marketplace transition helpers.
+ *
+ * The command-facing market service owns orchestration and side effects; this
+ * module owns deterministic decisions that should be easy to test without Mongo
+ * or Discord. Keep validation, pricing, and listing patch construction here so
+ * rollback logic in `market.ts` can refer to one canonical transition shape.
+ *
+ * Limits: only stackable item listings are supported. Instance items need a
+ * different escrow and identity model, not a boolean flag slipped in here.
+ */
 import type { MarketListingDoc } from "@/db/schemas/market";
 import {
   DEFAULT_MARKET_CONFIG,
@@ -34,6 +45,9 @@ export function marketConflict(
 /**
  * Validate user-controlled listing creation fields before escrow happens.
  * Returns null when the fields are safe to use.
+ *
+ * Precondition: item existence is validated by the caller's inventory escrow;
+ * this function only validates scalar request shape and market policy limits.
  */
 export function validateCreateListingInput(
   itemId: string,
@@ -112,6 +126,9 @@ export function validateCancellableListing(
 /**
  * Calculate the buyer charge and seller payout for a listing purchase.
  * Fees are intentionally floored to preserve existing command behavior.
+ *
+ * RISK: changing fee rounding is an economy behavior change. Update tests,
+ * commands, and decision log if the policy changes.
  */
 export function calculatePurchase(
   listing: MarketListingDoc,
@@ -136,6 +153,9 @@ export function calculatePurchase(
 /**
  * Return the CAS patch for consuming quantity from a listing.
  * The caller owns persistence and rollback; this function owns the transition.
+ *
+ * Postcondition: quantity reaches zero only with `sold_out`; partial purchases
+ * keep the listing active.
  */
 export function purchaseListingPatch(
   listing: MarketListingDoc,
@@ -153,6 +173,9 @@ export function purchaseListingPatch(
 /**
  * Return the CAS patch for cancelling an active listing.
  * Escrow return happens after this patch succeeds.
+ *
+ * WHY: status changes before inventory return so a concurrent buyer cannot
+ * consume the listing while cancellation is returning escrow.
  */
 export function cancelListingPatch(
   listing: MarketListingDoc,

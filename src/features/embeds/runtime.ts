@@ -1,3 +1,19 @@
+/**
+ * Runtime loops for admin-authored embeds.
+ *
+ * Sticky embeds react to raw Discord `messageCreate` events and repost a
+ * configured message at the bottom of a channel. Scheduled embeds run from a
+ * periodic sweep. Both paths share the same persisted `EmbedConfig` records but
+ * keep side effects injectable so repost/schedule rules remain unit-testable.
+ *
+ * Invariants:
+ * - Sticky cache stores only config IDs, not full configs, so edits are visible
+ *   after the next fetch or invalidation.
+ * - Repost state is persisted after send; if persistence fails the cache entry
+ *   is dropped to avoid trusting stale message IDs.
+ * - Scheduled sends are best-effort per config; one bad channel must not stop
+ *   the rest of the sweep.
+ */
 import type { Client, Guild, Message, TextBasedChannel } from "discord.js";
 import { createLogger, type Logger } from "@/core/logger";
 import {
@@ -87,6 +103,9 @@ export function createStickyEmbedRuntime(deps: StickyRuntimeDeps = defaultSticky
         let config: EmbedConfig | null = null;
 
         if (!cached) {
+          // WHY: cache misses are keyed by channel, because a channel can have
+          // at most one sticky config. Cache the absence too to avoid querying
+          // Mongo for every normal message in non-sticky channels.
           const stickyRes = await deps.findStickyForChannel(message.guildId, message.channelId);
           if (stickyRes.isErr()) return;
           config = stickyRes.unwrap();
@@ -118,6 +137,9 @@ export function createStickyEmbedRuntime(deps: StickyRuntimeDeps = defaultSticky
         }
 
         if (config.stickyMessageId) {
+          // RISK: deletion can fail for missing access or already-deleted
+          // messages. Reposting should still continue; the worst case is one
+          // stale sticky message left behind.
           await message.channel.messages.delete(config.stickyMessageId).catch(() => null);
         }
 
@@ -166,6 +188,8 @@ export function createScheduledEmbedRuntime(deps: ScheduledRuntimeDeps = default
           };
           if (config.stickyEnabled) patch.stickyMessageId = sent.id;
 
+          // WHY: next-send time is advanced only after a successful send. A
+          // failed send remains due for the next sweep instead of disappearing.
           const patchRes = await deps.patchEmbedConfig(config._id, patch);
           if (patchRes.isErr())
             deps.log.warn("Failed to update scheduled embed state", { id: config._id });

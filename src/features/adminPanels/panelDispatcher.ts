@@ -3,6 +3,10 @@
  *
  * Maps every PanelId to its render and action functions. Adding a new panel
  * means adding one entry here and one file under `panels/`. Nothing else.
+ *
+ * Invariant: render and action stay co-located per panel module. Splitting
+ * those into separate registries makes it too easy to add controls that no
+ * action handler understands, or action strings that no UI can produce.
  */
 import type { ComponentInteraction } from "@/core/feature";
 import type { Guild as GuildConfig } from "@/db/schemas/guild";
@@ -68,6 +72,9 @@ export function renderPanelBody(
  * Routes a component or modal interaction to the appropriate panel action handler.
  * Returns `true` when the caller should re-render, `false` when the panel already
  * responded (e.g. after showing a modal).
+ *
+ * The caller has already parsed and authorized the session. This function only
+ * dispatches within the current in-memory panel state.
  */
 export function dispatchPanelAction(
   interaction: ComponentInteraction,

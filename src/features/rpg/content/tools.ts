@@ -4,6 +4,10 @@
  * Equipped weapons in user loadouts may contain an itemId outside this map
  * (stale DB rows, future content). Use `parseToolId` at boundaries and
  * `toolTier` / `toolKind` for forgiving lookups that fall back safely.
+ *
+ * RISK: changing fallback behavior affects old loadouts and any dashboard
+ * content that temporarily removes a tool ID. Keep command error rendering
+ * separate from progression fallback rules.
  */
 
 import { type RuntimeToolDef, runtimeTools } from "./runtime";
@@ -14,6 +18,7 @@ export type ToolDef = RuntimeToolDef;
 
 export const TOOLS = runtimeTools as Record<string, ToolDef>;
 
+/** Runtime tool ID after `parseToolId` succeeds. */
 export type ToolId = string;
 
 /**

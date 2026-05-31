@@ -107,6 +107,9 @@ async function withListingLock<T>(
   try {
     return await fn();
   } finally {
+    // WHY: listing operations mix DB writes with component updates. The
+    // process-local lock prevents two interactions in this process from
+    // interleaving their rollback paths; version CAS still guards Mongo.
     ctx.locks.release(key);
   }
 }
@@ -197,6 +200,8 @@ export async function createListing(
 
   const saveRes = await marketListingStore.save(listing);
   if (saveRes.isErr()) {
+    // RISK: inventory escrow has already happened. Restore best-effort and
+    // surface the listing failure; do not leave the listing half-created.
     await addStackItems(ctx, sellerId, itemId, quantity).catch((error) => {
       ctx.logger.error("Failed to restore inventory after listing save failure", error);
     });
@@ -285,6 +290,8 @@ export async function buyListing(
     try {
       await adjustBalance(ctx, listing.sellerId, cfg.currencyId, sellerPayout);
     } catch {
+      // WHY: after listing CAS succeeds, buyer money has moved but seller credit
+      // failed. Reverse buyer debit and listing quantity/status before reporting.
       await rollbackBalance(ctx, buyerId, cfg.currencyId, total);
       await rollbackListing(listing, listing.version + 1);
       return ErrResult(
@@ -295,6 +302,9 @@ export async function buyListing(
     try {
       await addStackItems(ctx, buyerId, listing.itemId, quantity);
     } catch (error) {
+      // RISK: this is the widest rollback path: seller credit, buyer debit, and
+      // listing state all need reversal. Each rollback is best-effort because
+      // the code is not inside a multi-document Mongo transaction.
       await rollbackBalance(ctx, listing.sellerId, cfg.currencyId, -sellerPayout);
       await rollbackBalance(ctx, buyerId, cfg.currencyId, total);
       await rollbackListing(listing, listing.version + 1);
@@ -363,6 +373,8 @@ export async function cancelListing(
     try {
       await addStackItems(ctx, listing.sellerId, listing.itemId, listing.quantity);
     } catch (error) {
+      // WHY: the listing is already marked cancelled. Restoring the snapshot is
+      // safer than leaving escrow stuck when inventory return fails.
       await rollbackListing(listing, listing.version + 1);
       return ErrResult(asMarketError(error, "Failed to return inventory"));
     }

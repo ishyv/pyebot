@@ -1,3 +1,18 @@
+/**
+ * AutoMod runtime handlers for raw Discord events and framework components.
+ *
+ * This class is discovered by the feature loader through the top-level
+ * `handlers.ts` convention. It bridges three boundaries:
+ * - raw Discord events via `@Listen` for high-volume message/member activity;
+ * - framework events via `@On` for internal member-joined flow;
+ * - component IDs via `@Handle` for raid alert buttons.
+ *
+ * Invariants:
+ * - Message handling must fail closed to the handler, not the bot process.
+ * - Temp-role grants are persisted before expiry sweeps can remove them.
+ * - TTL indexes are intentionally not used for temp roles because expiry has
+ *   Discord side effects: the role must be removed before the grant row is gone.
+ */
 import {
   type ButtonInteraction,
   type Client,
@@ -98,6 +113,8 @@ export default class AutomodHandlers {
       if (slowInput) {
         const slowDecision = evaluatePerUserSlow(config, slowInput);
         if (slowDecision.rule && message.member) {
+          // WHY: per-user slow roles can be assigned outside this process. The
+          // first matching message repairs the in-memory/persisted expiry state.
           await recoverPerUserSlowGrant(ctx, message.member, slowDecision.rule);
         }
         if (slowDecision.action !== "allow") {
@@ -148,6 +165,8 @@ export default class AutomodHandlers {
   @Listen(Events.ClientReady)
   onReady(_client: Client, ctx: Ctx): void {
     if (this.expiryTimer) return;
+    // WHY: expiry is a sweep, not Mongo TTL. Deleting the DB row without first
+    // removing the Discord role would strand temporary access on the member.
     this.expiryTimer = setInterval(() => {
       void sweepExpiredTempRoles(ctx).catch((error) => {
         log.error("Failed to sweep temp-role grants", error);
@@ -173,6 +192,8 @@ async function grantTempRole(
   }
 
   if (!member.roles.cache.has(roleId)) {
+    // WHY: Discord role assignment is attempted before persistence so a stored
+    // grant always represents a role this process tried to apply.
     await member.roles.add(roleId, "Recently joined temp-role policy").catch((error) => {
       log.error(`Failed to grant temp role ${roleId}`, error);
     });
@@ -264,6 +285,9 @@ async function sweepExpiredTempRoles(ctx: Ctx): Promise<void> {
       const reason = grant.policyId.startsWith(PER_USER_SLOW_POLICY_PREFIX)
         ? "Per-user slow role expired"
         : "Recently joined temp role expired";
+      // RISK: this remove can fail because of Discord permissions or deleted
+      // roles. The grant row is still deleted so the sweeper does not retry
+      // forever on an unfixable guild configuration.
       await member.roles.remove(grant.roleId, reason).catch((error) => {
         log.error(`Failed to remove expired temp role ${grant.roleId}`, error);
       });

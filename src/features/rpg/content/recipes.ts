@@ -4,6 +4,10 @@
  * Dashboard reloads replace these maps in place after validation. The keys
  * remain runtime strings because author-authored content can add recipes
  * without a TypeScript rebuild.
+ *
+ * Processing recipes are keyed by input material, not by recipe ID. Crafting
+ * recipes are keyed by output tool. Those shapes are intentionally different
+ * because commands start from different user choices.
  */
 
 import type { MaterialId } from "./materials";
@@ -18,6 +22,7 @@ export type CraftingRecipeDef = RuntimeCraftingRecipeDef;
 
 export const CRAFTING_RECIPES = runtimeCraftingRecipes;
 
+/** Runtime crafting recipe ID after `parseCraftingRecipeId` succeeds. */
 export type CraftingRecipeId = string;
 
 /** Untrusted-string boundary helper for /craft. */

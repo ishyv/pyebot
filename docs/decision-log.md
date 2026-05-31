@@ -1,5 +1,31 @@
 # Decision Log
 
+## 2026-05-31 - Runtime documentation pass for boundary-heavy code
+
+**Change:** Added engineering-level in-code documentation to the runtime seams where the code was
+most likely to mislead a new maintainer: command DSL dispatch, interaction response lifecycle,
+World/DB upserts, legacy `MongoStore` CAS/update helpers, mutable RPG content maps, marketplace
+rollback, AutoMod temp-role expiry/link tracking, embed sticky/scheduled runtimes, admin panel
+sessions, and admin-authored embed scripts.
+
+**Reason:** These areas depend on order of operations, cache identity, best-effort rollback,
+Discord acknowledgement rules, MongoDB update semantics, and explicit compatibility boundaries.
+Broad docs already existed, but the "why this order / why this tradeoff / what breaks if changed"
+needed to live beside the code that enforces it.
+
+**Discarded alternatives:** A generic architecture note was rejected because it would drift away
+from the runtime decisions. A larger cleanup/refactor was rejected because the goal was honest
+documentation, not changing behavior while narrating it. TypeDoc-style exhaustive comments were
+rejected in favor of focused file headers, exported-symbol JSDoc, and surgical `WHY:` / `RISK:`
+comments.
+
+**Risks / impacts:** Runtime behavior should not change. The main risk is documentation becoming
+stale if future edits change response ownership, content reload semantics, or rollback ordering
+without updating the nearby comments and this log.
+
+**How to verify:** Run focused tests for the documented areas, `bun run typecheck`, and Biome check
+on the touched files. Review the diff to confirm changes are comments/docstrings only.
+
 ## 2026-05-27 - Trim del catálogo semilla: el pack ahora es items-only
 
 **Cambio:** `src/content/packs/default.ts` pasó de 14,395 a ~2,133 líneas. Se vaciaron las secciones

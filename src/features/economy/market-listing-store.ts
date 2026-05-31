@@ -6,6 +6,10 @@ import { listingSnapshotPatch } from "./market-transitions";
 /**
  * Small adapter around the legacy market repository.
  * The market service talks to this module so legacy `MongoStore` details do not spread.
+ *
+ * This is deliberately not a new repository abstraction. It is a quarantine
+ * layer for the remaining `MongoStore` market collection while commands keep
+ * importing the stable market service API.
  */
 export const marketListingStore = {
   get(id: string): Promise<Result<MarketListingDoc | null>> {
@@ -28,6 +32,9 @@ export const marketListingStore = {
     listing: MarketListingDoc,
     expectedVersion: number,
   ): Promise<Result<MarketListingDoc | null>> {
+    // WHY: rollback is also CAS-guarded. If another write touched the listing
+    // after the failed transaction, silently overwriting it would make the
+    // recovery path more dangerous than the original failure.
     return marketStore.replaceIfMatch(
       listing._id,
       { version: expectedVersion },

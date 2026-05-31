@@ -1,3 +1,23 @@
+/**
+ * Interaction response lifecycle adapter.
+ *
+ * Discord interactions can be acknowledged exactly once, then either edited or
+ * followed up depending on whether the first response was a defer or a reply.
+ * This module centralizes that state-machine so command handlers can return a
+ * payload and receive `Result` errors instead of scattering `reply` /
+ * `editReply` / `followUp` branching across feature code.
+ *
+ * Invariants:
+ * - `send()` validates payload shape before crossing the Discord API boundary.
+ * - `fail()` always forces an ephemeral response without dropping existing
+ *   payload flags.
+ * - Discord API failures are classified, not thrown, so command code can decide
+ *   whether to surface or ignore them.
+ *
+ * Gotcha: this is intentionally a small runtime adapter over discord.js. It
+ * does not hide all interaction methods, and it cannot rescue a handler that
+ * manually acknowledges the same interaction through raw discord.js calls.
+ */
 import {
   type BaseInteraction,
   type InteractionReplyOptions,
@@ -16,6 +36,7 @@ export type InteractionResponseErrorKind =
   | "discord_api_error"
   | "unsupported_interaction";
 
+/** Classified failure returned by responder methods instead of thrown. */
 export class InteractionResponseError extends Error {
   constructor(
     public readonly kind: InteractionResponseErrorKind,
@@ -27,6 +48,13 @@ export class InteractionResponseError extends Error {
   }
 }
 
+/**
+ * Minimal response surface used by `Ctx.respond`.
+ *
+ * Side effects: each method may call Discord's interaction API. All methods
+ * return `Result` so feature code can short-circuit without relying on thrown
+ * discord.js exceptions.
+ */
 export interface InteractionResponder {
   defer(options?: {
     visibility?: InteractionVisibility;
@@ -47,10 +75,20 @@ type InteractionResponseMethods = {
   followUp?: (payload: InteractionReplyOptions) => Promise<unknown>;
 };
 
+/**
+ * Create a responder bound to one Discord interaction.
+ *
+ * The returned object reads `interaction.replied` / `interaction.deferred` at
+ * call time. That matters because a handler may defer, then later send, and the
+ * second call must edit the original response rather than attempting a second
+ * first acknowledgement.
+ */
 export function createInteractionResponder(interaction: BaseInteraction): InteractionResponder {
   const replyable = interaction as ReplyableInteraction & InteractionResponseMethods;
   return {
     async defer(options = {}) {
+      // WHY: Discord treats defer/reply as the one allowed initial ACK. A
+      // repeated defer should be idempotent for framework callers, not a 40060.
       if (replyable.replied || replyable.deferred) return OkResult(undefined);
       if (!replyable.deferReply) {
         return ErrResult(
@@ -87,6 +125,8 @@ export function createInteractionResponder(interaction: BaseInteraction): Intera
         );
       }
 
+      // WHY: once a normal reply exists, additional user-visible messages must
+      // be follow-ups. Reusing reply would fail as "already acknowledged".
       if (replyable.replied) {
         if (!replyable.followUp) {
           return ErrResult(
@@ -119,6 +159,13 @@ export function createInteractionResponder(interaction: BaseInteraction): Intera
   };
 }
 
+/**
+ * Validate Discord response limits that this codebase can check locally.
+ *
+ * Returns `Err(invalid_payload)` before the network call when the payload would
+ * violate known Discord limits. It deliberately does not validate every possible
+ * Discord schema rule; discord.js and the API remain the final authority.
+ */
 export function validateInteractionPayload(
   payload: InteractionReplyOptions,
 ): Result<void, InteractionResponseError> {
@@ -166,6 +213,12 @@ function hasComponentsV2(flags: InteractionReplyOptions["flags"]): boolean {
   return (MessageFlagsBitField.resolve(flags as never) & MessageFlags.IsComponentsV2) !== 0;
 }
 
+/**
+ * Convert common Discord API error codes into stable application categories.
+ *
+ * Unknown codes are grouped as `discord_api_error` so callers are not coupled to
+ * discord.js error object shapes.
+ */
 export function classifyDiscordInteractionError(error: unknown): InteractionResponseErrorKind {
   const code = errorCode(error);
   if (code === 10062) return "expired_interaction";

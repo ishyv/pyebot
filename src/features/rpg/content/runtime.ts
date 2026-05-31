@@ -5,6 +5,16 @@
  * a Mongo snapshot and replace these maps at runtime after validation. Consumers
  * import the live maps through the existing content modules, so command code
  * does not need to know whether content came from source or Mongo.
+ *
+ * Invariants:
+ * - The exported map objects keep stable identity for imports.
+ * - Snapshot replacement mutates those objects in place after validation.
+ * - IDs are runtime strings narrowed at command/handler boundaries with
+ *   `parseXId` helpers; do not derive `keyof typeof` IDs from these maps.
+ *
+ * Gotcha: `DEFAULT_CONTENT_PACK` currently seeds items only. Locations, tools,
+ * and recipes below are the gameplay fallback until the content registry and
+ * dashboard model are deliberately reconciled.
  */
 
 import { DEFAULT_CONTENT_PACK } from "@/content/packs/default";
@@ -187,6 +197,8 @@ export const runtimeCraftingRecipes: Record<string, RuntimeCraftingRecipeDef> = 
 export const runtimeProcessingRecipes: Record<string, RuntimeProcessingRecipeDef> = {};
 
 function assignRecord<T>(target: Record<string, T>, next: Readonly<Record<string, T>>): void {
+  // WHY: consumers import the map object once. Reassigning the export would
+  // strand existing imports on stale content, so reload mutates in place.
   for (const key of Object.keys(target)) delete target[key];
   Object.assign(target, next);
 }
@@ -223,6 +235,8 @@ function activeSnapshot(): RpgContentSnapshot {
 }
 
 function validateSnapshot(snapshot: RpgContentSnapshot): Error | null {
+  // WHY: item schemas are reused from the source content layer because item
+  // shape crosses inventory, market, and dashboard boundaries.
   for (const [id, item] of Object.entries(snapshot.items)) {
     const parsed = ItemDefSchema.safeParse(item);
     if (!parsed.success) {
@@ -273,6 +287,9 @@ export function getRpgContentSnapshot(): RpgContentSnapshot {
 /**
  * Atomically replaces active RPG content after validation.
  * Failed validation leaves the previous snapshot untouched.
+ *
+ * Intended for tests and dashboard bridge verification. Runtime callers should
+ * use `saveRpgContent` so Mongo and the live maps stay aligned.
  */
 export function replaceRpgContentForTest(next: RpgContentSnapshot): Result<void, Error> {
   const error = validateSnapshot(next);
@@ -286,7 +303,13 @@ export function resetRpgContentForTest(): void {
   applySnapshot(defaultSnapshot());
 }
 
-/** Loads persisted dashboard-authored RPG content from Mongo, falling back to source defaults. */
+/**
+ * Load persisted dashboard-authored RPG content from Mongo.
+ *
+ * Side effects: replaces the live maps in place. Missing Mongo state falls back
+ * to source defaults; malformed Mongo state returns `Err` and leaves callers to
+ * decide whether to keep the current process state or reset.
+ */
 export async function reloadRpgContent(): Promise<Result<RpgContentSnapshot, Error>> {
   try {
     const db = await getDb();
@@ -310,7 +333,13 @@ export async function reloadRpgContent(): Promise<Result<RpgContentSnapshot, Err
   }
 }
 
-/** Validates, persists, and activates dashboard-authored RPG content. */
+/**
+ * Validate, persist, and activate dashboard-authored RPG content.
+ *
+ * The write happens before `applySnapshot()`. If Mongo fails, the in-memory bot
+ * continues using the previous snapshot rather than accepting content that will
+ * disappear on restart.
+ */
 export async function saveRpgContent(
   next: RpgContentSnapshot,
 ): Promise<Result<RpgContentSnapshot, Error>> {
