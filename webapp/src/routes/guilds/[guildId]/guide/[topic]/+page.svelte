@@ -15,9 +15,12 @@ const Body = $derived(TOPIC_BODIES[data.topic.id]);
 const enabled = $derived(
   data.topic.featureId ? (data.featureEnabled[data.topic.featureId] ?? false) : null,
 );
+const pageTitle = $derived(
+  `${data.topic.title.charAt(0).toUpperCase()}${data.topic.title.slice(1)} · Guide`,
+);
 </script>
 
-<svelte:head><title>{data.topic.title} · guide</title></svelte:head>
+<svelte:head><title>{pageTitle}</title></svelte:head>
 
 <DocPage topic={data.topic} {guildId} {enabled} prev={data.prev} next={data.next}>
   <Body />
