@@ -18,9 +18,19 @@ describe("runScript", () => {
   it(
     "timeout — never-resolving async script rejects with 'Script timeout'",
     async () => {
-      await expect(runScript("async (ctx) => new Promise(() => {})", mockCtx)).rejects.toThrow(
-        "Script timeout",
-      );
+      await expect(
+        runScript("async (ctx) => new Promise(() => {})", mockCtx, { timeoutMs: 50 }),
+      ).rejects.toThrow("Script timeout");
+    },
+    { timeout: 2000 },
+  );
+
+  it(
+    "timeout — synchronous infinite loop is terminated outside the bot thread",
+    async () => {
+      await expect(
+        runScript("(ctx) => { while (true) {} }", mockCtx, { timeoutMs: 50 }),
+      ).rejects.toThrow("Script timeout");
     },
     { timeout: 2000 },
   );

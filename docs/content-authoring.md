@@ -1,11 +1,15 @@
 # RPG Content Authoring
 
-The seed catalog is defined in `src/content/packs/default.ts`. It currently
-ships **items only** — the `locations`, `dropTables`, and `recipes` sections
-were trimmed (2026-05-27) because the active runtime never read them. That file
-is seed/catalog data for authoring and validation, not the live dashboard
-editing path. The authoring helpers below still type-check those sections if you
-re-introduce them, but gameplay content lives in `src/features/rpg/content/**`.
+The built-in item seed is defined in `src/content/packs/default-items.ts`.
+`src/content/packs/default.ts` wraps those items as `DEFAULT_CONTENT_PACK.items`
+for authoring/type-checking. The full source fallback snapshot for live gameplay
+is `src/features/rpg/content/default-content.ts`.
+
+`DEFAULT_CONTENT_PACK` currently ships **items only** — the `locations`,
+`dropTables`, and `recipes` sections were trimmed (2026-05-27) because the
+active runtime never read them. The authoring helpers below still type-check
+those sections if you re-introduce them, but gameplay fallback data belongs in
+`src/features/rpg/content/default-content.ts`.
 
 The embedded dashboard edits the active RPG runtime snapshot through the bot
 bridge and persists it to Mongo as `rpg_content.active`. Keep dashboard changes
@@ -13,9 +17,9 @@ on that live bridge path. Source-pack edits belong in normal TypeScript changes
 against this file.
 
 The active bot runtime does not load a content registry. Commands for
-gathering, processing, crafting, tools, and expeditions read the small typed
-maps in `src/features/rpg/content/**`. Keep gameplay changes there until the
-catalog and runtime content are reconciled.
+gathering, processing, crafting, tools, and expeditions read the live maps in
+`src/features/rpg/content/**`, seeded from `default-content.ts` unless Mongo
+`rpg_content.active` replaces them at boot.
 
 ## Quick Start
 

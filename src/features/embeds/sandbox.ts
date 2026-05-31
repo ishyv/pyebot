@@ -3,12 +3,11 @@
  *
  * Scripts are stored as JavaScript function expressions that receive a small
  * `ScriptContext` and return an embed-shaped object. This is a trust-boundary
- * compromise for server admins: output is validated, globals are not passed in,
- * but the runner is not a CPU sandbox.
+ * compromise for server admins: output is validated in the parent process, and
+ * execution happens in a worker so timeout can terminate CPU-bound loops.
  *
- * RISK: synchronous infinite loops cannot be interrupted by the async timeout.
- * Do not expose this to untrusted users or broaden the context with process,
- * filesystem, network, or Bun globals.
+ * RISK: this is availability isolation, not a security sandbox. Admin-authored
+ * JavaScript remains trusted code; do not expose this to untrusted users.
  */
 import { z } from "zod";
 
@@ -46,41 +45,71 @@ const ScriptOutputSchema = z.object({
     .optional(),
 });
 
+export interface RunScriptOptions {
+  readonly timeoutMs?: number;
+}
+
+type WorkerResponse =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly message: string };
+
+function isWorkerResponse(value: unknown): value is WorkerResponse {
+  if (!value || typeof value !== "object") return false;
+  if (!("ok" in value)) return false;
+  if ((value as { ok: unknown }).ok === true) return "value" in value;
+  return (
+    (value as { ok: unknown }).ok === false &&
+    typeof (value as { message?: unknown }).message === "string"
+  );
+}
+
 /**
  * Executes a user-provided JavaScript function expression with the given context.
  *
- * Security note: Scripts are authored by server admins with `ManageMessages` — they are already
- * trusted users. The function-based sandbox does not prevent CPU-bound abuse in tight loops; this
- * trade-off is acceptable given the trust model. The 1-second timeout prevents async hangs only.
- * Do not expose `process`, `require`, or any Bun globals — pass only the `ScriptContext` object.
+ * Security note: Scripts are authored by server admins with `ManageMessages`;
+ * this worker boundary is meant to protect bot availability, not to safely run
+ * hostile JavaScript. The parent owns output validation and kills the worker
+ * after the timeout.
  */
-export async function runScript(script: string, ctx: ScriptContext): Promise<ScriptOutput> {
-  const execution = new Promise<ScriptOutput>((resolve, reject) => {
-    try {
-      // WHY: the script must be an expression that evaluates to a callable. We
-      // pass only `ctx`; any additional capability must be explicit in this file.
-      const result = new Function("ctx", `"use strict"; return (${script})(ctx);`)(ctx);
-      Promise.resolve(result)
-        .then((value) => {
-          const parsed = ScriptOutputSchema.safeParse(value);
-          if (!parsed.success) {
-            reject(new Error(`Script output validation failed: ${parsed.error.message}`));
-          } else {
-            resolve(parsed.data);
-          }
-        })
-        .catch(reject);
-    } catch (err) {
-      reject(err);
-    }
+export async function runScript(
+  script: string,
+  ctx: ScriptContext,
+  options: RunScriptOptions = {},
+): Promise<ScriptOutput> {
+  const timeoutMs = options.timeoutMs ?? 1000;
+  const worker = new Worker(new URL("./script-worker.ts", import.meta.url), { type: "module" });
+
+  const execution = new Promise<unknown>((resolve, reject) => {
+    worker.onmessage = (event: MessageEvent<unknown>) => {
+      if (!isWorkerResponse(event.data)) {
+        reject(new Error("Script worker returned an invalid response"));
+        return;
+      }
+      if (!event.data.ok) {
+        reject(new Error(event.data.message));
+        return;
+      }
+      resolve(event.data.value);
+    };
+    worker.onerror = (event) => {
+      reject(new Error(event.message));
+    };
+    worker.postMessage({ script, ctx });
   });
 
   let handle: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    handle = setTimeout(() => reject(new Error("Script timeout")), 1000);
+    handle = setTimeout(() => reject(new Error("Script timeout")), timeoutMs);
   });
 
-  return Promise.race([execution, timeout]).finally(() => {
+  const value = await Promise.race([execution, timeout]).finally(() => {
     if (handle) clearTimeout(handle);
+    worker.terminate();
   });
+
+  const parsed = ScriptOutputSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Script output validation failed: ${parsed.error.message}`);
+  }
+  return parsed.data;
 }

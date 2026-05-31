@@ -30,6 +30,19 @@ describe("createDoctorReport", () => {
     expect(report.checks.find((check) => check.id === "discord-token")?.status).toBe("pass");
   });
 
+  test("mentions Mongo transaction requirement when Mongo is configured", () => {
+    const report = createDoctorReport({
+      bunVersion: "1.1.0",
+      env: { DISCORD_TOKEN: "token", CLIENT_ID: "client", MONGO_URI: "mongodb://localhost:27017" },
+      nodeModulesPresent: true,
+      lockfilePresent: true,
+    });
+
+    expect(report.checks.find((check) => check.id === "mongo")?.message).toContain(
+      "marketplace writes require MongoDB transactions",
+    );
+  });
+
   test("does not accept TOKEN as an alias", () => {
     const report = createDoctorReport({
       bunVersion: "1.1.0",

@@ -1,5 +1,39 @@
 # Decision Log
 
+## 2026-05-31 - Runtime danger-zone remediation
+
+**Change:** Market create/buy/cancel writes moved to `src/features/economy/market-persistence.ts`,
+which opens MongoDB transactions for listing, currency, inventory, and account writes. Market no
+longer uses the legacy `MongoStore` listing adapter or best-effort rollback. `MongoStore` call sites
+are guarded by `src/db/mongo-store-boundary.test.ts`; the remaining approved legacy stores are:
+appeals, counting, economy achievements/quests, embeds, guilds, offers, RPG discovery, temp bans,
+and users. RPG fallback content now lives in `src/features/rpg/content/default-content.ts`, with
+items shared through `src/content/packs/default-items.ts`. Embed scripts now execute in a worker
+terminated by timeout, while output validation stays in the parent.
+
+**Reason:** These were the highest-risk runtime seams left after documentation: market rollback was
+not atomic across documents, `MongoStore` could leak back into features, RPG fallback data could drift
+between runtime and authoring pack items, and synchronous embed scripts could block the bot thread.
+
+**Discarded alternatives:** Keeping best-effort rollback was rejected because failed seller credit or
+inventory grant could still strand partial state. A full `MongoStore` deletion was deferred because
+several legacy repositories still own stable collection contracts. Removing embed scripts outright was
+rejected to preserve admin-authored embeds; the worker boundary keeps the feature while protecting
+availability. Loading RPG content from an external pack was rejected because the supported live source
+remains Mongo `rpg_content.active`.
+
+**Risks / impacts:** Marketplace writes now require MongoDB transactions, so standalone Mongo
+deployments fail market create/buy/cancel with `TRANSACTION_FAILED` instead of attempting rollback.
+The market persistence module bypasses `World` cache by design; command code should not read the same
+documents again through `Ctx` after a market write in one interaction. Embed scripts are still
+admin-trusted JavaScript, not a security sandbox.
+
+**How to verify:** Run `bun test src/features/economy/market-persistence.test.ts
+src/features/economy/market.test.ts`, `bun test src/db/mongo-store-boundary.test.ts
+src/features/offers/service.test.ts`, `bun test src/features/rpg/content/runtime-content.test.ts`,
+`bun test src/features/embeds/sandbox.test.ts`, `bun test src/framework/doctor.test.ts`,
+`bun run typecheck`, touched-path Biome, and `git diff --check`.
+
 ## 2026-05-31 - Runtime documentation pass for boundary-heavy code
 
 **Change:** Added engineering-level in-code documentation to the runtime seams where the code was

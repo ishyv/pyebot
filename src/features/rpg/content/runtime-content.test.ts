@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { DEFAULT_CONTENT_PACK } from "@/content/packs/default";
 import { LOCATIONS, locationsForAction, parseLocationId } from "@/features/rpg/content/locations";
 import { MATERIALS } from "@/features/rpg/content/materials";
 import {
@@ -7,6 +8,7 @@ import {
   parseCraftingRecipeId,
 } from "@/features/rpg/content/recipes";
 import {
+  DEFAULT_RPG_CONTENT,
   getRpgContentSnapshot,
   replaceRpgContentForTest,
   resetRpgContentForTest,
@@ -41,6 +43,15 @@ describe("RPG runtime content", () => {
         expect(materialId in MATERIALS, `${recipeId} requires ${materialId}`).toBe(true);
       }
     }
+  });
+
+  test("runtime fallback and default content pack derive items from the same seed", () => {
+    resetRpgContentForTest();
+
+    expect(JSON.stringify(DEFAULT_CONTENT_PACK.items)).toBe(
+      JSON.stringify(DEFAULT_RPG_CONTENT.items),
+    );
+    expect(getRpgContentSnapshot()).toEqual(DEFAULT_RPG_CONTENT);
   });
 
   test("valid reloads atomically update gathering location lookups", () => {

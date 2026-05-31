@@ -50,7 +50,9 @@ Per-feature conventions enforced by the loader (throws at boot if violated):
 
 ### Database layer (`src/db/`)
 
-`MongoStore<T>` (`src/db/store.ts`) is the generic data layer. Each instance is bound to one MongoDB collection and one Zod schema. Every document read is validated; invalid documents silently fall back to schema defaults.
+`MongoStore<T>` (`src/db/store.ts`) is the legacy Result-returning repository adapter. Existing instances must live in `src/db/repositories/**` (guarded by `src/db/mongo-store-boundary.test.ts`). New feature code should use `World`/`Ctx` components or a deliberately narrow persistence module for external constraints such as MongoDB transactions.
+
+Marketplace create/buy/cancel now require MongoDB transaction support. Run MongoDB as a replica set or sharded cluster; standalone Mongo deployments fail market writes with `TRANSACTION_FAILED`.
 
 Key methods: `get`, `ensure` (upsert-or-return), `patch` (partial update), `set`, `replaceIfMatch` (optimistic CAS), `find`, `updatePaths`.
 
@@ -62,7 +64,7 @@ Repositories in `src/db/repositories/` instantiate stores and add query helpers.
 
 The content modules expose live, typed maps — `LOCATIONS`, `MATERIALS`, `TOOLS`, and the recipe maps — plus a `parseXId` boundary helper per catalog (`parseLocationId`, `parseMaterialId`, `parseToolId`, `parseCraftingRecipeId`, `parseProcessingInputId`). IDs are plain `string` (e.g. `type LocationId = string`); narrow an untrusted Discord string **once** at the command/handler edge with the matching `parseXId`, then pass the typed ID inward — domain functions index the live map directly and never re-validate.
 
-These maps are **runtime-mutable**, not compile-time constants. Static TypeScript (`src/features/rpg/content/runtime.ts`, seeded from `src/content/packs/default.ts` items) is the boot seed/fallback; the embedded dashboard validates edits with Zod and persists a snapshot to Mongo (`rpg_content.active`) that replaces the live maps. Command code can't tell whether content came from source or Mongo, which is the point. There is **no** external JSON/JSON5 content-pack loader, and the seed catalog ships items only — see `docs/content-authoring.md` and `docs/rpg-content-dashboard.md` before changing content.
+These maps are **runtime-mutable**, not compile-time constants. Static TypeScript fallback lives in `src/features/rpg/content/default-content.ts`, with item definitions shared through `src/content/packs/default-items.ts` and consumed by `DEFAULT_CONTENT_PACK.items`. The embedded dashboard validates edits with Zod and persists a snapshot to Mongo (`rpg_content.active`) that replaces the live maps. Command code can't tell whether content came from source or Mongo, which is the point. There is **no** external JSON/JSON5 content-pack loader — see `docs/content-authoring.md` and `docs/rpg-content-dashboard.md` before changing content.
 
 ### Feature modules (`src/features/<name>/`)
 

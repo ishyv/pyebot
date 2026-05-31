@@ -10,6 +10,14 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { ErrResult, OkResult } from "@/core/result";
 import type { MarketListingDoc } from "@/db/schemas/market";
 import type { User } from "@/db/schemas/user";
+import {
+  calculatePurchase,
+  cancelListingPatch,
+  purchaseListingPatch,
+  validateBuyableListing,
+  validateCancellableListing,
+} from "./market-transitions";
+import { type MarketConfig, MarketError as MarketDomainError } from "./market-types";
 
 // ---------------------------------------------------------------------------
 // Cooldown spies used by the ctx stub.
@@ -144,6 +152,160 @@ mock.module("@/db/repositories/economy", () => ({
   getActiveQuestsForUser: mock(async () => OkResult([])),
 }));
 
+let activeWallets: Record<string, Record<string, number>> = {};
+let activeInventories: Record<string, Record<string, number>> = {};
+let activeFailCurrency = new Set<string>();
+let activeFailInventory = new Set<string>();
+
+const mockCreateListingTx = mock(
+  async ({ listing, config }: { listing: MarketListingDoc; config: MarketConfig }) => {
+    if (Array.from(listingStore.values()).filter((doc) => doc.status === "active").length >= 20) {
+      return ErrResult(
+        new MarketDomainError(
+          "LISTING_LIMIT_REACHED",
+          `You can have at most ${config.maxActiveListings} active listings`,
+        ),
+      );
+    }
+    const current = activeInventories[listing.sellerId]?.[listing.itemId] ?? 0;
+    if (current < listing.quantity) {
+      return ErrResult(
+        new MarketDomainError(
+          "INSUFFICIENT_INVENTORY",
+          `You need ${listing.quantity} ${listing.itemId}, but do not have enough`,
+        ),
+      );
+    }
+    activeInventories[listing.sellerId] = {
+      ...activeInventories[listing.sellerId],
+      [listing.itemId]: current - listing.quantity,
+    };
+    listingStore.set(listing._id, listing);
+    return OkResult({
+      listingId: listing._id,
+      itemId: listing.itemId,
+      quantity: listing.quantity,
+      pricePerUnit: listing.pricePerUnit,
+    });
+  },
+);
+
+const mockBuyListingTx = mock(
+  async ({
+    buyerId,
+    listingId,
+    quantity,
+    config,
+  }: {
+    buyerId: string;
+    listingId: string;
+    quantity: number;
+    config: MarketConfig;
+  }) => {
+    const listing = listingStore.get(listingId);
+    if (!listing) return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
+    const listingError = validateBuyableListing(listing, buyerId, quantity);
+    if (listingError) return ErrResult(listingError);
+
+    const purchase = calculatePurchase(listing, quantity, config);
+    const buyerBalance = activeWallets[buyerId]?.[config.currencyId] ?? 0;
+    if (buyerBalance < purchase.total) {
+      return ErrResult(
+        new MarketDomainError(
+          "INSUFFICIENT_FUNDS",
+          `You need ${purchase.total} ${config.currencyId}`,
+        ),
+      );
+    }
+    if (activeFailCurrency.has(listing.sellerId) || activeFailInventory.has(buyerId)) {
+      return ErrResult(new MarketDomainError("TRANSACTION_FAILED", "transaction aborted"));
+    }
+
+    activeWallets[buyerId] = {
+      ...activeWallets[buyerId],
+      [config.currencyId]: buyerBalance - purchase.total,
+    };
+    activeWallets[listing.sellerId] = {
+      ...activeWallets[listing.sellerId],
+      [config.currencyId]:
+        (activeWallets[listing.sellerId]?.[config.currencyId] ?? 0) + purchase.sellerPayout,
+    };
+    activeInventories[buyerId] = {
+      ...activeInventories[buyerId],
+      [listing.itemId]: (activeInventories[buyerId]?.[listing.itemId] ?? 0) + quantity,
+    };
+    const listingPatch = purchaseListingPatch(listing, quantity);
+    listingStore.set(listingId, { ...listing, ...listingPatch });
+
+    return OkResult({
+      listingId,
+      itemId: listing.itemId,
+      quantity,
+      ...purchase,
+      buyerNewBalance: activeWallets[buyerId]?.[config.currencyId] ?? 0,
+      listingRemaining: listingPatch.quantity,
+    });
+  },
+);
+
+const mockCancelListingTx = mock(
+  async ({
+    actorId,
+    listingId,
+    allowModeratorOverride,
+  }: {
+    actorId: string;
+    listingId: string;
+    allowModeratorOverride?: boolean;
+  }) => {
+    const listing = listingStore.get(listingId);
+    if (!listing) return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
+    const listingError = validateCancellableListing(listing, actorId, allowModeratorOverride);
+    if (listingError) return ErrResult(listingError);
+    if (activeFailInventory.has(listing.sellerId)) {
+      return ErrResult(new MarketDomainError("TRANSACTION_FAILED", "transaction aborted"));
+    }
+
+    listingStore.set(listingId, { ...listing, ...cancelListingPatch(listing) });
+    activeInventories[listing.sellerId] = {
+      ...activeInventories[listing.sellerId],
+      [listing.itemId]:
+        (activeInventories[listing.sellerId]?.[listing.itemId] ?? 0) + listing.quantity,
+    };
+    return OkResult({
+      listingId,
+      itemId: listing.itemId,
+      returnedQuantity: listing.quantity,
+    });
+  },
+);
+
+const mockFindActiveMarketListings = mock(
+  async (
+    guildId: string,
+    options: { itemId?: string; sellerId?: string; limit?: number; skip?: number } = {},
+  ) =>
+    OkResult(
+      Array.from(listingStore.values()).filter(
+        (listing) =>
+          listing.guildId === guildId &&
+          listing.status === "active" &&
+          (!options.itemId || listing.itemId === options.itemId) &&
+          (!options.sellerId || listing.sellerId === options.sellerId),
+      ),
+    ),
+);
+
+mock.module("./market-persistence", () => ({
+  createListingTx: mockCreateListingTx,
+  buyListingTx: mockBuyListingTx,
+  cancelListingTx: mockCancelListingTx,
+  findActiveMarketListings: mockFindActiveMarketListings,
+  MarketPersistenceError: class MarketPersistenceError extends Error {
+    readonly code = "TRANSACTION_UNSUPPORTED";
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Ctx stub (wires mock cooldowns + in-memory wallets for mutations)
 // ---------------------------------------------------------------------------
@@ -166,6 +328,10 @@ function makeCtx(
   const locks = new Set<string>();
   const failCurrency = new Set(options.failCurrencyPatchForUser ?? []);
   const failInventory = new Set(options.failInventoryPatchForUser ?? []);
+  activeWallets = walletStore;
+  activeInventories = inventoryStore;
+  activeFailCurrency = failCurrency;
+  activeFailInventory = failInventory;
   return {
     cooldowns: {
       isOnCooldown: mockIsOnCooldown,
@@ -262,6 +428,10 @@ function resetAll() {
   mockMarketReplaceIfMatch.mockReset();
   mockFindActiveListings.mockReset();
   mockCountActiveListings.mockReset();
+  mockCreateListingTx.mockReset();
+  mockBuyListingTx.mockReset();
+  mockCancelListingTx.mockReset();
+  mockFindActiveMarketListings.mockReset();
   listingStore.clear();
 
   // Restore defaults
@@ -299,6 +469,154 @@ function resetAll() {
     OkResult(Array.from(listingStore.values()).filter((l) => l.status === "active")),
   );
   mockCountActiveListings.mockImplementation(async () => OkResult(0));
+  activeWallets = {};
+  activeInventories = {};
+  activeFailCurrency = new Set();
+  activeFailInventory = new Set();
+  mockCreateListingTx.mockImplementation(
+    async ({ listing, config }: { listing: MarketListingDoc; config: MarketConfig }) => {
+      if (
+        Array.from(listingStore.values()).filter(
+          (doc) =>
+            doc.guildId === listing.guildId &&
+            doc.sellerId === listing.sellerId &&
+            doc.status === "active",
+        ).length >= config.maxActiveListings
+      ) {
+        return ErrResult(
+          new MarketDomainError(
+            "LISTING_LIMIT_REACHED",
+            `You can have at most ${config.maxActiveListings} active listings`,
+          ),
+        );
+      }
+      const current = activeInventories[listing.sellerId]?.[listing.itemId] ?? 0;
+      if (current < listing.quantity) {
+        return ErrResult(
+          new MarketDomainError(
+            "INSUFFICIENT_INVENTORY",
+            `You need ${listing.quantity} ${listing.itemId}, but do not have enough`,
+          ),
+        );
+      }
+      activeInventories[listing.sellerId] = {
+        ...activeInventories[listing.sellerId],
+        [listing.itemId]: current - listing.quantity,
+      };
+      listingStore.set(listing._id, listing);
+      return OkResult({
+        listingId: listing._id,
+        itemId: listing.itemId,
+        quantity: listing.quantity,
+        pricePerUnit: listing.pricePerUnit,
+      });
+    },
+  );
+  mockBuyListingTx.mockImplementation(
+    async ({
+      buyerId,
+      listingId,
+      quantity,
+      config,
+    }: {
+      buyerId: string;
+      listingId: string;
+      quantity: number;
+      config: MarketConfig;
+    }) => {
+      const listing = listingStore.get(listingId);
+      if (!listing)
+        return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
+      const listingError = validateBuyableListing(listing, buyerId, quantity);
+      if (listingError) return ErrResult(listingError);
+
+      const purchase = calculatePurchase(listing, quantity, config);
+      const buyerBalance = activeWallets[buyerId]?.[config.currencyId] ?? 0;
+      if (buyerBalance < purchase.total) {
+        return ErrResult(
+          new MarketDomainError(
+            "INSUFFICIENT_FUNDS",
+            `You need ${purchase.total} ${config.currencyId}`,
+          ),
+        );
+      }
+      if (activeFailCurrency.has(listing.sellerId) || activeFailInventory.has(buyerId)) {
+        return ErrResult(new MarketDomainError("TRANSACTION_FAILED", "transaction aborted"));
+      }
+
+      activeWallets[buyerId] = {
+        ...activeWallets[buyerId],
+        [config.currencyId]: buyerBalance - purchase.total,
+      };
+      activeWallets[listing.sellerId] = {
+        ...activeWallets[listing.sellerId],
+        [config.currencyId]:
+          (activeWallets[listing.sellerId]?.[config.currencyId] ?? 0) + purchase.sellerPayout,
+      };
+      activeInventories[buyerId] = {
+        ...activeInventories[buyerId],
+        [listing.itemId]: (activeInventories[buyerId]?.[listing.itemId] ?? 0) + quantity,
+      };
+      const listingPatch = purchaseListingPatch(listing, quantity);
+      listingStore.set(listingId, { ...listing, ...listingPatch });
+
+      return OkResult({
+        listingId,
+        itemId: listing.itemId,
+        quantity,
+        ...purchase,
+        buyerNewBalance: activeWallets[buyerId]?.[config.currencyId] ?? 0,
+        listingRemaining: listingPatch.quantity,
+      });
+    },
+  );
+  mockCancelListingTx.mockImplementation(
+    async ({
+      actorId,
+      listingId,
+      allowModeratorOverride,
+    }: {
+      actorId: string;
+      listingId: string;
+      allowModeratorOverride?: boolean;
+    }) => {
+      const listing = listingStore.get(listingId);
+      if (!listing)
+        return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
+      const listingError = validateCancellableListing(listing, actorId, allowModeratorOverride);
+      if (listingError) return ErrResult(listingError);
+      if (activeFailInventory.has(listing.sellerId)) {
+        return ErrResult(new MarketDomainError("TRANSACTION_FAILED", "transaction aborted"));
+      }
+
+      listingStore.set(listingId, { ...listing, ...cancelListingPatch(listing) });
+      activeInventories[listing.sellerId] = {
+        ...activeInventories[listing.sellerId],
+        [listing.itemId]:
+          (activeInventories[listing.sellerId]?.[listing.itemId] ?? 0) + listing.quantity,
+      };
+      return OkResult({
+        listingId,
+        itemId: listing.itemId,
+        returnedQuantity: listing.quantity,
+      });
+    },
+  );
+  mockFindActiveMarketListings.mockImplementation(
+    async (
+      guildId: string,
+      options: { itemId?: string; sellerId?: string; limit?: number; skip?: number } = {},
+    ) =>
+      OkResult(
+        Array.from(listingStore.values()).filter(
+          (listing) =>
+            listing.guildId === guildId &&
+            listing.status === "active" &&
+            (!options.itemId || listing.itemId === options.itemId) &&
+            (!options.sellerId || listing.sellerId === options.sellerId),
+        ),
+      ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,9 +663,11 @@ describe("createListing", () => {
     expect(err.code).toBe("INSUFFICIENT_INVENTORY");
   });
 
-  test("restores seller inventory if listing save fails", async () => {
+  test("leaves seller inventory untouched if listing transaction aborts", async () => {
     const inventory = { "seller-1": { wood: 10 } };
-    mockMarketSet.mockImplementation(async () => ErrResult(new Error("save failed")));
+    mockCreateListingTx.mockImplementation(async () =>
+      ErrResult(new MarketDomainError("TRANSACTION_FAILED", "save failed")),
+    );
 
     const result = await createListing(
       makeCtx({}, inventory),
@@ -395,9 +715,18 @@ describe("createListing", () => {
   });
 
   test("rejects when listing limit reached", async () => {
-    mockCountActiveListings.mockImplementation(async () => OkResult(20));
+    for (let index = 0; index < 20; index += 1) {
+      listingStore.set(`listing:${index}`, makeListing({ _id: `listing:${index}` }));
+    }
 
-    const result = await createListing(makeCtx(), "seller-1", "guild-1", "wood", 10, 50);
+    const result = await createListing(
+      makeCtx({}, { "seller-1": { wood: 10 } }),
+      "seller-1",
+      "guild-1",
+      "wood",
+      10,
+      50,
+    );
     expect(result.isErr()).toBe(true);
     const err = result.error as InstanceType<typeof MarketError>;
     expect(err.code).toBe("LISTING_LIMIT_REACHED");
@@ -455,8 +784,8 @@ describe("buyListing", () => {
   test("fails stale listing CAS and refunds buyer", async () => {
     listingStore.set("listing:test-1", makeListing());
     const wallets = { "buyer-1": { coins: 500 }, "seller-1": { coins: 0 } };
-    mockMarketReplaceIfMatch.mockImplementation(async () =>
-      OkResult<MarketListingDoc | null>(null),
+    mockBuyListingTx.mockImplementation(async () =>
+      ErrResult(new MarketDomainError("TRANSACTION_FAILED", "listing changed")),
     );
 
     const result = await buyListing(makeCtx(wallets), "buyer-1", "listing:test-1", 5);
@@ -601,8 +930,8 @@ describe("cancelListing", () => {
 
   test("fails stale cancel CAS", async () => {
     listingStore.set("listing:test-1", makeListing());
-    mockMarketReplaceIfMatch.mockImplementation(async () =>
-      OkResult<MarketListingDoc | null>(null),
+    mockCancelListingTx.mockImplementation(async () =>
+      ErrResult(new MarketDomainError("TRANSACTION_FAILED", "listing changed")),
     );
 
     const result = await cancelListing(makeCtx(), "seller-1", "listing:test-1");
@@ -674,7 +1003,7 @@ describe("browseListings", () => {
     const result = await browseListings(makeCtx(), "guild-1", { itemId: "wood" });
 
     expect(result.isOk()).toBe(true);
-    expect(mockFindActiveListings).toHaveBeenCalledWith(
+    expect(mockFindActiveMarketListings).toHaveBeenCalledWith(
       "guild-1",
       expect.objectContaining({ itemId: "wood" }),
     );
@@ -687,7 +1016,7 @@ describe("browseListings", () => {
     const data = result.unwrap();
     expect(data.page).toBe(2);
     expect(data.pageSize).toBe(5);
-    expect(mockFindActiveListings).toHaveBeenCalledWith(
+    expect(mockFindActiveMarketListings).toHaveBeenCalledWith(
       "guild-1",
       expect.objectContaining({ skip: 10, limit: 5 }),
     );

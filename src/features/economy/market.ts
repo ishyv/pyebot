@@ -2,34 +2,32 @@
  * Economy marketplace: create, buy, cancel, browse listings.
  *
  * This module is the orchestration boundary for command-facing market actions.
- * Pure listing validation/pricing lives in `market-transitions`; legacy listing
- * persistence is hidden behind `market-listing-store`.
+ * Pure listing validation lives in `market-transitions`; multi-document writes
+ * are delegated to `market-persistence`, which is the only market path allowed
+ * to open MongoDB transactions directly.
  *
  * Invariants:
- * - Seller inventory is escrowed before a listing is saved.
- * - Purchases mutate listings with version CAS before seller credit.
- * - Any post-CAS failure attempts to reverse money and listing state.
+ * - Seller inventory escrow and listing creation commit in one transaction.
+ * - Purchases mutate listing, buyer/seller currency, and buyer inventory together.
+ * - Process-local listing locks reduce duplicate interaction spam only; MongoDB
+ *   transactions and listing status/version filters own correctness.
  *
  * It does not change command UX or support instance-item listings yet.
  */
 
-import { UserInventory } from "@/components/user-inventory";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import type { MarketListingDoc } from "@/db/schemas/market";
-import { ensureAccount, isAccountActive } from "@/features/economy/account";
-import { adjustBalance, getBalance } from "@/features/economy/mutations";
 import type { Ctx } from "@/framework/types";
 import { buildListingId } from "@/utils/ids";
-import { marketListingStore } from "./market-listing-store";
 import {
-  asMarketError,
-  calculatePurchase,
-  cancelListingPatch,
-  marketConflict,
-  purchaseListingPatch,
+  buyListingTx,
+  cancelListingTx,
+  createListingTx,
+  findActiveMarketListings,
+  MarketPersistenceError,
+} from "./market-persistence";
+import {
   resolveMarketConfig,
-  validateBuyableListing,
-  validateCancellableListing,
   validateCreateListingInput,
   validatePurchaseQuantity,
 } from "./market-transitions";
@@ -52,49 +50,6 @@ export type {
 } from "./market-types";
 export { DEFAULT_MARKET_CONFIG, MarketError, STACKABLE_ITEM_KIND } from "./market-types";
 
-function stackQuantity(slot: unknown): number {
-  if (!slot || typeof slot !== "object") return 0;
-  if ("qty" in slot && typeof slot.qty === "number") return slot.qty;
-  return 0;
-}
-
-async function getStackQuantity(ctx: Ctx, userId: string, itemId: string): Promise<number> {
-  const inventory = await ctx.get(userId, UserInventory);
-  return stackQuantity(inventory?.slots[itemId]);
-}
-
-async function addStackItems(
-  ctx: Ctx,
-  userId: string,
-  itemId: string,
-  quantity: number,
-): Promise<void> {
-  if (quantity <= 0) return;
-  const current = await getStackQuantity(ctx, userId, itemId);
-  await ctx.patch(userId, UserInventory, (inventory) => ({
-    slots: { ...inventory.slots, [itemId]: { qty: current + quantity } },
-  }));
-}
-
-async function removeStackItems(
-  ctx: Ctx,
-  userId: string,
-  itemId: string,
-  quantity: number,
-): Promise<void> {
-  if (quantity <= 0) return;
-  const current = await getStackQuantity(ctx, userId, itemId);
-  if (current < quantity) {
-    throw new MarketError(
-      "INSUFFICIENT_INVENTORY",
-      `You need ${quantity} ${itemId}, but only have ${current}`,
-    );
-  }
-  await ctx.patch(userId, UserInventory, (inventory) => ({
-    slots: { ...inventory.slots, [itemId]: { qty: current - quantity } },
-  }));
-}
-
 async function withListingLock<T>(
   ctx: Ctx,
   listingId: string,
@@ -107,26 +62,18 @@ async function withListingLock<T>(
   try {
     return await fn();
   } finally {
-    // WHY: listing operations mix DB writes with component updates. The
-    // process-local lock prevents two interactions in this process from
-    // interleaving their rollback paths; version CAS still guards Mongo.
+    // WHY: the lock is a local UX/contention reducer so two button clicks in
+    // this process do not both enter the transaction path. Correctness still
+    // comes from MongoDB transaction isolation and listing version/status filters.
     ctx.locks.release(key);
   }
 }
 
-async function rollbackBalance(
-  ctx: Ctx,
-  userId: string,
-  currencyId: string,
-  delta: number,
-): Promise<void> {
-  await adjustBalance(ctx, userId, currencyId, delta, { allowDebt: true }).catch((error) => {
-    ctx.logger.error("Failed to roll back market balance", error);
-  });
-}
-
-async function rollbackListing(listing: MarketListingDoc, expectedVersion: number): Promise<void> {
-  await marketListingStore.restoreSnapshot(listing, expectedVersion).catch(() => {});
+function mapPersistenceError(error: MarketError | MarketPersistenceError): MarketError {
+  if (error instanceof MarketPersistenceError) {
+    return new MarketError("TRANSACTION_FAILED", error.message);
+  }
+  return error;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,8 +82,8 @@ async function rollbackListing(listing: MarketListingDoc, expectedVersion: numbe
 
 /**
  * Creates a stackable-item listing after reserving seller inventory.
- * Side effects: reads account state, mutates `UserInventory`, writes the legacy listing store,
- * and sets the create cooldown only after the listing is saved.
+ * Side effects: opens a MongoDB transaction that upserts the seller account,
+ * escrows inventory, and inserts the listing; cooldown is set only after commit.
  */
 export async function createListing(
   ctx: Ctx,
@@ -158,30 +105,6 @@ export async function createListing(
     );
   }
 
-  const account = await ensureAccount(ctx, sellerId);
-  if (!isAccountActive(account.status)) {
-    return ErrResult(new MarketError("ACCOUNT_INACTIVE", "Your economy account is not active"));
-  }
-
-  const countRes = await marketListingStore.countActive(guildId, sellerId);
-  if (countRes.isErr())
-    return ErrResult(new MarketError("TRANSACTION_FAILED", countRes.error.message));
-
-  if (countRes.unwrap() >= cfg.maxActiveListings) {
-    return ErrResult(
-      new MarketError(
-        "LISTING_LIMIT_REACHED",
-        `You can have at most ${cfg.maxActiveListings} active listings`,
-      ),
-    );
-  }
-
-  try {
-    await removeStackItems(ctx, sellerId, itemId, quantity);
-  } catch (error) {
-    return ErrResult(asMarketError(error, "Failed to reserve inventory"));
-  }
-
   const now = new Date();
   const listing: MarketListingDoc = {
     _id: buildListingId(),
@@ -198,19 +121,12 @@ export async function createListing(
     expiresAt: null,
   };
 
-  const saveRes = await marketListingStore.save(listing);
-  if (saveRes.isErr()) {
-    // RISK: inventory escrow has already happened. Restore best-effort and
-    // surface the listing failure; do not leave the listing half-created.
-    await addStackItems(ctx, sellerId, itemId, quantity).catch((error) => {
-      ctx.logger.error("Failed to restore inventory after listing save failure", error);
-    });
-    return ErrResult(new MarketError("TRANSACTION_FAILED", saveRes.error.message));
-  }
+  const result = await createListingTx({ listing, config: cfg });
+  if (result.isErr()) return ErrResult(mapPersistenceError(result.error));
 
   ctx.cooldowns.set(sellerId, "market:create", cfg.createCooldownMs);
 
-  return OkResult({ listingId: listing._id, itemId, quantity, pricePerUnit });
+  return OkResult(result.unwrap());
 }
 
 // ---------------------------------------------------------------------------
@@ -219,8 +135,8 @@ export async function createListing(
 
 /**
  * Buys quantity from an active listing with per-listing locking and CAS.
- * Side effects: debits buyer, updates listing quantity/status, credits seller,
- * grants buyer inventory, and rolls back best-effort if a later step fails.
+ * Side effects: the transaction path debits buyer, updates listing quantity/status,
+ * credits seller, and grants buyer inventory atomically.
  */
 export async function buyListing(
   ctx: Ctx,
@@ -238,92 +154,13 @@ export async function buyListing(
     return ErrResult(new MarketError("COOLDOWN_ACTIVE", `Wait ${remaining}ms before buying again`));
   }
 
-  const account = await ensureAccount(ctx, buyerId);
-  if (!isAccountActive(account.status)) {
-    return ErrResult(new MarketError("ACCOUNT_INACTIVE", "Your economy account is not active"));
-  }
-
   return withListingLock(ctx, listingId, async () => {
-    const listingRes = await marketListingStore.get(listingId);
-    if (listingRes.isErr())
-      return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
-    const listing = listingRes.unwrap();
-
-    if (!listing) {
-      return ErrResult(new MarketError("LISTING_NOT_FOUND", "Listing not found"));
-    }
-
-    const listingError = validateBuyableListing(listing, buyerId, quantity);
-    if (listingError) return ErrResult(listingError);
-
-    const { subtotal, fee, total, sellerPayout } = calculatePurchase(listing, quantity, cfg);
-
-    const balance = await getBalance(ctx, buyerId, cfg.currencyId);
-    if (balance < total) {
-      return ErrResult(
-        new MarketError("INSUFFICIENT_FUNDS", `You need ${total} ${cfg.currencyId}`),
-      );
-    }
-
-    let buyerNewBalance: number;
-    try {
-      buyerNewBalance = await adjustBalance(ctx, buyerId, cfg.currencyId, -total);
-    } catch {
-      return ErrResult(new MarketError("TRANSACTION_FAILED", "Failed to debit buyer"));
-    }
-
-    const listingPatch = purchaseListingPatch(listing, quantity);
-    const updateRes = await marketListingStore.replaceIfVersion(
-      listingId,
-      listing.version,
-      listingPatch,
-    );
-    if (updateRes.isErr()) {
-      await rollbackBalance(ctx, buyerId, cfg.currencyId, total);
-      return ErrResult(new MarketError("TRANSACTION_FAILED", updateRes.error.message));
-    }
-    if (!updateRes.unwrap()) {
-      await rollbackBalance(ctx, buyerId, cfg.currencyId, total);
-      return ErrResult(marketConflict());
-    }
-
-    try {
-      await adjustBalance(ctx, listing.sellerId, cfg.currencyId, sellerPayout);
-    } catch {
-      // WHY: after listing CAS succeeds, buyer money has moved but seller credit
-      // failed. Reverse buyer debit and listing quantity/status before reporting.
-      await rollbackBalance(ctx, buyerId, cfg.currencyId, total);
-      await rollbackListing(listing, listing.version + 1);
-      return ErrResult(
-        new MarketError("TRANSACTION_FAILED", "Failed to credit seller; transaction reversed"),
-      );
-    }
-
-    try {
-      await addStackItems(ctx, buyerId, listing.itemId, quantity);
-    } catch (error) {
-      // RISK: this is the widest rollback path: seller credit, buyer debit, and
-      // listing state all need reversal. Each rollback is best-effort because
-      // the code is not inside a multi-document Mongo transaction.
-      await rollbackBalance(ctx, listing.sellerId, cfg.currencyId, -sellerPayout);
-      await rollbackBalance(ctx, buyerId, cfg.currencyId, total);
-      await rollbackListing(listing, listing.version + 1);
-      return ErrResult(asMarketError(error, "Failed to grant inventory; transaction reversed"));
-    }
+    const result = await buyListingTx({ buyerId, listingId, quantity, config: cfg });
+    if (result.isErr()) return ErrResult(mapPersistenceError(result.error));
 
     ctx.cooldowns.set(buyerId, "market:buy", cfg.buyCooldownMs);
 
-    return OkResult({
-      listingId,
-      itemId: listing.itemId,
-      quantity,
-      subtotal,
-      fee,
-      total,
-      sellerPayout,
-      buyerNewBalance,
-      listingRemaining: listingPatch.quantity,
-    });
+    return OkResult(result.unwrap());
   });
 }
 
@@ -342,48 +179,13 @@ export async function cancelListing(
   options: { allowModeratorOverride?: boolean } = {},
 ): Promise<Result<CancelListingResult, MarketError>> {
   return withListingLock(ctx, listingId, async () => {
-    const listingRes = await marketListingStore.get(listingId);
-    if (listingRes.isErr())
-      return ErrResult(new MarketError("TRANSACTION_FAILED", listingRes.error.message));
-    const listing = listingRes.unwrap();
-
-    if (!listing) {
-      return ErrResult(new MarketError("LISTING_NOT_FOUND", "Listing not found"));
-    }
-
-    const listingError = validateCancellableListing(
-      listing,
+    const result = await cancelListingTx({
       actorId,
-      options.allowModeratorOverride,
-    );
-    if (listingError) return ErrResult(listingError);
-
-    const updateRes = await marketListingStore.replaceIfVersion(
       listingId,
-      listing.version,
-      cancelListingPatch(listing),
-    );
-    if (updateRes.isErr()) {
-      return ErrResult(new MarketError("TRANSACTION_FAILED", updateRes.error.message));
-    }
-    if (!updateRes.unwrap()) {
-      return ErrResult(marketConflict());
-    }
-
-    try {
-      await addStackItems(ctx, listing.sellerId, listing.itemId, listing.quantity);
-    } catch (error) {
-      // WHY: the listing is already marked cancelled. Restoring the snapshot is
-      // safer than leaving escrow stuck when inventory return fails.
-      await rollbackListing(listing, listing.version + 1);
-      return ErrResult(asMarketError(error, "Failed to return inventory"));
-    }
-
-    return OkResult({
-      listingId,
-      itemId: listing.itemId,
-      returnedQuantity: listing.quantity,
+      allowModeratorOverride: options.allowModeratorOverride,
     });
+    if (result.isErr()) return ErrResult(mapPersistenceError(result.error));
+    return OkResult(result.unwrap());
   });
 }
 
@@ -407,7 +209,7 @@ export async function browseListings(
   const pageSize = options.pageSize ?? cfg.pageSize;
   const skip = page * pageSize;
 
-  const res = await marketListingStore.findActive(guildId, {
+  const res = await findActiveMarketListings(guildId, {
     itemId: options.itemId,
     sellerId: options.sellerId,
     skip,

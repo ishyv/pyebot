@@ -168,7 +168,8 @@ function checkMongo(env: Record<string, string | undefined>): DoctorCheck {
         id: "mongo",
         label: "MongoDB",
         status: "pass",
-        message: "MONGO_URI is configured for persistent storage.",
+        message:
+          "MONGO_URI is configured; marketplace writes require MongoDB transactions (replica set or sharded cluster).",
       }
     : {
         id: "mongo",

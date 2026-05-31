@@ -18,60 +18,27 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
-import { z } from "zod";
 import { createLogger } from "@/core/logger";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { getGuild } from "@/db/repositories/guilds";
-import { MongoStore } from "@/db/store";
+import { findActiveOfferByAuthor, getOffer, saveOffer } from "@/db/repositories/offers";
+import {
+  type Offer,
+  type OfferDetails,
+  OfferDetailsSchema,
+  OfferSchema,
+  type OfferStatus,
+  OfferStatusSchema,
+} from "@/db/schemas/offer";
 import type { AccentKey } from "@/ui/theme";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
 const log = createLogger("offers");
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
-export const OfferStatusSchema = z.enum([
-  "PENDING_REVIEW",
-  "APPROVED",
-  "REJECTED",
-  "CHANGES_REQUESTED",
-  "WITHDRAWN",
-]);
-
-export type OfferStatus = z.infer<typeof OfferStatusSchema>;
-
-export const OfferDetailsSchema = z.object({
-  title: z.string(),
-  description: z.string(),
-  requirements: z.string().nullable().catch(null),
-  salary: z.string().nullable().catch(null),
-  contact: z.string().nullable().catch(null),
-});
-
-export type OfferDetails = z.infer<typeof OfferDetailsSchema>;
-
-export const OfferSchema = z.object({
-  _id: z.string(),
-  guildId: z.string(),
-  authorId: z.string(),
-  status: OfferStatusSchema,
-  details: OfferDetailsSchema,
-  reviewMessageId: z.string().nullable().catch(null),
-  reviewChannelId: z.string().nullable().catch(null),
-  publishedMessageId: z.string().nullable().catch(null),
-  publishedChannelId: z.string().nullable().catch(null),
-  rejectionReason: z.string().nullable().catch(null),
-  changesNote: z.string().nullable().catch(null),
-  moderatorId: z.string().nullable().catch(null),
-  createdAt: z.coerce.date().optional().catch(undefined),
-  updatedAt: z.coerce.date().optional().catch(undefined),
-});
-
-export type Offer = z.infer<typeof OfferSchema>;
+export type { Offer, OfferDetails, OfferStatus };
+export { OfferDetailsSchema, OfferSchema, OfferStatusSchema };
 
 const ACTIVE_STATUSES: OfferStatus[] = ["PENDING_REVIEW", "CHANGES_REQUESTED"];
-
-const offerStore = new MongoStore("offers", OfferSchema);
 
 // ─── customId constants ───────────────────────────────────────────────────────
 // Button prefixes carry the offerId as a suffix: `offer:approve:{offerId}`
@@ -241,13 +208,7 @@ export async function findActiveByAuthor(
   guildId: string,
   authorId: string,
 ): Promise<Result<Offer | null>> {
-  try {
-    const col = await offerStore.collection();
-    const doc = await col.findOne({ guildId, authorId, status: { $in: ACTIVE_STATUSES } } as never);
-    return OkResult(doc ? OfferSchema.parse(doc) : null);
-  } catch (err) {
-    return ErrResult(err instanceof Error ? err : new Error(String(err)));
-  }
+  return findActiveOfferByAuthor(guildId, authorId, ACTIVE_STATUSES);
 }
 
 export async function createOffer(
@@ -316,7 +277,7 @@ export async function createOffer(
   }
 
   offer.reviewMessageId = reviewMessageId;
-  const saveRes = await offerStore.set(id, offer);
+  const saveRes = await saveOffer(offer);
   if (saveRes.isErr()) {
     // Clean up review message if save failed
     if (reviewMessageId && reviewChannelId) {
@@ -342,7 +303,7 @@ export async function approveOffer(
   offerId: string,
   moderatorId: string,
 ): Promise<Result<Offer>> {
-  const res = await offerStore.get(offerId);
+  const res = await getOffer(offerId);
   if (res.isErr()) return ErrResult(res.error);
 
   const offer = res.unwrap();
@@ -384,7 +345,7 @@ export async function approveOffer(
     publishedChannelId,
     updatedAt: new Date(),
   };
-  await offerStore.set(offerId, updated);
+  await saveOffer(updated);
 
   // DM author
   try {
@@ -405,7 +366,7 @@ export async function rejectOffer(
   moderatorId: string,
   reason: string,
 ): Promise<Result<Offer>> {
-  const res = await offerStore.get(offerId);
+  const res = await getOffer(offerId);
   if (res.isErr()) return ErrResult(res.error);
 
   const offer = res.unwrap();
@@ -423,7 +384,7 @@ export async function rejectOffer(
     rejectionReason: reason,
     updatedAt: new Date(),
   };
-  await offerStore.set(offerId, updated);
+  await saveOffer(updated);
 
   try {
     const user = await guild.client.users.fetch(offer.authorId);
@@ -445,7 +406,7 @@ export async function requestChanges(
   moderatorId: string,
   note: string,
 ): Promise<Result<Offer>> {
-  const res = await offerStore.get(offerId);
+  const res = await getOffer(offerId);
   if (res.isErr()) return ErrResult(res.error);
 
   const offer = res.unwrap();
@@ -463,7 +424,7 @@ export async function requestChanges(
     changesNote: note,
     updatedAt: new Date(),
   };
-  await offerStore.set(offerId, updated);
+  await saveOffer(updated);
 
   try {
     const user = await guild.client.users.fetch(offer.authorId);
@@ -487,7 +448,7 @@ export async function withdrawOffer(guild: DjsGuild, authorId: string): Promise<
   if (!offer) return OkResult(false);
 
   const updated: Offer = { ...offer, status: "WITHDRAWN", updatedAt: new Date() };
-  await offerStore.set(offer._id, updated);
+  await saveOffer(updated);
   // Mark the review card as WITHDRAWN and disable its buttons so moderators
   // don't act on a submission that no longer exists.
   await updateReviewMessage(guild, offer, "WITHDRAWN", null, true);
