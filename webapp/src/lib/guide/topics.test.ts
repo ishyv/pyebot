@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TOPIC_BODIES } from "./bodies";
 import { GUIDE_TOPICS } from "./topics";
 
 // Self-contained contract: the bot's loaded feature ids (see repo CLAUDE.md).
@@ -55,5 +56,16 @@ describe("GUIDE_TOPICS", () => {
       expect(t.title).toBe(t.title.toLowerCase());
       expect(t.summary).toBe(t.summary.toLowerCase());
     }
+  });
+});
+
+describe("topic <-> body mapping", () => {
+  it("every topic has exactly one body", () => {
+    for (const t of GUIDE_TOPICS) expect(TOPIC_BODIES[t.id]).toBeDefined();
+  });
+
+  it("every body maps to a real topic (no orphans)", () => {
+    const ids = new Set(GUIDE_TOPICS.map((t) => t.id));
+    for (const id of Object.keys(TOPIC_BODIES)) expect(ids.has(id)).toBe(true);
   });
 });
