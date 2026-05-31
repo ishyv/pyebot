@@ -11,11 +11,11 @@ interface Props {
 }
 const { data }: Props = $props();
 const guildId = $derived(data.guild.id);
-const groups = $derived(groupTopicsByCapability(GUIDE_TOPICS));
+const groups = groupTopicsByCapability(GUIDE_TOPICS);
 const topicHref = (id: string) => `/guilds/${guildId}/guide/${id}`;
 </script>
 
-<svelte:head><title>guide</title></svelte:head>
+<svelte:head><title>Guide</title></svelte:head>
 
 <Stack gap="var(--space-lg)">
   <PageHeader
