@@ -18,22 +18,6 @@ const embedConfigs = new Map<string, Record<string, unknown>>();
 const sentEmbeds: Array<{ args: unknown[] }> = [];
 let activeBridgeBannedImages: unknown[] = [];
 let mockFeatureCatalog: Array<Record<string, unknown>> = [{ id: "economy", defaultEnabled: true }];
-let mockLoadedFeatures: Array<{
-  descriptor: Record<string, unknown>;
-  commands: [];
-  handlers: null;
-}> = [
-  {
-    descriptor: {
-      id: "economy",
-      name: "Economy",
-      description: "Currency wallet.",
-      defaultEnabled: true,
-    },
-    commands: [],
-    handlers: null,
-  },
-];
 
 function matchesFilter(doc: Record<string, unknown>, filter: unknown): boolean {
   if (!filter || typeof filter !== "object") return true;
@@ -189,18 +173,12 @@ mock.module("@/core/featureCatalog", () => ({
     features: readonly { descriptor: Record<string, unknown> }[],
     configs: Record<string, unknown> = {},
   ) => {
-    mockLoadedFeatures = features.map((feature) => ({
-      descriptor: feature.descriptor,
-      commands: [],
-      handlers: null,
-    }));
     mockFeatureCatalog = features.map((feature) => {
       const config = configs[String(feature.descriptor.id)];
       return config ? { ...feature.descriptor, config } : feature.descriptor;
     });
   },
   listFeatureCatalog: () => mockFeatureCatalog,
-  listLoadedFeatures: () => mockLoadedFeatures,
   listConfigurableFeatures: () =>
     mockFeatureCatalog.filter((feature) => feature.config !== undefined),
 }));
