@@ -30,7 +30,7 @@ const activeId = $derived((() => {
 </div>
 
 <style>
-  .guide-shell { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  .guide-shell { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: var(--space-xl); align-items: start; }
   .toc { position: sticky; top: var(--space-md); }
   .reading { min-width: 0; max-width: 48rem; }
   /* below tablet: TOC stacks above content (ui-design-notes 48rem breakpoint) */
