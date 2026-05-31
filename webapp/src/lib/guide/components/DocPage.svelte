@@ -25,7 +25,11 @@ const topicHref = (id: string) => `/guilds/${guildId}/guide/${id}`;
       {#if enabled === true}
         <Badge variant="ok">active on this server</Badge>
       {:else if enabled === false}
-        <a class="enable-link" href={`/guilds/${guildId}/features`}>
+        <a
+          class="enable-link"
+          href={`/guilds/${guildId}/features`}
+          aria-label="not enabled, open features to enable it"
+        >
           <Badge variant="warn">not enabled</Badge>
         </a>
       {/if}
@@ -50,7 +54,7 @@ const topicHref = (id: string) => `/guilds/${guildId}/guide/${id}`;
       </div>
     {/if}
     <nav class="pager" aria-label="topic navigation">
-      {#if prev}<a href={topicHref(prev.id)}>← {prev.title}</a>{:else}<span></span>{/if}
+      {#if prev}<a href={topicHref(prev.id)}>← {prev.title}</a>{/if}
       {#if next}<a class="next" href={topicHref(next.id)}>{next.title} →</a>{/if}
     </nav>
   </footer>
