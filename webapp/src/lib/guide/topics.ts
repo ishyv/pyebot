@@ -38,7 +38,7 @@ export const GUIDE_TOPICS: readonly GuideTopicMeta[] = [
     group: "protection",
     featureId: "automod",
     dashboardPath: "/automod",
-    discordCommands: [],
+    discordCommands: ["/automod"],
     keywords: ["spam", "filter", "raid", "images", "auto"],
   },
   // server ops
