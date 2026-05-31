@@ -1,0 +1,161 @@
+import type { GuideTopicMeta } from "./types";
+
+/**
+ * v1 guide topics. Adding a topic = append here + add a body in `bodies/` +
+ * register it in `bodies.ts`. The orphan test enforces the 1:1 body mapping.
+ */
+export const GUIDE_TOPICS: readonly GuideTopicMeta[] = [
+  // start here
+  {
+    id: "quick-start",
+    title: "quick start",
+    summary: "get the bot doing something useful on your server in three steps.",
+    group: "start",
+    keywords: ["setup", "getting started", "begin", "onboarding"],
+  },
+  {
+    id: "basics",
+    title: "commands & basics",
+    summary: "how slash commands work, who can run them, and where to configure things.",
+    group: "start",
+    keywords: ["slash", "permissions", "admin", "dashboard"],
+  },
+  // protection
+  {
+    id: "moderation",
+    title: "moderation",
+    summary: "warn, mute, and ban members, review cases, and handle appeals.",
+    group: "protection",
+    featureId: "moderation",
+    dashboardPath: "/moderation",
+    discordCommands: ["/warn", "/ban", "/mute", "/case", "/appeal"],
+    keywords: ["ban", "kick", "warn", "case", "appeal", "punishment"],
+  },
+  {
+    id: "automod",
+    title: "automod",
+    summary: "automatically catch spam, mass mentions, and banned images.",
+    group: "protection",
+    featureId: "automod",
+    dashboardPath: "/automod",
+    discordCommands: [],
+    keywords: ["spam", "filter", "raid", "images", "auto"],
+  },
+  // server ops
+  {
+    id: "features",
+    title: "feature toggles",
+    summary: "turn each part of the bot on or off for your server.",
+    group: "server_ops",
+    dashboardPath: "/features",
+    keywords: ["enable", "disable", "toggle", "modules"],
+  },
+  {
+    id: "channels",
+    title: "channels",
+    summary: "choose where logs, reports, and managed messages are posted.",
+    group: "server_ops",
+    dashboardPath: "/channels",
+    keywords: ["logs", "log channel", "reports"],
+  },
+  {
+    id: "roles",
+    title: "roles",
+    summary: "manage role policies and which roles the bot may assign.",
+    group: "server_ops",
+    dashboardPath: "/roles",
+    keywords: ["permissions", "role policy", "reach"],
+  },
+  {
+    id: "autoroles",
+    title: "autoroles",
+    summary: "give members roles automatically when they join.",
+    group: "server_ops",
+    featureId: "autoroles",
+    discordCommands: ["/autorole"],
+    keywords: ["join", "auto role", "onboarding"],
+  },
+  {
+    id: "tickets",
+    title: "tickets",
+    summary: "let members open private support channels with your helper roles.",
+    group: "server_ops",
+    featureId: "tickets",
+    discordCommands: ["/ticket"],
+    keywords: ["support", "help desk", "private channel"],
+  },
+  // engagement
+  {
+    id: "economy",
+    title: "economy",
+    summary: "currency, daily rewards, work payouts, the market, and quests.",
+    group: "engagement",
+    featureId: "economy",
+    dashboardPath: "/economy",
+    discordCommands: ["/balance", "/daily", "/work", "/market"],
+    keywords: ["currency", "coins", "daily", "work", "market", "quest"],
+  },
+  {
+    id: "counting",
+    title: "counting",
+    summary: "a shared counting game with streak tracking.",
+    group: "engagement",
+    featureId: "counting",
+    keywords: ["count", "streak", "game"],
+  },
+  {
+    id: "rpg",
+    title: "rpg",
+    summary: "combat, gathering, crafting, processing, and character progression.",
+    group: "engagement",
+    featureId: "rpg",
+    discordCommands: ["/fight", "/gather", "/craft", "/profile"],
+    keywords: ["combat", "gather", "craft", "loot", "character"],
+  },
+  {
+    id: "tycoon",
+    title: "tycoon",
+    summary: "idle economy operations that earn over time.",
+    group: "engagement",
+    featureId: "tycoon",
+    keywords: ["idle", "business", "passive"],
+  },
+  // publishing
+  {
+    id: "embeds",
+    title: "embeds",
+    summary: "build, preview, send, schedule, and sticky rich messages.",
+    group: "publishing",
+    featureId: "embeds",
+    dashboardPath: "/embeds",
+    keywords: ["embed", "announcement", "schedule", "sticky"],
+  },
+  {
+    id: "offers",
+    title: "offers",
+    summary: "publish time-limited offers and prompts into your channels.",
+    group: "publishing",
+    featureId: "offers",
+    discordCommands: ["/offer"],
+    keywords: ["promo", "deal", "prompt"],
+  },
+  // ai / tools
+  {
+    id: "ai",
+    title: "ai",
+    summary: "ai-assisted commands for members and admins.",
+    group: "ai_tools",
+    featureId: "ai",
+    discordCommands: ["/ask"],
+    keywords: ["assistant", "chat", "gpt", "claude"],
+  },
+  {
+    id: "utility",
+    title: "utility",
+    summary: "everyday helper commands for your members.",
+    group: "ai_tools",
+    featureId: "utility",
+    discordCommands: ["/help"],
+    keywords: ["tools", "helper", "misc"],
+  },
+];
