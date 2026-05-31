@@ -42,7 +42,7 @@ Register-to-surface map (don't drift from this without discussion):
 
 | theme | surfaces |
 |---|---|
-| (none / base) | login, guilds list, features, channels, roles |
+| (none / base) | login, guilds list, features, channels, roles, guide |
 | `hextech` | overview, moderation, automod |
 | `arcane` | economy, rpg editor |
 
