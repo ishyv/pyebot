@@ -35,6 +35,7 @@ export interface GuideTopicMeta {
 /** Ordered group with display label, produced by `groupTopicsByCapability`. */
 export interface GuideTopicGroup {
   readonly id: GuideGroupId;
+  /** lowercase display label */
   readonly label: string;
   readonly topics: readonly GuideTopicMeta[];
 }

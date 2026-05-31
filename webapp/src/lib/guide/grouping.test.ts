@@ -21,9 +21,7 @@ describe("groupTopicsByCapability", () => {
 
   it("gives each group a lowercase label", () => {
     const groups = groupTopicsByCapability(sample);
-    expect(groups.find((g) => g.id === "server_ops" ? false : g.id === "start")?.label).toBe(
-      "start here",
-    );
+    expect(groups.find((g) => g.id === "start")?.label).toBe("start here");
     expect(groups.every((g) => g.label === g.label.toLowerCase())).toBe(true);
   });
 });
