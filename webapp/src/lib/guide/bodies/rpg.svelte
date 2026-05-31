@@ -1,10 +1,17 @@
+<script lang="ts">
+import Callout from "$lib/guide/components/Callout.svelte";
+</script>
+
 <p>
-  the rpg system lets members fight enemies, gather materials, craft gear,
-  process raw items, and build out a character over time. progression is
-  per-member and carries across sessions.
+  rpg is a full progression system: members fight, gather materials, craft and
+  process items, equip gear, and build up a character over time.
 </p>
 
 <p>
-  most of the play happens in discord using the listed commands. admins can
-  tune content, locations, and recipes from the rpg editor in the dashboard.
+  most play happens in discord with commands like /fight, /gather, /craft, and
+  /profile.
 </p>
+
+<Callout variant="note">
+  admins can tune content, locations, and recipes in the rpg content editor.
+</Callout>

@@ -4,18 +4,18 @@ import Steps from "$lib/guide/components/Steps.svelte";
 </script>
 
 <p>
-  automod watches messages in real time and acts before a moderator even sees the
-  problem. it can catch spam bursts, mass mentions, and banned images and delete
-  or flag them automatically.
+  automod watches messages and automatically acts on spam, mass mentions, raids,
+  and banned images, so your team does not have to catch everything by hand.
 </p>
 
+<Callout variant="warning">
+  strict filters can catch real members by mistake. start permissive and tighten
+  the rules over time as you see what gets flagged.
+</Callout>
+
+<h2>set it up</h2>
 <Steps steps={[
   "enable the automod feature on the features page.",
-  "open the automod page and choose which rules to activate.",
-  "set an automod log channel so you can review what was caught.",
+  "set an automod report channel so you can see what gets caught.",
+  "open the automod page and choose which detectors to turn on.",
 ]} />
-
-<Callout variant="warning">
-  aggressive filters can flag real members by accident. start with permissive
-  thresholds and tighten them after you see what gets caught.
-</Callout>

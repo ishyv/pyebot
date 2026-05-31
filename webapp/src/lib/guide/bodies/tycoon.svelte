@@ -1,10 +1,10 @@
 <p>
-  tycoon adds idle operations to the economy: members invest in passive
-  businesses that earn currency over time, even while they are away. the longer
-  they leave operations running, the more they accumulate.
+  tycoon is an idle system: members charter automated production lines that keep
+  working over time, even while they are away.
 </p>
 
 <p>
-  enable the tycoon feature on the features page and members can start buying
-  and upgrading operations right away with the tycoon commands in discord.
+  each line runs through stages, an extractor, a refinery, and an assembler, that
+  members upgrade to produce more. the output can be spent as currency or used as
+  rpg materials.
 </p>

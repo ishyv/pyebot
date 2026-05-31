@@ -1,10 +1,10 @@
 <p>
-  offers let you publish a time-limited call to action directly into a channel.
-  use them for limited-time events, prompts for member feedback, or any
-  announcement that has a natural expiry.
+  offers let members submit a deal or prompt that goes live in your channels after
+  a moderator approves it.
 </p>
 
 <p>
-  create an offer from the dashboard or with /offer in discord, set how long it
-  runs, and the bot posts it. once the time is up the offer closes automatically.
+  a member runs /offer in discord to submit an offer. it lands in a review queue
+  where a moderator can approve it, reject it, or ask for changes. approved offers
+  post to the channel and close on their own when the time limit runs out.
 </p>
