@@ -14,12 +14,21 @@ const href = (id: string) => `/guilds/${guildId}/guide/${id}`;
 </script>
 
 <nav class="topic-nav" aria-label="guide topics">
-  <a class="home" class:active={activeId === null} href={`/guilds/${guildId}/guide`}>overview</a>
+  <a
+    class="home"
+    class:active={activeId === null}
+    aria-current={activeId === null ? "page" : undefined}
+    href={`/guilds/${guildId}/guide`}
+  >overview</a>
   {#each groups as group (group.id)}
     <div class="group">
       <span class="group-label">{group.label}</span>
       {#each group.topics as topic (topic.id)}
-        <a href={href(topic.id)} class:active={topic.id === activeId}>{topic.title}</a>
+        <a
+          href={href(topic.id)}
+          class:active={topic.id === activeId}
+          aria-current={topic.id === activeId ? "page" : undefined}
+        >{topic.title}</a>
       {/each}
     </div>
   {/each}
