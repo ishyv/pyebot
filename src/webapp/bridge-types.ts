@@ -475,7 +475,6 @@ export interface BotBridge {
   getGuildConfig(guildId: string): Promise<Result<Record<string, unknown>, Error>>;
   getAdminState(guildId: string): Promise<Result<Record<string, unknown>, Error>>;
   listFeatures(guildId: string): Promise<Result<readonly FeatureSummary[], Error>>;
-  getGuideGraph(guildId: string): Promise<Result<GuideGraphSnapshot, Error>>;
   saveChannels(
     guildId: string,
     slots: Record<string, string | null>,

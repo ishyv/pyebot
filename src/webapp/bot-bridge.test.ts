@@ -363,7 +363,6 @@ describe("webapp bot bridge", () => {
       "getChannels",
       "saveChannels",
       "listFeatures",
-      "getGuideGraph",
       "saveEconomy",
       "saveAutomod",
       "listBannedImages",
@@ -374,25 +373,6 @@ describe("webapp bot bridge", () => {
       expect(typeof bridge[method]).toBe("function");
     }
   }, 10_000);
-
-  it("exposes the runtime guide graph through the feature bridge", async () => {
-    const { createBridgeFromClient } = await import("./bot-bridge");
-    const bridge = createBridgeFromClient(fakeClient() as never);
-
-    const result = await bridge.getGuideGraph("guild-1");
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().features).toContainEqual(
-      expect.objectContaining({
-        id: "economy",
-        enabled: true,
-        defaultEnabled: true,
-      }),
-    );
-    expect(result.unwrap().capabilities).toContainEqual(
-      expect.objectContaining({ id: "engagement", featureIds: ["economy"] }),
-    );
-  });
 
   it("writes economy settings to the guild_economy component collection", async () => {
     collectionUpdates.length = 0;

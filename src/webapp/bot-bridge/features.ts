@@ -1,15 +1,14 @@
 import { getGuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
-import { listFeatureCatalog, listLoadedFeatures } from "@/core/featureCatalog";
+import { listFeatureCatalog } from "@/core/featureCatalog";
 import { ErrResult, OkResult } from "@/core/result";
 import { toggleFeatureSetting } from "@/features/adminPanels/configMutations";
-import { buildGuideGraph } from "@/utils/feature-guide";
 import type { BotBridge, FeatureSummary } from "../bridge-types";
 import type { BridgeEmit } from "./shared";
 
 /** Creates feature toggle bridge methods backed by the GuildFeatures component. */
 export function createFeatureBridge(
   emit: BridgeEmit,
-): Pick<BotBridge, "listFeatures" | "getGuideGraph" | "toggleFeature"> {
+): Pick<BotBridge, "listFeatures" | "toggleFeature"> {
   return {
     async listFeatures(guildId) {
       const featureState = await getGuildFeatures(guildId);
@@ -21,17 +20,6 @@ export function createFeatureBridge(
         enabled: resolveFeatureEnabled(feature, featureState.unwrap().overrides),
       }));
       return OkResult(summaries);
-    },
-
-    async getGuideGraph(guildId) {
-      const featureState = await getGuildFeatures(guildId);
-      if (featureState.isErr()) return ErrResult(featureState.error);
-      return OkResult(
-        buildGuideGraph({
-          features: listLoadedFeatures(),
-          overrides: featureState.unwrap().overrides,
-        }),
-      );
     },
 
     async toggleFeature(guildId, featureId, enabled, actorId) {
