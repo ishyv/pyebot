@@ -13,11 +13,8 @@ interface Props {
 const { data, children }: Props = $props();
 
 const guildId = $derived(data.guild.id);
-// derive active topic id from the url path: segment after /guide/, or null on the landing page
-const activeId = $derived((() => {
-  const match = page.url.pathname.match(/\/guide\/([^/]+)/);
-  return match ? match[1] : null;
-})());
+// active topic id from the url, or null on the guide landing page
+const activeId = $derived(page.url.pathname.match(/\/guide\/([^/]+)/)?.[1] ?? null);
 </script>
 
 <div class="guide-shell">
