@@ -9,7 +9,7 @@ const { command, description }: Props = $props();
 
 <div class="cmd">
   <code>{command}</code>
-  {#if description}<span>{description}</span>{/if}
+  {#if description}<span class="desc">{description}</span>{/if}
 </div>
 
 <style>
@@ -19,5 +19,5 @@ const { command, description }: Props = $props();
     background: var(--bg-elev); border: 1px solid var(--line);
     border-radius: var(--radius-sm); padding: 0.1rem 0.4rem; color: var(--text);
   }
-  span { font-size: 0.88rem; color: var(--text-soft); line-height: 1.4; }
+  .desc { font-size: 0.88rem; color: var(--text-soft); line-height: 1.4; }
 </style>

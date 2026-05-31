@@ -7,7 +7,7 @@ interface Props {
 const { steps }: Props = $props();
 </script>
 
-<ol class="steps">
+<ol class="steps" role="list">
   {#each steps as step, i (i)}
     <li>
       <span class="num">{i + 1}</span>
