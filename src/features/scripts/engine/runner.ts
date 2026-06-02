@@ -1,17 +1,21 @@
 /**
- * Admin-authored embed script runner.
+ * Script runner.
  *
  * Scripts are stored as JavaScript function expressions that receive a small
- * `ScriptContext` and return an embed-shaped object. This is a trust-boundary
+ * `ScriptContext` and return an output object. This is a trust-boundary
  * compromise for server admins: output is validated in the parent process, and
  * execution happens in a worker so timeout can terminate CPU-bound loops.
  *
  * RISK: this is availability isolation, not a security sandbox. Admin-authored
  * JavaScript remains trusted code; do not expose this to untrusted users.
+ *
+ * NOTE: the `ScriptOutput` shape is currently embed-flavoured — the engine was
+ * lifted out of the embeds feature unchanged. Later phases generalise the
+ * context/output and add the collect-then-apply operation model.
  */
 import { z } from "zod";
 
-/** Stable data made available to an embed script. */
+/** Stable data made available to a script. */
 export interface ScriptContext {
   guild: { id: string; name: string; memberCount: number };
   channel: { id: string; name: string };
@@ -77,7 +81,7 @@ export async function runScript(
   options: RunScriptOptions = {},
 ): Promise<ScriptOutput> {
   const timeoutMs = options.timeoutMs ?? 1000;
-  const worker = new Worker(new URL("./script-worker.ts", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
 
   const execution = new Promise<unknown>((resolve, reject) => {
     worker.onmessage = (event: MessageEvent<unknown>) => {

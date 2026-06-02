@@ -1,12 +1,8 @@
 import type { Guild, Message, TextBasedChannel, TextChannel } from "discord.js";
 import { EmbedBuilder } from "discord.js";
-import { createLogger } from "@/core/logger";
 import type { EmbedConfig } from "@/db/schemas/embed-config";
 import { EMBED_MAX_FIELDS } from "./config";
-import type { ScriptContext } from "./sandbox";
-import { runScript } from "./sandbox";
-
-const log = createLogger("embeds:service");
+import { runEmbedScript } from "./script-bridge";
 
 /**
  * Build a Discord EmbedBuilder from a stored embed config, optionally applying a script.
@@ -44,29 +40,16 @@ export async function buildEmbed(
     embed.addFields(config.embedFields);
   }
 
-  if (config.scriptEnabled && config.script !== null) {
-    const ctx: ScriptContext = {
-      guild: { id: guild.id, name: guild.name, memberCount: guild.memberCount },
-      channel,
-      timestamp: Date.now(),
-      date: new Date().toISOString().slice(0, 10),
-      time: new Date().toISOString().slice(11, 16),
-    };
+  const output = await runEmbedScript(config, channel, guild);
+  if (output) {
+    if (output.title != null) embed.setTitle(output.title);
+    if (output.description != null) embed.setDescription(output.description);
+    if (output.color != null) embed.setColor(output.color);
+    if (output.footer != null) embed.setFooter({ text: output.footer });
 
-    try {
-      const output = await runScript(config.script, ctx);
-
-      if (output.title != null) embed.setTitle(output.title);
-      if (output.description != null) embed.setDescription(output.description);
-      if (output.color != null) embed.setColor(output.color);
-      if (output.footer != null) embed.setFooter({ text: output.footer });
-
-      if (output.fields && output.fields.length > 0) {
-        const mergedFields = [...config.embedFields, ...output.fields].slice(0, EMBED_MAX_FIELDS);
-        embed.setFields(mergedFields);
-      }
-    } catch (err) {
-      log.warn("Script execution failed", err);
+    if (output.fields && output.fields.length > 0) {
+      const mergedFields = [...config.embedFields, ...output.fields].slice(0, EMBED_MAX_FIELDS);
+      embed.setFields(mergedFields);
     }
   }
 

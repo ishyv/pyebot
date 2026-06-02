@@ -1,4 +1,4 @@
-import type { ScriptContext } from "./sandbox";
+import type { ScriptContext } from "./runner";
 
 type WorkerRequest = {
   readonly script: string;

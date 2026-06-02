@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { runScript, type ScriptContext } from "./sandbox";
+import { runScript, type ScriptContext } from "./runner";
 
 const mockCtx: ScriptContext = {
   guild: { id: "111", name: "Test Guild", memberCount: 42 },
