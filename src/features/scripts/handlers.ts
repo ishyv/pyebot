@@ -2,6 +2,7 @@ import {
   type ButtonInteraction,
   type Client,
   Events,
+  type GuildMember,
   MessageFlags,
   type ModalSubmitInteraction,
   PermissionFlagsBits,
@@ -13,6 +14,7 @@ import { container, text, v2Message } from "@/ui/v2";
 import { parseCapabilities } from "./model";
 import { resolveRunnable } from "./resolve";
 import { executeRunnable } from "./run";
+import { runEventScripts } from "./triggers/events";
 import { runScheduleSweep } from "./triggers/schedule";
 
 const SCHEDULE_SWEEP_INTERVAL_MS = 60_000;
@@ -50,6 +52,14 @@ export default class ScriptHandlers {
         ),
       SCHEDULE_SWEEP_INTERVAL_MS,
     );
+  }
+
+  @Listen(Events.GuildMemberAdd)
+  async onMemberJoin(member: GuildMember, ctx: Ctx): Promise<void> {
+    await runEventScripts(member.client, ctx, "member-join", member.guild.id, {
+      id: member.id,
+      tag: member.user.tag,
+    });
   }
 
   @Handle("scr:")

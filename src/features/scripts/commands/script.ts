@@ -10,8 +10,10 @@ import {
   TextInputStyle,
 } from "discord.js";
 import {
+  SCRIPT_EVENTS,
   ScriptDefinition,
   type ScriptDefinitionValue,
+  type ScriptEvent,
   scriptId,
 } from "@/components/script-definition";
 import { command, type RunContext } from "@/framework";
@@ -41,6 +43,15 @@ const data = command("script")
     s
       .string("name", "Script name", { required: true })
       .integer("hours", "Interval in hours", { required: true, min: 1, max: 168 })
+      .channel("channel", "Channel to post run summaries in"),
+  )
+  .subcommand("on", "Run a script when a Discord event fires", (s) =>
+    s
+      .string("name", "Script name", { required: true })
+      .string("event", "Event to bind", {
+        required: true,
+        choices: [{ name: "member join", value: "member-join" }],
+      })
       .channel("channel", "Channel to post run summaries in"),
   )
   .subcommand("manual", "Clear a script's trigger (run only via /script run)", (s) =>
@@ -302,6 +313,30 @@ async function handleSchedule(c: Extract<ScriptCtx, { subcommand: "schedule" }>)
   );
 }
 
+async function handleOn(c: Extract<ScriptCtx, { subcommand: "on" }>): Promise<void> {
+  const name = parseScriptName(c.options.name);
+  const def = await loadStoredForConfig(c.interaction, c.ctx, c.guildId, name);
+  if (!def) return;
+
+  const event = c.options.event;
+  if (!(SCRIPT_EVENTS as readonly string[]).includes(event)) {
+    await replyEphemeral(c.interaction, container("danger", text(`Unknown event \`${event}\`.`)));
+    return;
+  }
+  const channel = c.options.channel;
+  await c.ctx.patch(scriptId(c.guildId, def.name), ScriptDefinition, {
+    trigger: { kind: "event", event: event as ScriptEvent },
+    reportChannelId: channel?.id ?? def.reportChannelId,
+    scheduleNextRunAt: null,
+    updatedAt: new Date(),
+  });
+  const where = channel ? `, reporting in <#${channel.id}>` : "";
+  await replyEphemeral(
+    c.interaction,
+    container("ok", text(`\`${def.name}\` now runs on \`${event}\`${where}.`)),
+  );
+}
+
 async function handleManual(c: Extract<ScriptCtx, { subcommand: "manual" }>): Promise<void> {
   const name = parseScriptName(c.options.name);
   const def = await loadStoredForConfig(c.interaction, c.ctx, c.guildId, name);
@@ -323,4 +358,5 @@ export default data
   .handle("list", handleList)
   .handle("delete", handleDelete)
   .handle("schedule", handleSchedule)
+  .handle("on", handleOn)
   .handle("manual", handleManual);
