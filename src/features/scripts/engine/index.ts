@@ -12,14 +12,15 @@
  * engine: TS source -> { value, operations } -> applied against the guild.
  */
 
-export type {
-  Capability,
-  ChannelSnapshot,
-  MemberSnapshot,
-  MemberView,
-  RoleSnapshot,
-  ScriptApi,
-  ScriptSnapshot,
+export {
+  buildContext,
+  type Capability,
+  type ChannelSnapshot,
+  type MemberSnapshot,
+  type MemberView,
+  type RoleSnapshot,
+  type ScriptApi,
+  type ScriptSnapshot,
 } from "./api";
 export {
   type ApplyOptions,

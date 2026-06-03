@@ -10,10 +10,12 @@ import type { Guild } from "discord.js";
 import {
   type ApplyReport,
   applyOperations,
+  buildContext,
   type Capability,
   execute,
   type Operation,
 } from "./engine";
+import type { StaticScript } from "./library/define";
 import { buildSnapshot, type SnapshotContext } from "./snapshot";
 
 export interface RunOptions extends SnapshotContext {
@@ -45,6 +47,35 @@ export async function runSource(
     maxOperations: options.maxOperations,
   });
 
+  const report = await applyOperations(guild, operations, { dryRun: options.dryRun });
+  return { value, operations, report };
+}
+
+/**
+ * Runs a trusted in-source script. Same snapshot/operation/apply path as
+ * `runSource`, but the script function runs in-process — no worker, no
+ * transpile — since library code is compiled with the bot.
+ */
+export async function runStatic(
+  guild: Guild,
+  script: StaticScript,
+  options: RunOptions = {},
+): Promise<RunResult> {
+  const snapshot = await buildSnapshot(guild, {
+    channel: options.channel,
+    invoker: options.invoker,
+  });
+
+  const maxOperations = options.maxOperations ?? 1000;
+  const operations: Operation[] = [];
+  const ctx = buildContext(snapshot, new Set(script.capabilities), (op) => {
+    if (operations.length >= maxOperations) {
+      throw new Error(`Operation budget exceeded (max ${maxOperations})`);
+    }
+    operations.push(op);
+  });
+
+  const value = await script.run(ctx);
   const report = await applyOperations(guild, operations, { dryRun: options.dryRun });
   return { value, operations, report };
 }

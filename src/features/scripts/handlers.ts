@@ -9,7 +9,8 @@ import { Handle } from "@/framework";
 import type { BoundComponentHandler, Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { parseCapabilities } from "./model";
-import { executeStoredScript } from "./run";
+import { resolveRunnable } from "./resolve";
+import { executeRunnable } from "./run";
 
 function isManageGuild(interaction: {
   memberPermissions: ButtonInteraction["memberPermissions"];
@@ -118,8 +119,8 @@ export default class ScriptHandlers {
     const guild = interaction.guild;
     if (!guild) return;
 
-    const def = await ctx.get(scriptId(guild.id, name), ScriptDefinition);
-    if (!def) {
+    const runnable = await resolveRunnable(ctx, guild.id, name);
+    if (!runnable) {
       await interaction.update(
         v2Message(container("danger", text(`No script named \`${name}\`.`))),
       );
@@ -127,7 +128,7 @@ export default class ScriptHandlers {
     }
 
     await interaction.deferUpdate();
-    const presented = await executeStoredScript(guild, def, {
+    const presented = await executeRunnable(guild, runnable, {
       dryRun: false,
       invoker: { id: interaction.user.id, tag: interaction.user.tag },
       channel: interaction.channelId ? { id: interaction.channelId, name: "channel" } : null,

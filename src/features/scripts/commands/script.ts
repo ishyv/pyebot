@@ -16,8 +16,10 @@ import {
 } from "@/components/script-definition";
 import { command, type RunContext } from "@/framework";
 import { type ContainerChild, container, separator, text, type V2Top, v2Message } from "@/ui/v2";
+import { LIBRARY_SCRIPTS } from "../library";
 import { parseScriptName } from "../model";
-import { executeStoredScript } from "../run";
+import { resolveRunnable } from "../resolve";
+import { executeRunnable } from "../run";
 
 const data = command("script")
   .description("Author and run server scripts")
@@ -134,6 +136,13 @@ async function handleCreate(c: Extract<ScriptCtx, { subcommand: "create" }>): Pr
     );
     return;
   }
+  if (LIBRARY_SCRIPTS.has(name)) {
+    await replyEphemeral(
+      c.interaction,
+      container("mute", text(`\`${name}\` is a built-in script and can't be overridden.`)),
+    );
+    return;
+  }
   const existing = await c.ctx.get(scriptId(c.guildId, name), ScriptDefinition);
   if (existing) {
     await replyEphemeral(
@@ -154,6 +163,13 @@ async function handleEdit(c: Extract<ScriptCtx, { subcommand: "edit" }>): Promis
     await replyEphemeral(c.interaction, container("danger", text("Invalid script name.")));
     return;
   }
+  if (LIBRARY_SCRIPTS.has(name)) {
+    await replyEphemeral(
+      c.interaction,
+      container("mute", text(`\`${name}\` is a built-in script and can't be edited.`)),
+    );
+    return;
+  }
   const def = await c.ctx.get(scriptId(c.guildId, name), ScriptDefinition);
   if (!def) {
     await replyEphemeral(c.interaction, container("mute", text(`No script named \`${name}\`.`)));
@@ -166,11 +182,13 @@ async function handleRun(c: Extract<ScriptCtx, { subcommand: "run" }>) {
   await c.ctx.respond.defer({ visibility: "ephemeral" });
   const name = parseScriptName(c.options.name);
   if (!name) return c.fail("Invalid script name.");
-  const def = await c.ctx.get(scriptId(c.guildId, name), ScriptDefinition);
-  if (!def) return c.fail(`No script named \`${name}\`.`);
-  if (!def.enabled) return c.warn(`Script \`${name}\` is disabled.`);
+  const runnable = await resolveRunnable(c.ctx, c.guildId, name);
+  if (!runnable) return c.fail(`No script named \`${name}\`.`);
+  if (runnable.kind === "stored" && !runnable.def.enabled) {
+    return c.warn(`Script \`${name}\` is disabled.`);
+  }
 
-  const presented = await executeStoredScript(c.guild, def, {
+  const presented = await executeRunnable(c.guild, runnable, {
     dryRun: true,
     invoker: { id: c.userId, tag: c.user.tag },
     channel: c.interaction.channelId ? { id: c.interaction.channelId, name: "channel" } : null,
@@ -182,10 +200,15 @@ async function handleRun(c: Extract<ScriptCtx, { subcommand: "run" }>) {
 async function handleList(c: Extract<ScriptCtx, { subcommand: "list" }>) {
   await c.ctx.respond.defer({ visibility: "ephemeral" });
   const defs = await c.ctx.query(ScriptDefinition, { filter: { guildId: c.guildId } });
-  if (defs.length === 0) {
+  if (defs.length === 0 && LIBRARY_SCRIPTS.size === 0) {
     return c.info("No scripts yet. Use `/script create` to author one.");
   }
   const children: ContainerChild[] = [text("## Scripts")];
+  for (const builtin of LIBRARY_SCRIPTS.values()) {
+    const caps = builtin.capabilities.length > 0 ? builtin.capabilities.join(", ") : "read-only";
+    children.push(separator("sm"));
+    children.push(text(`**${builtin.name}** — built-in · ${caps}\n-# ${builtin.description}`));
+  }
   for (const def of defs.slice(0, 15)) {
     const caps = def.capabilities.length > 0 ? def.capabilities.join(", ") : "read-only";
     const state = def.enabled ? "" : " · disabled";
@@ -201,6 +224,13 @@ async function handleDelete(c: Extract<ScriptCtx, { subcommand: "delete" }>): Pr
   const name = parseScriptName(c.options.name);
   if (!name) {
     await replyEphemeral(c.interaction, container("danger", text("Invalid script name.")));
+    return;
+  }
+  if (LIBRARY_SCRIPTS.has(name)) {
+    await replyEphemeral(
+      c.interaction,
+      container("mute", text(`\`${name}\` is a built-in script and can't be deleted.`)),
+    );
     return;
   }
   const def = await c.ctx.get(scriptId(c.guildId, name), ScriptDefinition);

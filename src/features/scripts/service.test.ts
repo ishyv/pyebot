@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Collection, type Guild } from "discord.js";
-import { runSource } from "./service";
+import memberCount from "./library/member-count";
+import { runSource, runStatic } from "./service";
 
 /** Guild that serves two members and records any mutating call made on it. */
 function fakeGuild(recorded: string[]): Guild {
@@ -73,5 +74,13 @@ describe("runSource", () => {
     expect(result.report.dryRun).toBe(true);
     expect(result.report.applied).toBe(1);
     expect(recorded.filter((c) => c.startsWith("add:"))).toEqual([]);
+  });
+});
+
+describe("runStatic", () => {
+  it("runs a built-in script in-process against the snapshot", async () => {
+    const result = await runStatic(fakeGuild([]), memberCount);
+    expect(result.value).toEqual({ total: 2, humans: 2, bots: 0 });
+    expect(result.operations).toEqual([]);
   });
 });

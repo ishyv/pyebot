@@ -9,8 +9,18 @@ import type { ContainerBuilder, Guild } from "discord.js";
 import type { ScriptDefinitionValue } from "@/components/script-definition";
 import { container, text } from "@/ui/v2";
 import type { Operation } from "./engine";
-import { runSource } from "./service";
+import type { StaticScript } from "./library/define";
+import { type RunResult, runSource, runStatic } from "./service";
 import type { SnapshotContext } from "./snapshot";
+
+/** A script ready to run: either guild-authored (stored) or a built-in. */
+export type Runnable =
+  | { readonly kind: "stored"; readonly def: ScriptDefinitionValue }
+  | { readonly kind: "library"; readonly script: StaticScript };
+
+export function runnableName(runnable: Runnable): string {
+  return runnable.kind === "stored" ? runnable.def.name : runnable.script.name;
+}
 
 export interface PresentedRun {
   readonly container: ContainerBuilder;
@@ -27,22 +37,32 @@ function summarizeKinds(operations: readonly Operation[]): string {
   return [...counts].map(([kind, n]) => `${n}× ${kind}`).join(", ");
 }
 
-export async function executeStoredScript(
+export async function executeRunnable(
   guild: Guild,
-  def: ScriptDefinitionValue,
+  runnable: Runnable,
   options: { dryRun: boolean } & SnapshotContext,
 ): Promise<PresentedRun> {
-  let result: Awaited<ReturnType<typeof runSource>>;
+  const name = runnableName(runnable);
+  const run = (): Promise<RunResult> =>
+    runnable.kind === "stored"
+      ? runSource(guild, runnable.def.source, runnable.def.capabilities, {
+          dryRun: options.dryRun,
+          invoker: options.invoker,
+          channel: options.channel,
+        })
+      : runStatic(guild, runnable.script, {
+          dryRun: options.dryRun,
+          invoker: options.invoker,
+          channel: options.channel,
+        });
+
+  let result: RunResult;
   try {
-    result = await runSource(guild, def.source, def.capabilities, {
-      dryRun: options.dryRun,
-      invoker: options.invoker,
-      channel: options.channel,
-    });
+    result = await run();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
-      container: container("danger", text(`## \`${def.name}\` failed\n${truncate(message, 500)}`)),
+      container: container("danger", text(`## \`${name}\` failed\n${truncate(message, 500)}`)),
       operationCount: 0,
     };
   }
@@ -70,7 +90,7 @@ export async function executeStoredScript(
 
   const accent = result.report.failed > 0 ? "warn" : "ok";
   return {
-    container: container(accent, text(`## \`${def.name}\`\n${lines.join("\n")}`)),
+    container: container(accent, text(`## \`${name}\`\n${lines.join("\n")}`)),
     operationCount: result.operations.length,
   };
 }
