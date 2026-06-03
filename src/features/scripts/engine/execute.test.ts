@@ -132,4 +132,19 @@ describe("execute", () => {
     const result = await execute('input.text("role", "Role to check"); return 42;', snapshot(), []);
     expect(result.value).toBe(42);
   });
+
+  it("fail_input — throws a marked error surfaced through the worker", async () => {
+    await expect(execute('fail_input("nope, try again");', snapshot(), [])).rejects.toThrow(
+      "nope, try again",
+    );
+  });
+
+  it("entity inputs arrive as ids resolvable via find_role", async () => {
+    const result = await execute(
+      "return ctx.find_role(ctx.input.role)?.name;",
+      snapshot({ input: { role: "r-vet" } }),
+      [],
+    );
+    expect(result.value).toBe("Veteran");
+  });
 });

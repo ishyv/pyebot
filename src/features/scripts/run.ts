@@ -9,7 +9,7 @@ import type { ContainerBuilder, Guild } from "discord.js";
 import type { ScriptDefinitionValue } from "@/components/script-definition";
 import { type ContainerChild, container, separator, text } from "@/ui/v2";
 import type { InputField, Operation, OutputAccent, OutputItem, OutputToken } from "./engine";
-import { isOutputArray, isOutputToken, scanInputs } from "./engine";
+import { asInputError, isOutputArray, isOutputToken, scanInputs } from "./engine";
 import type { StaticScript } from "./library/define";
 import { type RunResult, runSource, runStatic } from "./service";
 import type { SnapshotContext } from "./snapshot";
@@ -26,6 +26,10 @@ export function runnableName(runnable: Runnable): string {
 export interface PresentedRun {
   readonly container: ContainerBuilder;
   readonly operationCount: number;
+  /** Set when the run threw. The collector uses this to re-render with a retry. */
+  readonly error?: string;
+  /** True when the error came from `fail_input` (a soft, retryable rejection). */
+  readonly inputError?: boolean;
 }
 
 let _transpiler: Bun.Transpiler | null = null;
@@ -201,10 +205,17 @@ export async function executeRunnable(
   try {
     result = await run();
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const softMessage = asInputError(rawMessage);
+    const message = softMessage ?? rawMessage;
     return {
-      container: container("danger", text(`## \`${name}\` failed\n${truncate(message, 500)}`)),
+      container: container(
+        softMessage ? "warn" : "danger",
+        text(`## \`${name}\`${softMessage ? "" : " failed"}\n${truncate(message, 500)}`),
+      ),
       operationCount: 0,
+      error: message,
+      inputError: softMessage !== null,
     };
   }
 

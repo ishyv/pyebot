@@ -1,41 +1,38 @@
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
   type ButtonInteraction,
-  ButtonStyle,
+  type ChannelSelectMenuInteraction,
   type Client,
   Events,
   type GuildMember,
   MessageFlags,
   type ModalSubmitInteraction,
   PermissionFlagsBits,
+  type RoleSelectMenuInteraction,
+  type UserSelectMenuInteraction,
 } from "discord.js";
 import { SCRIPT_CAPABILITIES, ScriptDefinition, scriptId } from "@/components/script-definition";
 import { sessions } from "@/core/state";
 import { Handle, Listen } from "@/framework";
 import type { BoundComponentHandler, Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
+import { validateInputValues } from "./engine";
+import {
+  applyRow,
+  buildInputModal,
+  renderCollector,
+  type ScriptInputSession,
+  sessionKey,
+} from "./input-collector";
 import { parseCapabilities } from "./model";
 import { resolveRunnable } from "./resolve";
-import { executeRunnable, type Runnable } from "./run";
+import { executeRunnable } from "./run";
 import { runEventScripts } from "./triggers/events";
 import { runScheduleSweep } from "./triggers/schedule";
 
-interface ScriptInputSession {
-  readonly runnable: Runnable;
-  readonly input?: Record<string, string>;
-}
-
-function sessionKey(userId: string, guildId: string, name: string): string {
-  return `scr:${userId}:${guildId}:${name}`;
-}
-
-function inputSessionKey(
-  interaction: { user: { id: string }; guildId: string | null },
-  name: string,
-): string {
-  return sessionKey(interaction.user.id, interaction.guildId ?? "", name);
-}
+type EntitySelectInteraction =
+  | RoleSelectMenuInteraction
+  | UserSelectMenuInteraction
+  | ChannelSelectMenuInteraction;
 
 const SCHEDULE_SWEEP_INTERVAL_MS = 60_000;
 
@@ -54,10 +51,20 @@ async function replyEphemeral(
   await interaction.reply({ ...payload, flags: payload.flags | MessageFlags.Ephemeral });
 }
 
+function getSession(
+  interaction: { user: { id: string }; guildId: string | null },
+  name: string,
+): ScriptInputSession | undefined {
+  return sessions.get(sessionKey(interaction.user.id, interaction.guildId ?? "", name)) as
+    | ScriptInputSession
+    | undefined;
+}
+
 /**
- * Routes `scr:` component interactions: the script editor modal and the
- * confirm/cancel buttons. Mutating buttons re-check ManageGuild because a button
- * press is a fresh interaction that does not pass through the command's gate.
+ * Routes `scr:` component interactions: the script editor modal, the input
+ * collector (select menus + modal + Run), and the confirm/cancel/delete buttons.
+ * Mutating buttons re-check ManageGuild because a button press is a fresh
+ * interaction that does not pass through the command's gate.
  */
 export default class ScriptHandlers {
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
@@ -84,24 +91,43 @@ export default class ScriptHandlers {
 
   @Handle("scr:")
   async onInteraction(interaction: Parameters<BoundComponentHandler>[0], ctx: Ctx): Promise<void> {
+    const id = interaction.customId;
+
     if (interaction.isModalSubmit()) {
-      const id = interaction.customId;
       if (id.startsWith("scr:inp:")) {
-        await this.onInputSubmit(interaction, ctx, id.slice("scr:inp:".length));
+        await this.onInputSubmit(interaction, id.slice("scr:inp:".length));
       } else {
         await this.onModalSubmit(interaction, ctx);
       }
       return;
     }
+
+    if (
+      (interaction.isRoleSelectMenu() ||
+        interaction.isUserSelectMenu() ||
+        interaction.isChannelSelectMenu()) &&
+      id.startsWith("scr:sel:")
+    ) {
+      await this.onInputSelect(interaction, id.slice("scr:sel:".length));
+      return;
+    }
+
     if (!interaction.isButton()) return;
 
-    const id = interaction.customId;
     if (id === "scr:cancel") {
       await interaction.update(v2Message(container("mute", text("Cancelled."))));
       return;
     }
+    if (id.startsWith("scr:txt:")) {
+      await this.onTextFields(interaction, id.slice("scr:txt:".length));
+      return;
+    }
+    if (id.startsWith("scr:go:")) {
+      await this.onCollectorRun(interaction, id.slice("scr:go:".length));
+      return;
+    }
     if (id.startsWith("scr:apply:")) {
-      await this.onConfirmApply(interaction, ctx, id.slice("scr:apply:".length));
+      await this.onConfirmApply(interaction, id.slice("scr:apply:".length));
       return;
     }
     if (id.startsWith("scr:run:")) {
@@ -168,6 +194,159 @@ export default class ScriptHandlers {
     );
   }
 
+  // ─── Input collector ────────────────────────────────────────────────────────
+
+  /** An entity select changed — store its value and re-render the collector. */
+  private async onInputSelect(interaction: EntitySelectInteraction, rest: string): Promise<void> {
+    const colon = rest.indexOf(":");
+    const name = rest.slice(0, colon);
+    const inputName = rest.slice(colon + 1);
+
+    const session = getSession(interaction, name);
+    if (!session) {
+      await interaction.update(
+        v2Message(container("danger", text("This form expired. Use `/script run` again."))),
+      );
+      return;
+    }
+
+    session.values[inputName] = interaction.values[0] ?? "";
+    sessions.set(sessionKey(interaction.user.id, interaction.guildId ?? "", name), session);
+    await interaction.update(renderCollector(name, session.fields, session.values));
+  }
+
+  /** "Fill text fields" — open the text/number modal prefilled with current values. */
+  private async onTextFields(interaction: ButtonInteraction, name: string): Promise<void> {
+    const session = getSession(interaction, name);
+    if (!session) {
+      await interaction.update(
+        v2Message(container("danger", text("This form expired. Use `/script run` again."))),
+      );
+      return;
+    }
+    await interaction.showModal(buildInputModal(name, session.fields, session.values));
+  }
+
+  /** Text/number modal submitted — store values, flag bad numbers, re-render collector. */
+  private async onInputSubmit(interaction: ModalSubmitInteraction, name: string): Promise<void> {
+    if (!interaction.isFromMessage()) return;
+    const session = getSession(interaction, name);
+    if (!session) {
+      await interaction.update(
+        v2Message(container("danger", text("This form expired. Use `/script run` again."))),
+      );
+      return;
+    }
+
+    for (const [customId] of interaction.fields.fields) {
+      session.values[customId] = interaction.fields.getTextInputValue(customId).trim();
+    }
+
+    let badNumber: string | undefined;
+    for (const f of session.fields) {
+      if (f.type === "number") {
+        const v = session.values[f.name];
+        if (v && Number.isNaN(Number(v))) {
+          badNumber = `**${f.label}** must be a number.`;
+          break;
+        }
+      }
+    }
+
+    sessions.set(sessionKey(interaction.user.id, interaction.guildId ?? "", name), session);
+    await interaction.update(
+      renderCollector(
+        name,
+        session.fields,
+        session.values,
+        badNumber ? { message: badNumber, soft: true } : undefined,
+      ),
+    );
+  }
+
+  /** "Run" — validate, dry-run with the collected inputs, then show the result. */
+  private async onCollectorRun(interaction: ButtonInteraction, name: string): Promise<void> {
+    if (!isManageGuild(interaction)) {
+      await replyEphemeral(interaction, "danger", "You need Manage Server to run scripts.");
+      return;
+    }
+    const guild = interaction.guild;
+    if (!guild) return;
+
+    const session = getSession(interaction, name);
+    if (!session) {
+      await interaction.update(
+        v2Message(container("danger", text("This form expired. Use `/script run` again."))),
+      );
+      return;
+    }
+
+    const validationError = validateInputValues(session.fields, session.values);
+    if (validationError) {
+      await interaction.update(
+        renderCollector(name, session.fields, session.values, {
+          message: validationError,
+          soft: true,
+        }),
+      );
+      return;
+    }
+
+    await interaction.deferUpdate();
+    const presented = await executeRunnable(guild, session.runnable, {
+      dryRun: true,
+      invoker: { id: interaction.user.id, tag: interaction.user.tag },
+      channel: interaction.channelId ? { id: interaction.channelId, name: "channel" } : null,
+      input: session.values,
+    });
+
+    if (presented.error) {
+      await interaction.editReply(
+        renderCollector(name, session.fields, session.values, {
+          message: presented.error,
+          soft: presented.inputError ?? false,
+        }),
+      );
+      return;
+    }
+
+    if (presented.operationCount === 0) {
+      await interaction.editReply(v2Message(presented.container));
+    } else {
+      await interaction.editReply(v2Message(presented.container, applyRow(name)));
+    }
+  }
+
+  /** Apply button after a collector dry-run — run for real with the stored inputs. */
+  private async onConfirmApply(interaction: ButtonInteraction, name: string): Promise<void> {
+    if (!isManageGuild(interaction)) {
+      await replyEphemeral(interaction, "danger", "You need Manage Server to run scripts.");
+      return;
+    }
+    const guild = interaction.guild;
+    if (!guild) return;
+
+    const session = getSession(interaction, name);
+    if (!session) {
+      await interaction.update(
+        v2Message(container("danger", text("Session expired. Use `/script run` again."))),
+      );
+      return;
+    }
+
+    await interaction.deferUpdate();
+    const presented = await executeRunnable(guild, session.runnable, {
+      dryRun: false,
+      invoker: { id: interaction.user.id, tag: interaction.user.tag },
+      channel: interaction.channelId ? { id: interaction.channelId, name: "channel" } : null,
+      input: session.values,
+    });
+    sessions.delete(sessionKey(interaction.user.id, interaction.guildId ?? "", name));
+    await interaction.editReply(v2Message(presented.container));
+  }
+
+  // ─── No-input confirm/delete (unchanged) ─────────────────────────────────────
+
   private async onConfirmRun(
     interaction: ButtonInteraction,
     ctx: Ctx,
@@ -211,101 +390,5 @@ export default class ScriptHandlers {
 
     await ctx.delete(scriptId(guildId, name), ScriptDefinition);
     await interaction.update(v2Message(container("ok", text(`Deleted \`${name}\`.`))));
-  }
-
-  /**
-   * Handles submission of the input form modal (`scr:inp:{name}`).
-   * Retrieves the stored runnable, populates ctx.input, dry-runs, and shows
-   * the result — with an Apply button if there are operations.
-   */
-  private async onInputSubmit(
-    interaction: ModalSubmitInteraction,
-    _ctx: Ctx,
-    name: string,
-  ): Promise<void> {
-    const guildId = interaction.guildId;
-    if (!guildId) return;
-
-    const key = inputSessionKey(interaction, name);
-    const session = sessions.get(key) as ScriptInputSession | undefined;
-    if (!session) {
-      await interaction.reply({
-        ...v2Message(container("danger", text("Input form expired. Use `/script run` again."))),
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    // Collect input values from modal fields (keyed by their customId = input name)
-    const collected: Record<string, string> = {};
-    for (const [customId] of interaction.fields.fields) {
-      collected[customId] = interaction.fields.getTextInputValue(customId).trim();
-    }
-
-    // Store with collected inputs for the Apply button
-    sessions.set(key, { ...session, input: collected });
-
-    const guild = interaction.guild;
-    if (!guild) return;
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const presented = await executeRunnable(guild, session.runnable, {
-      dryRun: true,
-      invoker: { id: interaction.user.id, tag: interaction.user.tag },
-      channel: interaction.channelId ? { id: interaction.channelId, name: "channel" } : null,
-      input: collected,
-    });
-
-    if (presented.operationCount === 0) {
-      await interaction.editReply(v2Message(presented.container));
-    } else {
-      const applyBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`scr:apply:${name}`)
-          .setLabel("Apply")
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId("scr:cancel")
-          .setLabel("Cancel")
-          .setStyle(ButtonStyle.Secondary),
-      );
-      await interaction.editReply(v2Message(presented.container, applyBtn));
-    }
-  }
-
-  /**
-   * Handles the Apply button for scripts that collected inputs (`scr:apply:{name}`).
-   * Retrieves the stored inputs from the session and runs the script for real.
-   */
-  private async onConfirmApply(
-    interaction: ButtonInteraction,
-    _ctx: Ctx,
-    name: string,
-  ): Promise<void> {
-    if (!isManageGuild(interaction)) {
-      await replyEphemeral(interaction, "danger", "You need Manage Server to run scripts.");
-      return;
-    }
-    const guild = interaction.guild;
-    if (!guild) return;
-
-    const key = inputSessionKey(interaction, name);
-    const session = sessions.get(key) as ScriptInputSession | undefined;
-    if (!session) {
-      await interaction.update(
-        v2Message(container("danger", text("Session expired. Use `/script run` again."))),
-      );
-      return;
-    }
-
-    await interaction.deferUpdate();
-    const presented = await executeRunnable(guild, session.runnable, {
-      dryRun: false,
-      invoker: { id: interaction.user.id, tag: interaction.user.tag },
-      channel: interaction.channelId ? { id: interaction.channelId, name: "channel" } : null,
-      input: session.input ?? {},
-    });
-    sessions.delete(key);
-    await interaction.editReply(v2Message(presented.container));
   }
 }

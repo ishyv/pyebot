@@ -26,7 +26,16 @@ export {
   type OperationResult,
 } from "./apply";
 export { type ExecuteOptions, type ExecutionResult, execute } from "./execute";
-export { type InputField, type InputFieldOpts, input, scanInputs } from "./input";
+export {
+  asInputError,
+  fail_input,
+  type InputField,
+  type InputFieldOpts,
+  type InputType,
+  input,
+  scanInputs,
+  validateInputValues,
+} from "./input";
 export { type Operation, OperationSchema, OperationsSchema } from "./operations";
 export {
   color,

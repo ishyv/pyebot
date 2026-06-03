@@ -8,7 +8,7 @@
  * kill-switch and validates everything that comes back.
  */
 import { buildContext, type WorkerRequest, type WorkerResponse } from "./api";
-import { input } from "./input";
+import { fail_input, input } from "./input";
 import type { Operation } from "./operations";
 import { color, display, field, footer, sep, title } from "./output";
 
@@ -26,9 +26,10 @@ const OUTPUT_HELPERS = { title, color, sep, footer, display, field };
 // library-script authors who might import both. `display(...)` is unambiguous.
 
 // `input` is a no-op at runtime — declarations were already collected by scanInputs
-// on the main thread. Injected so `input.text(...)` calls don't throw.
-const INPUT_HELPERS = { input };
-const PREAMBLE = `const { title, color, sep, footer, display, field } = _out;\nconst { input } = _inp;`;
+// on the main thread. `fail_input` throws so a script can reject inputs and trigger
+// the collector's retry. Both injected as bare names.
+const INPUT_HELPERS = { input, fail_input };
+const PREAMBLE = `const { title, color, sep, footer, display, field } = _out;\nconst { input, fail_input } = _inp;`;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

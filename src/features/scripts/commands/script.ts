@@ -19,7 +19,7 @@ import {
 import { sessions } from "@/core/state";
 import { command, type RunContext } from "@/framework";
 import { type ContainerChild, container, separator, text, type V2Top, v2Message } from "@/ui/v2";
-import type { InputField } from "../engine";
+import { renderCollector, sessionKey } from "../input-collector";
 import { LIBRARY_SCRIPTS } from "../library";
 import { describeTrigger, parseScriptName } from "../model";
 import { resolveRunnable } from "../resolve";
@@ -201,26 +201,7 @@ async function handleEdit(c: Extract<ScriptCtx, { subcommand: "edit" }>): Promis
   await c.interaction.showModal(buildScriptModal(name, def));
 }
 
-function buildInputModal(name: string, fields: InputField[]): ModalBuilder {
-  const modal = new ModalBuilder()
-    .setCustomId(`scr:inp:${name}`)
-    .setTitle(`${name} — inputs`.slice(0, 45));
-  for (const f of fields.slice(0, 5)) {
-    const input = new TextInputBuilder()
-      .setCustomId(f.name)
-      .setLabel(f.label.slice(0, 45))
-      .setStyle(TextInputStyle.Short)
-      .setRequired(f.required)
-      .setMaxLength(200);
-    if (f.placeholder) input.setPlaceholder(f.placeholder);
-    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
-  }
-  return modal;
-}
-
 async function handleRun(c: Extract<ScriptCtx, { subcommand: "run" }>) {
-  // Don't defer yet — if the script has inputs we need to showModal first,
-  // and Discord does not allow showModal after a defer/reply.
   const name = parseScriptName(c.options.name);
   if (!name) {
     await replyEphemeral(c.interaction, container("danger", text("Invalid script name.")));
@@ -236,15 +217,19 @@ async function handleRun(c: Extract<ScriptCtx, { subcommand: "run" }>) {
     return;
   }
 
-  // Check for declared inputs; if found, show the form and return.
+  // Declared inputs → show the collector (ephemeral message) and gather values there.
   const inputFields = scanInputsFromRunnable(runnable);
   if (inputFields.length > 0) {
-    sessions.set(`scr:${c.userId}:${c.guildId}:${name}`, { runnable });
-    await c.interaction.showModal(buildInputModal(name, inputFields));
-    return;
+    sessions.set(sessionKey(c.userId, c.guildId, name), {
+      runnable,
+      fields: inputFields,
+      values: {},
+    });
+    await c.ctx.respond.defer({ visibility: "ephemeral" });
+    return renderCollector(name, inputFields, {});
   }
 
-  // No inputs — safe to defer and run immediately.
+  // No inputs — defer and run immediately.
   await c.ctx.respond.defer({ visibility: "ephemeral" });
   const presented = await executeRunnable(c.guild, runnable, {
     dryRun: true,
@@ -414,9 +399,14 @@ function handleHelp(_c: Extract<ScriptCtx, { subcommand: "help" }>) {
     '`color("ok"|"warn"|"danger"|"info"|"mute")` — set the result\'s accent color',
     "-# Arrays return as bullet lists; objects return as key-value pairs automatically.",
 
-    "\n### Inputs",
-    '`input.text("name", "Label")` — declares a required input shown in a form before running',
-    "-# Access collected values via `ctx.input.name`. Declare up to 5 inputs per script.",
+    "\n### Inputs (shown in a form before the script runs)",
+    '`input.text("name", "Label")` — single-line text',
+    '`input.number("name", "Label")` — validated number',
+    '`input.role("name", "Label")` — native role picker',
+    '`input.member("name", "Label")` — native member picker',
+    '`input.channel("name", "Label")` — native channel picker',
+    "-# Values arrive as strings in `ctx.input.name`. Role/member/channel give an id — resolve with `ctx.find_role`/`find_member`. Up to 4 picker inputs.",
+    '`fail_input("message")` — reject the inputs and re-open the form with your message',
 
     "\n### Capabilities (comma-separated in the Capabilities field)",
     "`roles` → `ctx.addRole(member, roleName)`, `ctx.removeRole(member, roleName)`",
@@ -441,11 +431,11 @@ function handleHelp(_c: Extract<ScriptCtx, { subcommand: "help" }>) {
     '`return [title("Tagged"), footer(`${n.length} members`)];`',
     "",
     "**Count members with a specific role (uses inputs)**",
-    '`input.text("role", "Role name or @mention");`',
+    '`input.role("role", "Pick the role to count");`',
     "`const role = ctx.find_role(ctx.input.role);`",
-    '`if (!role) return [title("Not found"), color("danger")];`',
+    '`if (!role) fail_input("That role no longer exists — pick another.");`',
     // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — this is example code shown to users
-    "`return [title(`Members with ${role.name}`), { count: ctx.members_with_role(role.name).length }];`",
+    "`return [title(`Members with ${role.name}`), { count: ctx.members_with_role(role.id).length }];`",
   ].join("\n");
 
   return v2Message(container("info", text(HELP_TEXT), separator("sm"), text(EXAMPLES_TEXT)));
