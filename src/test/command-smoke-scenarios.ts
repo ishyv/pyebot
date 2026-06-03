@@ -48,6 +48,7 @@ export const commandSmokeScenarios: Readonly<Record<string, CommandScenario>> = 
   work: ctxNoGuild("work"),
 
   embed: ctxNoGuild("embed"),
+  script: ctxNoGuild("script"),
   ban: ctxNoGuild("ban"),
   case: ctxNoGuild("case", "view"),
   cases: ctxNoGuild("cases"),
