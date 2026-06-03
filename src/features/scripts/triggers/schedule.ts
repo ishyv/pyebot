@@ -6,6 +6,7 @@ import type { Client } from "discord.js";
 import { ScriptDefinition } from "@/components/script-definition";
 import { createLogger } from "@/core/logger";
 import type { Ctx } from "@/framework/types";
+import { saveExistingScript } from "../persistence";
 import { dispatchScript } from "./dispatch";
 
 const log = createLogger("scripts:schedule");
@@ -25,7 +26,7 @@ export async function runScheduleSweep(client: Client, ctx: Ctx): Promise<void> 
       log.warn(`Scheduled script ${def._id} failed`, err);
     }
     const intervalHours = def.trigger.kind === "schedule" ? def.trigger.intervalHours : 24;
-    await ctx.patch(def._id, ScriptDefinition, {
+    await saveExistingScript(ctx, def._id, def, {
       scheduleNextRunAt: new Date(Date.now() + intervalHours * HOUR_MS),
     });
   }

@@ -25,6 +25,15 @@ describe("automod admin panel", () => {
             timeoutSeconds: 300,
           },
         ],
+        textRules: [
+          {
+            id: "badword",
+            enabled: true,
+            phrase: "badword",
+            action: "timeout",
+            timeoutSeconds: 900,
+          },
+        ],
       },
     });
     const session = new PanelSessionRegistry().create("user-1", "guild-1", "automod");
@@ -35,6 +44,9 @@ describe("automod admin panel", () => {
 
     expect(rendered).toContain("Link spam");
     expect(rendered).toContain("Tiered policy");
+    expect(rendered).toContain("Text rules");
+    expect(rendered).toContain("badword");
+    expect(rendered).toContain("Advanced regex patterns");
     expect(rendered).toContain("30d rolling");
     expect(rendered).toContain("2 links / 5s");
     expect(rendered).toContain("<#reports-1>");

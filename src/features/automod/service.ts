@@ -27,6 +27,7 @@ import { extractHostname, extractLinks } from "./links";
 import { type AutomodPolicyDecision, evaluateAutomodPolicy } from "./policy";
 import { type AutomodProfile, updateAutomodProfile } from "./profile";
 import type { AutomodSignal } from "./signals";
+import { findTextRuleMatch } from "./textRules";
 
 const log = createLogger("automod");
 
@@ -213,7 +214,32 @@ export function detectMessageContentSignals(
     }
   }
 
-  // 4. Custom guild patterns
+  // 4. Plain text rules managed by moderators
+  const textRuleMatch = findTextRuleMatch(content, config.textRules ?? []);
+  if (textRuleMatch) {
+    const { rule, matchedText } = textRuleMatch;
+    const reason = `Text rule match: ${rule.id}`;
+    signals.push({
+      detectorId: "textRule",
+      ruleId: rule.id,
+      confidence: rule.action === "report" ? 0.72 : 0.9,
+      severity: rule.action === "timeout" ? "critical" : "high",
+      punishmentEligible: rule.action !== "report",
+      recommendedAction: rule.action,
+      target: baseTarget,
+      evidence: {
+        summary: reason,
+        messageContent: content.slice(0, 500),
+        matchedText,
+        matchedRule: rule.phrases.join(", "),
+        fingerprint: rule.id,
+        metadata: { timeoutSeconds: rule.timeoutSeconds },
+      },
+      createdAt,
+    });
+  }
+
+  // 5. Custom guild regex patterns
   const customPatterns = config.customPatterns ?? [];
   if (customPatterns.length > 0) {
     const compiled = getCompiledPatterns(message.guild.id, customPatterns);
@@ -550,6 +576,9 @@ function timeoutMsForSignals(config: AutomodConfig, signals: readonly AutomodSig
     return config.crossChannelSpam.timeoutSeconds * 1000;
   if (signals.some((signal) => signal.detectorId === "linkSpam"))
     return config.linkSpam.timeoutSeconds * 1000;
+  const textRuleTimeout = signals.find((signal) => signal.detectorId === "textRule")?.evidence
+    .metadata?.timeoutSeconds;
+  if (typeof textRuleTimeout === "number") return textRuleTimeout * 1000;
   return 5 * 60 * 1000;
 }
 

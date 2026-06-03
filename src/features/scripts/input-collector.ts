@@ -139,8 +139,22 @@ export function applyRow(name: string): V2Top {
       .setLabel("Apply")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
+      .setCustomId(`scr:back:${name}`)
+      .setLabel("Back to inputs")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId("scr:cancel")
       .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary),
+  );
+}
+
+/** Control row shown after a successful input-backed run with no apply step. */
+export function backRow(name: string): V2Top {
+  return row(
+    new ButtonBuilder()
+      .setCustomId(`scr:back:${name}`)
+      .setLabel("Back to inputs")
       .setStyle(ButtonStyle.Secondary),
   );
 }

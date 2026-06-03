@@ -15,6 +15,7 @@ import { handleRaid } from "./raid";
 import { handleReportChannel } from "./reportChannel";
 import { handleSlowmode } from "./slowmode";
 import { handleStatus } from "./status";
+import { handleText } from "./text";
 import { handleWhitelist } from "./whitelist";
 
 /**
@@ -36,6 +37,7 @@ export const automodSubcommands: Record<string, AutomodSubcommandHandler> = {
   mentionspam: handleMentionSpam,
   slowmode: handleSlowmode,
   raid: handleRaid,
+  text: handleText,
   pattern: handlePattern,
   policy: handlePolicy,
   "image-add": handleImageAdd,

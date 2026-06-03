@@ -7,7 +7,8 @@
   },
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
+    "build-webapp": "cd ./webapp && bun run build",
+    "start": "bun run build-webapp && bun src/index.ts",
     "doctor": "bun scripts/doctor.ts",
     "tx": "bun scripts/cli.ts",
     "glyphs:sync": "bun scripts/glyphs-sync.ts",
@@ -16,7 +17,9 @@
     "test": "bun test",
     "fmt": "biome format --write .",
     "lint": "biome lint .",
-    "check": "biome check ."
+    "check": "biome check .",
+    "ws-install": "bun install && cd ./webapp && bun install",
+    "ws-update": "bun update && cd ./webapp && bun update"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "3.0.69",
@@ -25,6 +28,7 @@
     "@google/genai": "^1.47.0",
     "ai": "6.0.161",
     "discord.js": "^14.16.0",
+    "dotenv": "^17.4.2",
     "json5": "^2.2.3",
     "mongodb": "^6.21.0",
     "openai": "^6.33.0",

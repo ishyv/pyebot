@@ -245,10 +245,30 @@ function coverageField(cfg: GuildConfig): APIEmbedField {
   };
 }
 
+function textRulesField(cfg: GuildConfig): APIEmbedField {
+  const rules = cfg.automod.textRules;
+  return {
+    name: "Text rules",
+    value: rules.length
+      ? limitText(
+          rules
+            .slice(0, 5)
+            .map(
+              (rule) =>
+                `**${rule.id}** - ${rule.enabled ? "On" : "Off"} - ${actionLabel(rule.action)} - \`${rule.phrases.join("`, `")}\``,
+            )
+            .join("\n"),
+          900,
+        )
+      : "No plain text rules configured.",
+    inline: false,
+  };
+}
+
 function patternsField(cfg: GuildConfig): APIEmbedField {
   const patterns = cfg.automod.customPatterns;
   return {
-    name: "Custom patterns",
+    name: "Advanced regex patterns",
     value: patterns.length
       ? limitText(
           patterns
@@ -293,6 +313,7 @@ export function render(session: PanelState, cfg: GuildConfig): PanelPayload {
         policyField(cfg),
         selectedField(section, cfg),
         coverageField(cfg),
+        textRulesField(cfg),
         patternsField(cfg),
       ],
     }),

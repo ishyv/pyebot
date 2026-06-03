@@ -98,6 +98,38 @@ export const PerUserSlowSchema = z
   })
   .catch(() => defaultPerUserSlow());
 
+export const AutomodTextRuleSchema = z
+  .object({
+    id: z.string().min(1),
+    enabled: z.boolean().catch(true),
+    phrase: z.string().optional(),
+    phrases: z.array(z.string()).catch(() => []),
+    action: z.enum(["delete", "timeout", "report"]).catch("delete"),
+    timeoutSeconds: z.number().int().min(60).catch(300),
+  })
+  .transform((rule, ctx) => {
+    const phrases = [...rule.phrases, ...(rule.phrase ? [rule.phrase] : [])]
+      .map((phrase) => phrase.trim())
+      .filter(Boolean)
+      .filter((phrase, index, all) => all.indexOf(phrase) === index);
+
+    if (phrases.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Text rules require at least one phrase.",
+      });
+      return z.NEVER;
+    }
+
+    return {
+      id: rule.id,
+      enabled: rule.enabled,
+      phrases,
+      action: rule.action,
+      timeoutSeconds: rule.timeoutSeconds,
+    };
+  });
+
 export const AutomodSchema = z.object({
   linkSpam: z
     .object({
@@ -218,6 +250,7 @@ export const AutomodSchema = z.object({
       }),
     )
     .catch(() => []),
+  textRules: z.array(AutomodTextRuleSchema).catch(() => []),
   tempRolePolicies: TempRolePoliciesSchema.catch(() => ({
     recentlyJoined: defaultRecentlyJoinedPolicy(),
   })),

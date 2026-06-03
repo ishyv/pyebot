@@ -106,6 +106,7 @@ export function saveAutomodSettings(
     ...(patch.customPatterns !== undefined
       ? { "automod.customPatterns": patch.customPatterns }
       : {}),
+    ...(patch.textRules !== undefined ? { "automod.textRules": patch.textRules } : {}),
   };
   return applyGuildConfigPaths(guildId, paths);
 }

@@ -252,6 +252,13 @@ export interface AutomodSettingsPatch {
     readonly action: "delete" | "timeout" | "report";
     readonly timeoutSeconds: number;
   }[];
+  readonly textRules?: readonly {
+    readonly id: string;
+    readonly enabled: boolean;
+    readonly phrases: readonly string[];
+    readonly action: "delete" | "timeout" | "report";
+    readonly timeoutSeconds: number;
+  }[];
   readonly imageDetection?: {
     readonly enabled?: boolean;
     readonly reportChannelId?: string | null;

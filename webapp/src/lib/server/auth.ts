@@ -49,6 +49,9 @@ const REQUIRED_KEYS = [
   "SESSION_SECRET",
 ] as const;
 
+const DISCORD_SNOWFLAKE = /^\d{17,20}$/;
+const DISCORD_TOKEN_SHAPED = /^[^.]+\.[^.]+\.[^.]+$/;
+
 export function hasGuildManagementPermission(guild: {
   permissions?: string | bigint;
   owner?: boolean;
@@ -70,6 +73,14 @@ export function requireEnv(
   const missing = REQUIRED_KEYS.filter((key) => !source[key]);
   if (missing.length > 0) {
     throw new Error(`Missing dashboard environment: ${missing.join(", ")}`);
+  }
+  if (!DISCORD_SNOWFLAKE.test(source.DISCORD_CLIENT_ID as string)) {
+    throw new Error(
+      "DISCORD_CLIENT_ID must be the numeric Discord application client id, not the bot token",
+    );
+  }
+  if (DISCORD_TOKEN_SHAPED.test(source.DISCORD_CLIENT_SECRET as string)) {
+    throw new Error("DISCORD_CLIENT_SECRET must be the OAuth client secret, not the bot token");
   }
   return Object.fromEntries(
     REQUIRED_KEYS.map((key) => [key, source[key] as string]),

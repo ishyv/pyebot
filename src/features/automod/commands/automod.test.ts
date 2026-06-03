@@ -16,6 +16,7 @@ interface TestGuild {
       enabled: boolean;
       domains: string[];
     };
+    textRules: unknown[];
     customPatterns: unknown[];
   };
 }
@@ -96,6 +97,7 @@ function makeGuild(overrides: Partial<{ domains: string[]; patterns: unknown[] }
         enabled: true,
         domains: overrides.domains ?? [],
       },
+      textRules: [],
       customPatterns: overrides.patterns ?? [],
     },
   };
@@ -258,6 +260,130 @@ describe("/automod command decomposition", () => {
 });
 
 describe("/automod config subcommands", () => {
+  it("adds a text rule when the guild config has not been created yet", async () => {
+    updateCalls.length = 0;
+    invalidatedGuilds.length = 0;
+    updateResult = OkResult(undefined);
+    activeGuild = null;
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(
+      automodInteraction("text", {
+        strings: {
+          action: "add",
+          id: "nword",
+          phrase: "badword",
+          response: "delete",
+        },
+      }) as never,
+      ctx as never,
+    );
+
+    expect(updateCalls.map((call) => call.paths)).toEqual([
+      {
+        "automod.textRules": [
+          {
+            id: "nword",
+            enabled: true,
+            phrases: ["badword"],
+            action: "delete",
+            timeoutSeconds: 300,
+          },
+        ],
+      },
+    ]);
+    expect(invalidatedGuilds).toEqual(["guild-1"]);
+    expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
+  });
+
+  it("adds multiple phrases under one text rule id", async () => {
+    updateCalls.length = 0;
+    invalidatedGuilds.length = 0;
+    updateResult = OkResult(undefined);
+    activeGuild = makeGuild();
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(
+      automodInteraction("text", {
+        strings: {
+          action: "add",
+          id: "blocked",
+          phrase: "badword, worse word",
+          response: "delete",
+        },
+      }) as never,
+      ctx as never,
+    );
+
+    expect(updateCalls.map((call) => call.paths)).toEqual([
+      {
+        "automod.textRules": [
+          {
+            id: "blocked",
+            enabled: true,
+            phrases: ["badword", "worse word"],
+            action: "delete",
+            timeoutSeconds: 300,
+          },
+        ],
+      },
+    ]);
+    expect(invalidatedGuilds).toEqual(["guild-1"]);
+    expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
+  });
+
+  it("extends an existing text rule id without replacing its action", async () => {
+    updateCalls.length = 0;
+    invalidatedGuilds.length = 0;
+    updateResult = OkResult(undefined);
+    activeGuild = {
+      ...makeGuild(),
+      automod: {
+        ...makeGuild().automod,
+        textRules: [
+          {
+            id: "blocked",
+            enabled: true,
+            phrases: ["badword"],
+            action: "timeout",
+            timeoutSeconds: 900,
+          },
+        ],
+      },
+    };
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(
+      automodInteraction("text", {
+        strings: {
+          action: "add",
+          id: "blocked",
+          phrase: "worse word",
+        },
+      }) as never,
+      ctx as never,
+    );
+
+    expect(updateCalls.map((call) => call.paths)).toEqual([
+      {
+        "automod.textRules": [
+          {
+            id: "blocked",
+            enabled: true,
+            phrases: ["badword", "worse word"],
+            action: "timeout",
+            timeoutSeconds: 900,
+          },
+        ],
+      },
+    ]);
+    expect(invalidatedGuilds).toEqual(["guild-1"]);
+    expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
+  });
+
   it("writes cross-channel, slowmode, raid, and policy config paths", async () => {
     updateCalls.length = 0;
     updateResult = OkResult(undefined);
@@ -426,6 +552,71 @@ describe("/automod config subcommands", () => {
     ]);
     expect(invalidatedGuilds).toEqual(["guild-1", "guild-1"]);
     expect(JSON.stringify(calls)).toContain("discord\\\\.gg");
+  });
+
+  it("manages plain text rules without asking moderators for regex", async () => {
+    updateCalls.length = 0;
+    invalidatedGuilds.length = 0;
+    activeGuild = {
+      ...makeGuild(),
+      automod: {
+        ...makeGuild().automod,
+        textRules: [
+          {
+            id: "badword",
+            enabled: true,
+            phrases: ["badword"],
+            action: "delete",
+            timeoutSeconds: 300,
+          },
+        ],
+      },
+    };
+    const { default: command } = await import("./automod");
+    const { ctx, calls } = fakeContext();
+
+    await command.execute(
+      automodInteraction("text", {
+        strings: { action: "list" },
+      }) as never,
+      ctx as never,
+    );
+    await command.execute(
+      automodInteraction("text", {
+        strings: { action: "remove", id: "badword" },
+      }) as never,
+      ctx as never,
+    );
+    activeGuild = makeGuild();
+    await command.execute(
+      automodInteraction("text", {
+        strings: {
+          action: "add",
+          id: "badword",
+          phrase: "badword",
+          response: "timeout",
+        },
+        integers: { timeout_seconds: 900 },
+      }) as never,
+      ctx as never,
+    );
+
+    expect(updateCalls.map((call) => call.paths)).toEqual([
+      { "automod.textRules": [] },
+      {
+        "automod.textRules": [
+          {
+            id: "badword",
+            enabled: true,
+            phrases: ["badword"],
+            action: "timeout",
+            timeoutSeconds: 900,
+          },
+        ],
+      },
+    ]);
+    expect(invalidatedGuilds).toEqual(["guild-1", "guild-1"]);
+    expect(JSON.stringify(calls)).toContain("badword");
   });
 });
 

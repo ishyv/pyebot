@@ -44,6 +44,12 @@ export const load: PageServerLoad = async ({ params }) => {
         ? getConfigPath(config, "automod.perUserSlow.rules")
         : [],
     },
+    textRules: Array.isArray(getConfigPath(config, "automod.textRules"))
+      ? getConfigPath(config, "automod.textRules")
+      : [],
+    customPatterns: Array.isArray(getConfigPath(config, "automod.customPatterns"))
+      ? getConfigPath(config, "automod.customPatterns")
+      : [],
     imageDetection: {
       enabled: Boolean(getConfigPath(config, "automod.imageDetection.enabled")),
       reportChannelId:
@@ -111,6 +117,19 @@ export const actions: Actions = {
       return fail(500, { section: "imageDetection", error: result.error.message });
     }
     return { success: true, section: "imageDetection" };
+  },
+  saveTextRules: async ({ params, request, locals }) => {
+    const data = await request.formData();
+    const patch = parseAutomodPatch(data, "textRules");
+    if (!patch.ok)
+      return fail(400, { section: "textRules", field: patch.field, error: patch.error });
+    const result = await getBridge().saveAutomod(
+      params.guildId,
+      patch.value,
+      locals.session?.userId,
+    );
+    if (result.isErr()) return fail(500, { section: "textRules", error: result.error.message });
+    return { success: true, section: "textRules" };
   },
   addBannedImage: async ({ params, request, locals }) => {
     if (!locals.session)

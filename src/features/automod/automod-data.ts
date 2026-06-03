@@ -110,7 +110,31 @@ export const data = command("automod")
       })
       .channel("report_channel", "Channel to send raid alerts (omit to clear)"),
   )
-  .subcommand("pattern", "Manage custom regex patterns", (s) =>
+  .subcommand("text", "Manage plain banned words and phrases", (s) =>
+    s
+      .string("action", "Add, remove, or list text rules", {
+        required: true,
+        choices: [
+          { name: "Add", value: "add" },
+          { name: "Remove", value: "remove" },
+          { name: "List", value: "list" },
+        ],
+      })
+      .string("id", "Short rule id (required for add/remove)")
+      .string("phrase", "Plain word or phrase to block (required for add)")
+      .string("response", "Action when the phrase matches (default: delete)", {
+        choices: [
+          { name: "Delete", value: "delete" },
+          { name: "Timeout", value: "timeout" },
+          { name: "Report only", value: "report" },
+        ],
+      })
+      .integer("timeout_seconds", "Timeout duration in seconds (default 300)", {
+        min: 60,
+        max: 604800,
+      }),
+  )
+  .subcommand("pattern", "Manage advanced custom regex patterns", (s) =>
     s
       .string("action", "Add, remove, or list patterns", {
         required: true,

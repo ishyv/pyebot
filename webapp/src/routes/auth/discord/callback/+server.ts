@@ -21,7 +21,12 @@ export async function GET({ cookies, url }) {
     throw redirect(303, "/login?error=invalid_state");
   }
 
-  const token = await exchangeDiscordCode(code, redirectUri);
+  let token: Awaited<ReturnType<typeof exchangeDiscordCode>>;
+  try {
+    token = await exchangeDiscordCode(code, redirectUri);
+  } catch {
+    throw redirect(303, "/login?error=oauth_exchange_failed");
+  }
   const user = await fetchDiscordUser(token.access_token);
   await createSession(cookies, {
     userId: user.id,

@@ -27,6 +27,7 @@ export async function handleStatus(
   const sm = automod.slowmode;
   const rd = automod.raidDetection;
   const cp = automod.customPatterns ?? [];
+  const tr = automod.textRules ?? [];
   const policy = automod.policy;
   const image = automod.imageDetection;
 
@@ -50,7 +51,11 @@ export async function handleStatus(
     `  Report channel: ${rd.reportChannelId ? `<#${rd.reportChannelId}>` : "none"}`,
     `**Banned Images:** ${image.enabled ? "✅ Enabled" : "❌ Disabled"}`,
     `  Tolerance: \`${image.tolerance}\` | Report channel: ${image.reportChannelId ? `<#${image.reportChannelId}>` : "none"}`,
-    `**Custom Patterns:** ${cp.length} pattern${cp.length !== 1 ? "s" : ""} configured`,
+    `**Text Rules:** ${tr.length} rule${tr.length !== 1 ? "s" : ""} configured`,
+    ...(tr.length > 0
+      ? tr.map((rule) => `  • \`${rule.id}\` (\`${rule.phrases.join("`, `")}\`) → ${rule.action}`)
+      : []),
+    `**Advanced Regex Patterns:** ${cp.length} pattern${cp.length !== 1 ? "s" : ""} configured`,
     ...(cp.length > 0 ? cp.map((p) => `  • \`${p.name}\` (\`${p.pattern}\`) → ${p.action}`) : []),
   ];
 

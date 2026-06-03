@@ -36,6 +36,21 @@ interface SlowRule {
   durationSeconds: number;
 }
 
+interface TextRule {
+  enabled: boolean;
+  id: string;
+  phrases: string[];
+  action: "delete" | "timeout" | "report";
+  timeoutSeconds: number;
+}
+
+interface CustomPattern {
+  name: string;
+  pattern: string;
+  flags: string;
+  action: string;
+}
+
 const { data }: Props = $props();
 
 // Snapshot loader values once for field seeding. `untrack` makes the intent
@@ -43,6 +58,7 @@ const { data }: Props = $props();
 const initialLink = untrack(() => data.linkSpam);
 const initialMention = untrack(() => data.mentionSpam);
 const initialSlow = untrack(() => data.perUserSlow);
+const initialText = untrack(() => data.textRules);
 const initialImage = untrack(() => data.imageDetection);
 
 let linkSpamEnabled = $state(initialLink.enabled);
@@ -59,6 +75,12 @@ let slowRoleId = $state("");
 let slowCooldownSeconds = $state("30");
 let slowDurationSeconds = $state("3600");
 let slowRules = $state<SlowRule[]>(normalizeSlowRules(initialSlow.rules));
+let textRuleId = $state("");
+let textRulePhrase = $state("");
+let textRuleAction = $state<"delete" | "timeout" | "report">("delete");
+let textRuleTimeoutSeconds = $state("300");
+let textRules = $state<TextRule[]>(normalizeTextRules(initialText));
+let textRuleTestMessage = $state("");
 let imageDetectionEnabled = $state(initialImage.enabled);
 let imageReportChannelId = $state(initialImage.reportChannelId);
 let imageTolerance = $state(initialImage.tolerance);
@@ -69,6 +91,7 @@ let imageDrafts = $state<Record<string, { reason: string; label: string }>>({});
 let savingLink = $state(false);
 let savingMention = $state(false);
 let savingSlow = $state(false);
+let savingText = $state(false);
 let savingImageSettings = $state(false);
 let addingImage = $state(false);
 let testingImage = $state(false);
@@ -79,11 +102,13 @@ let removeCandidate = $state<{ id: string; label: string } | null>(null);
 let linkResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let mentionResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let slowResolve: { trigger: (s: ResolveStatus) => void } | undefined;
+let textResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 let imageResolve: { trigger: (s: ResolveStatus) => void } | undefined;
 
 let linkError = $state<FieldError | null>(null);
 let mentionError = $state<FieldError | null>(null);
 let slowError = $state<FieldError | null>(null);
+let textRuleError = $state<FieldError | null>(null);
 let imageError = $state<FieldError | null>(null);
 
 // Dirty against the live loader value so a successful save (which reloads
@@ -127,6 +152,12 @@ const slowDirty = $derived(
     },
   ),
 );
+const textDirty = $derived(
+  isDirty(
+    { rules: JSON.stringify(textRules) },
+    { rules: JSON.stringify(normalizeTextRules(data.textRules)) },
+  ),
+);
 const imageDirty = $derived(
   isDirty(
     {
@@ -160,6 +191,10 @@ function resetSlow(): void {
   slowRules = normalizeSlowRules(data.perUserSlow.rules);
   slowError = null;
 }
+function resetTextRules(): void {
+  textRules = normalizeTextRules(data.textRules);
+  textRuleError = null;
+}
 function resetImage(): void {
   imageDetectionEnabled = data.imageDetection.enabled;
   imageReportChannelId = data.imageDetection.reportChannelId;
@@ -168,10 +203,18 @@ function resetImage(): void {
 }
 
 const slowRulesJson = $derived(JSON.stringify(slowRules));
+const textRulesJson = $derived(JSON.stringify(textRules));
+const textRuleTestMatch = $derived(findTextRulePreview(textRuleTestMessage, textRules));
+const advancedPatterns = $derived(normalizeCustomPatterns(data.customPatterns));
 const toleranceOptions = [
   { value: "strict", label: "strict" },
   { value: "balanced", label: "balanced" },
   { value: "loose", label: "loose" },
+];
+const textActionOptions = [
+  { value: "delete", label: "delete" },
+  { value: "timeout", label: "timeout" },
+  { value: "report", label: "report" },
 ];
 
 function roleNameFor(roleId: string): string {
@@ -196,6 +239,46 @@ function normalizeSlowRules(value: unknown): SlowRule[] {
   });
 }
 
+function normalizeTextRules(value: unknown): TextRule[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): TextRule[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const rule = entry as Record<string, unknown>;
+    const id = String(rule.id ?? "").trim();
+    const phrases = normalizePhraseList(rule);
+    const action = rule.action === "timeout" || rule.action === "report" ? rule.action : "delete";
+    if (!id || phrases.length === 0) return [];
+    return [
+      {
+        enabled: rule.enabled !== false,
+        id,
+        phrases,
+        action,
+        timeoutSeconds: Number(rule.timeoutSeconds ?? 300),
+      },
+    ];
+  });
+}
+
+function normalizeCustomPatterns(value: unknown): CustomPattern[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): CustomPattern[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const pattern = entry as Record<string, unknown>;
+    const name = String(pattern.name ?? "").trim();
+    const source = String(pattern.pattern ?? "").trim();
+    if (!name || !source) return [];
+    return [
+      {
+        name,
+        pattern: source,
+        flags: String(pattern.flags ?? "i"),
+        action: String(pattern.action ?? "delete"),
+      },
+    ];
+  });
+}
+
 function upsertSlowRule(): void {
   const roleId = slowRoleId.trim();
   const cooldownSeconds = Math.trunc(Number(slowCooldownSeconds));
@@ -207,8 +290,104 @@ function upsertSlowRule(): void {
   ];
 }
 
+function upsertTextRule(): void {
+  const id = textRuleId.trim();
+  const phrases = parsePhraseList(textRulePhrase);
+  const timeoutSeconds = Math.trunc(Number(textRuleTimeoutSeconds));
+  if (!id || phrases.length === 0 || !Number.isFinite(timeoutSeconds) || timeoutSeconds < 60) return;
+  const existing = textRules.find((rule) => rule.id === id);
+  textRules = [
+    ...textRules.filter((rule) => rule.id !== id),
+    {
+      enabled: existing?.enabled ?? true,
+      id,
+      phrases: [...(existing?.phrases ?? []), ...phrases].filter(
+        (phrase, index, all) => all.indexOf(phrase) === index,
+      ),
+      action: textRuleAction,
+      timeoutSeconds,
+    },
+  ];
+}
+
+function normalizePhraseList(rule: Record<string, unknown>): string[] {
+  const phrases = Array.isArray(rule.phrases) ? rule.phrases : [rule.phrase];
+  return phrases
+    .map((phrase) => String(phrase ?? "").trim())
+    .filter(Boolean)
+    .filter((phrase, index, all) => all.indexOf(phrase) === index);
+}
+
+function parsePhraseList(value: string): string[] {
+  return value
+    .split(/[,\n]/)
+    .map((phrase) => phrase.trim())
+    .filter(Boolean)
+    .filter((phrase, index, all) => all.indexOf(phrase) === index);
+}
+
+function toggleTextRule(id: string): void {
+  textRules = textRules.map((rule) =>
+    rule.id === id ? { ...rule, enabled: !rule.enabled } : rule,
+  );
+}
+
+function removeTextRule(id: string): void {
+  textRules = textRules.filter((rule) => rule.id !== id);
+}
+
 function removeSlowRule(roleId: string): void {
   slowRules = slowRules.filter((rule) => rule.roleId !== roleId);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
+function previewCharPattern(char: string): string {
+  const variants: Record<string, string> = {
+    a: "a@4",
+    e: "e3",
+    i: "i1!|",
+    o: "o0",
+    s: "s$5",
+    t: "t7",
+  };
+  const value = variants[char.toLowerCase()];
+  return value ? `[${escapeRegex(value)}]` : escapeRegex(char);
+}
+
+function previewWordPattern(word: string, index: number): string {
+  const chars = [...word];
+  const contiguous = chars.map(previewCharPattern).join("");
+  if (chars.length < 2) return contiguous;
+  const separatorGroup = `sep${index}`;
+  const separated = [
+    previewCharPattern(chars[0] ?? ""),
+    `(?<${separatorGroup}>[\\s\\p{P}\\p{S}_\\u200B-\\u200D\\uFEFF])+`,
+    previewCharPattern(chars[1] ?? ""),
+    ...chars.slice(2).flatMap((char) => [`(?:\\k<${separatorGroup}>)+`, previewCharPattern(char)]),
+  ].join("");
+  return `(?:${contiguous}|${separated})`;
+}
+
+function findTextRulePreview(message: string, rules: TextRule[]): TextRule | null {
+  for (const rule of rules) {
+    if (!rule.enabled) continue;
+    const patterns = rule.phrases.flatMap((phrase, phraseIndex) => {
+      const words = phrase.trim().split(/\s+/).filter(Boolean);
+      if (words.length === 0) return [];
+      return [
+        words
+          .map((word, index) => previewWordPattern(word, phraseIndex * 100 + index))
+          .join("[\\s\\W_\\u200B-\\u200D\\uFEFF]+"),
+      ];
+    });
+    if (patterns.length === 0) continue;
+    const pattern = patterns.join("|");
+    if (new RegExp(`(?<![a-z0-9])(?:${pattern})(?![a-z0-9])`, "iu").test(message)) return rule;
+  }
+  return null;
 }
 
 function imageLabel(record: PageData["bannedImages"][number]): string {
@@ -432,6 +611,106 @@ $effect(() => {
   </div>
 
   <div use:surface={{ delay: 180 }}>
+    <Panel withInset>
+      {#snippet header()}
+        <div class="panel-head">
+          <span class="panel-title">text rules</span>
+          <Badge variant="accent">{textRules.length} rules</Badge>
+        </div>
+      {/snippet}
+
+      <form
+        method="POST"
+        action="?/saveTextRules"
+        use:resolve={(a) => (textResolve = a)}
+        use:enhance={enhanceSave({
+          setSaving: (v) => (savingText = v),
+          resolve: () => textResolve,
+          okMessage: "text rules saved",
+          setError: (e) => (textRuleError = e),
+        })}
+      >
+        <input type="hidden" name="rules" value={textRulesJson} />
+
+        {#if textRuleError}
+          <Alert variant="error">{textRuleError.message}</Alert>
+        {/if}
+
+        <div class="text-rule-builder">
+          <FormField label="rule id" description="short label shown in reports and status output.">
+            <Input bind:value={textRuleId} placeholder="badword" />
+          </FormField>
+
+          <FormField label="words or phrases" description="comma-separated plain text; separators between letters are handled by automod.">
+            <Input bind:value={textRulePhrase} placeholder="badword" />
+          </FormField>
+
+          <FormField label="action" description="what automod recommends when this rule matches.">
+            <Select bind:value={textRuleAction} options={textActionOptions} />
+          </FormField>
+
+          <FormField label="timeout seconds" description="used only when action is timeout.">
+            <Input type="number" bind:value={textRuleTimeoutSeconds} />
+          </FormField>
+
+          <Button type="button" variant="secondary" onclick={upsertTextRule}>add rule</Button>
+        </div>
+
+        <FormField label="test message" description="preview the first enabled rule that would match this text.">
+          <Input bind:value={textRuleTestMessage} placeholder="try b.a.d.w.o.r.d here" />
+        </FormField>
+        {#if textRuleTestMessage}
+          <div class="test-result">
+            <Badge variant={textRuleTestMatch ? "warn" : "accent"}>
+              {textRuleTestMatch ? "match" : "clear"}
+            </Badge>
+            <span>{textRuleTestMatch ? textRuleTestMatch.id : "no enabled text rule matched."}</span>
+          </div>
+        {/if}
+
+        {#if textRules.length > 0}
+          <div class="text-rule-list">
+            {#each textRules as rule (rule.id)}
+              <div class="text-rule-row">
+                <span>{rule.id}</span>
+                <span>{rule.phrases.join(", ")}</span>
+                <span>{rule.action}{rule.action === "timeout" ? ` · ${rule.timeoutSeconds}s` : ""}</span>
+                <Button type="button" size="sm" variant="ghost" onclick={() => toggleTextRule(rule.id)}>
+                  {rule.enabled ? "disable" : "enable"}
+                </Button>
+                <Button type="button" size="sm" variant="destructive" onclick={() => removeTextRule(rule.id)}>
+                  remove
+                </Button>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <EmptyState title="no text rules" description="add a plain word or phrase above to start filtering it." />
+        {/if}
+
+        {#if advancedPatterns.length > 0}
+          <div class="advanced-patterns">
+            <span class="advanced-title">advanced regex patterns</span>
+            {#each advancedPatterns as pattern}
+              <code>{pattern.name}: /{pattern.pattern}/{pattern.flags} -> {pattern.action}</code>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="actions">
+          {#if textDirty}<span class="unsaved">unsaved changes</span>{/if}
+          {#if textDirty}
+            <Button type="button" variant="ghost" size="sm" onclick={resetTextRules}>reset</Button>
+          {/if}
+          <Button type="submit" variant="primary" disabled={savingText} echo>
+            {savingText ? "saving" : "save text rules"}
+          </Button>
+        </div>
+      </form>
+    </Panel>
+  </div>
+
+  <div use:surface={{ delay: 240 }}>
     <Panel withInset>
       {#snippet header()}
         <div class="panel-head">
@@ -716,6 +995,45 @@ $effect(() => {
     font-family: var(--font-mono);
     font-size: 0.82rem;
   }
+  .text-rule-builder {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.8fr) minmax(12rem, 1.3fr) minmax(8rem, 0.7fr) minmax(8rem, 0.7fr) auto;
+    gap: var(--space-md);
+    align-items: end;
+  }
+  .text-rule-list {
+    display: grid;
+    gap: var(--space-xs);
+    margin-top: var(--space-md);
+  }
+  .text-rule-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.7fr) minmax(10rem, 1fr) minmax(9rem, auto) auto auto;
+    gap: var(--space-sm);
+    align-items: center;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+  .text-rule-row span {
+    overflow-wrap: anywhere;
+  }
+  .advanced-patterns {
+    display: grid;
+    gap: var(--space-2xs);
+    margin-top: var(--space-md);
+    padding: var(--space-sm);
+    border: 1px solid var(--line);
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .advanced-title {
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
   .image-settings-grid,
   .image-tools,
   .image-form-grid {
@@ -821,6 +1139,8 @@ $effect(() => {
   @media (max-width: 48rem) {
     .slow-builder,
     .slow-rule,
+    .text-rule-builder,
+    .text-rule-row,
     .image-settings-grid,
     .image-tools,
     .image-form-grid,

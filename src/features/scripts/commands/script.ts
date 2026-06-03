@@ -22,6 +22,7 @@ import { type ContainerChild, container, separator, text, type V2Top, v2Message 
 import { renderCollector, sessionKey } from "../input-collector";
 import { LIBRARY_SCRIPTS } from "../library";
 import { describeTrigger, parseScriptName } from "../model";
+import { saveExistingScript } from "../persistence";
 import { resolveRunnable } from "../resolve";
 import { executeRunnable, scanInputsFromRunnable } from "../run";
 
@@ -323,7 +324,7 @@ async function handleSchedule(c: Extract<ScriptCtx, { subcommand: "schedule" }>)
 
   const hours = c.options.hours;
   const channel = c.options.channel;
-  await c.ctx.patch(scriptId(c.guildId, def.name), ScriptDefinition, {
+  await saveExistingScript(c.ctx, scriptId(c.guildId, def.name), def, {
     trigger: { kind: "schedule", intervalHours: hours },
     reportChannelId: channel?.id ?? def.reportChannelId,
     scheduleNextRunAt: new Date(Date.now() + hours * 3_600_000),
@@ -347,7 +348,7 @@ async function handleOn(c: Extract<ScriptCtx, { subcommand: "on" }>): Promise<vo
     return;
   }
   const channel = c.options.channel;
-  await c.ctx.patch(scriptId(c.guildId, def.name), ScriptDefinition, {
+  await saveExistingScript(c.ctx, scriptId(c.guildId, def.name), def, {
     trigger: { kind: "event", event: event as ScriptEvent },
     reportChannelId: channel?.id ?? def.reportChannelId,
     scheduleNextRunAt: null,
@@ -365,7 +366,7 @@ async function handleManual(c: Extract<ScriptCtx, { subcommand: "manual" }>): Pr
   const def = await loadStoredForConfig(c.interaction, c.ctx, c.guildId, name);
   if (!def) return;
 
-  await c.ctx.patch(scriptId(c.guildId, def.name), ScriptDefinition, {
+  await saveExistingScript(c.ctx, scriptId(c.guildId, def.name), def, {
     trigger: { kind: "manual" },
     scheduleNextRunAt: null,
     updatedAt: new Date(),

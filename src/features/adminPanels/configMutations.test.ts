@@ -200,6 +200,15 @@ describe("admin panel config mutations", () => {
           timeoutSeconds: 300,
         },
       ],
+      textRules: [
+        {
+          id: "badword",
+          enabled: true,
+          phrases: ["badword"],
+          action: "timeout",
+          timeoutSeconds: 900,
+        },
+      ],
     });
 
     expect(result.isOk()).toBe(true);
@@ -236,6 +245,15 @@ describe("admin panel config mutations", () => {
               flags: "i",
               action: "delete",
               timeoutSeconds: 300,
+            },
+          ],
+          "automod.textRules": [
+            {
+              id: "badword",
+              enabled: true,
+              phrases: ["badword"],
+              action: "timeout",
+              timeoutSeconds: 900,
             },
           ],
         },

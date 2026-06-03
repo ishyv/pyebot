@@ -18,12 +18,14 @@ import { container, text, v2Message } from "@/ui/v2";
 import { validateInputValues } from "./engine";
 import {
   applyRow,
+  backRow,
   buildInputModal,
   renderCollector,
   type ScriptInputSession,
   sessionKey,
 } from "./input-collector";
 import { parseCapabilities } from "./model";
+import { saveExistingScript } from "./persistence";
 import { resolveRunnable } from "./resolve";
 import { executeRunnable } from "./run";
 import { runEventScripts } from "./triggers/events";
@@ -126,6 +128,10 @@ export default class ScriptHandlers {
       await this.onCollectorRun(interaction, id.slice("scr:go:".length));
       return;
     }
+    if (id.startsWith("scr:back:")) {
+      await this.onBackToInputs(interaction, id.slice("scr:back:".length));
+      return;
+    }
     if (id.startsWith("scr:apply:")) {
       await this.onConfirmApply(interaction, id.slice("scr:apply:".length));
       return;
@@ -137,6 +143,19 @@ export default class ScriptHandlers {
     if (id.startsWith("scr:delete:")) {
       await this.onConfirmDelete(interaction, ctx, id.slice("scr:delete:".length));
     }
+  }
+
+  /** Return from a successful run result to the same collector state. */
+  private async onBackToInputs(interaction: ButtonInteraction, name: string): Promise<void> {
+    const session = getSession(interaction, name);
+    if (!session) {
+      await interaction.update(
+        v2Message(container("danger", text("This form expired. Use `/script run` again."))),
+      );
+      return;
+    }
+
+    await interaction.update(renderCollector(name, session.fields, session.values));
   }
 
   private async onModalSubmit(interaction: ModalSubmitInteraction, ctx: Ctx): Promise<void> {
@@ -165,7 +184,7 @@ export default class ScriptHandlers {
     const existing = await ctx.get(id, ScriptDefinition);
     const now = new Date();
     if (existing) {
-      await ctx.patch(id, ScriptDefinition, {
+      await saveExistingScript(ctx, id, existing, {
         source,
         description,
         capabilities: caps.value,
@@ -311,7 +330,7 @@ export default class ScriptHandlers {
     }
 
     if (presented.operationCount === 0) {
-      await interaction.editReply(v2Message(presented.container));
+      await interaction.editReply(v2Message(presented.container, backRow(name)));
     } else {
       await interaction.editReply(v2Message(presented.container, applyRow(name)));
     }
@@ -341,8 +360,7 @@ export default class ScriptHandlers {
       channel: interaction.channelId ? { id: interaction.channelId, name: "channel" } : null,
       input: session.values,
     });
-    sessions.delete(sessionKey(interaction.user.id, interaction.guildId ?? "", name));
-    await interaction.editReply(v2Message(presented.container));
+    await interaction.editReply(v2Message(presented.container, backRow(name)));
   }
 
   // ─── No-input confirm/delete (unchanged) ─────────────────────────────────────

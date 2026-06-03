@@ -17,6 +17,14 @@ interface PerUserSlowRulePatch {
   readonly durationSeconds: number;
 }
 
+interface TextRulePatch {
+  readonly id: string;
+  readonly enabled: boolean;
+  readonly phrases: readonly string[];
+  readonly action: "delete" | "timeout" | "report";
+  readonly timeoutSeconds: number;
+}
+
 const MAX_DASHBOARD_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
 
@@ -108,7 +116,7 @@ export function parseTaxEconomyPatch(data: FormData): ParseResult<EconomyTaxPatc
 
 export function parseAutomodPatch(
   data: FormData,
-  section: "linkSpam" | "mentionSpam" | "perUserSlow" | "imageDetection",
+  section: "linkSpam" | "mentionSpam" | "perUserSlow" | "textRules" | "imageDetection",
 ): ParseResult<AutomodSettingsPatch> {
   if (section === "imageDetection") {
     const tolerance = text(data.get("tolerance")) ?? "balanced";
@@ -135,6 +143,12 @@ export function parseAutomodPatch(
     });
   }
 
+  if (section === "textRules") {
+    const parsedRules = parseTextRules(data);
+    if (!parsedRules.ok) return parsedRules;
+    return ok({ textRules: parsedRules.value });
+  }
+
   const windowSeconds = positiveInt(data, "windowSeconds", 10);
   if (!windowSeconds.ok) return windowSeconds;
   if (section === "linkSpam") {
@@ -158,6 +172,18 @@ export function parseAutomodPatch(
       windowSeconds: windowSeconds.value,
     },
   });
+}
+
+function isTextRuleAction(value: unknown): value is TextRulePatch["action"] {
+  return value === "delete" || value === "timeout" || value === "report";
+}
+
+function parseTextRulePhrases(record: Record<string, unknown>): string[] {
+  const phrases = Array.isArray(record.phrases) ? record.phrases : [record.phrase];
+  return phrases
+    .map((phrase) => (typeof phrase === "string" ? phrase.trim() : ""))
+    .filter(Boolean)
+    .filter((phrase, index, all) => all.indexOf(phrase) === index);
 }
 
 interface ParsedImageFile {
@@ -249,6 +275,49 @@ function parsePerUserSlowRules(
   }
   if (rules.some((rule) => rule.durationSeconds < 60)) {
     return err("durationSeconds must be at least 60.");
+  }
+  return ok(rules);
+}
+
+function parseTextRules(
+  data: FormData,
+): ParseResult<NonNullable<AutomodSettingsPatch["textRules"]>> {
+  const raw = text(data.get("rules")) ?? "[]";
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return err("rules must be valid JSON.");
+  }
+  if (!Array.isArray(value)) return err("rules must be an array.");
+
+  const rules: TextRulePatch[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) {
+      return err("Each text rule needs an id, phrases, action, and timeout.");
+    }
+    const record = entry as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const phrases = parseTextRulePhrases(record);
+    const timeoutSeconds = Number(record.timeoutSeconds);
+    if (
+      !id ||
+      phrases.length === 0 ||
+      !isTextRuleAction(record.action) ||
+      !Number.isFinite(timeoutSeconds)
+    ) {
+      return err("Each text rule needs an id, phrases, action, and timeout.");
+    }
+    rules.push({
+      id,
+      enabled: record.enabled !== false,
+      phrases,
+      action: record.action,
+      timeoutSeconds: Math.trunc(timeoutSeconds),
+    });
+  }
+  if (rules.some((rule) => rule.timeoutSeconds < 60)) {
+    return err("timeoutSeconds must be at least 60.");
   }
   return ok(rules);
 }

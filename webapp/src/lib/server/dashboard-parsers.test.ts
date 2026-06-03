@@ -152,6 +152,57 @@ describe("dashboard form parsers", () => {
     });
   });
 
+  test("parses plain text automod rules", () => {
+    const parsed = parseAutomodPatch(
+      form({
+        rules: JSON.stringify([
+          {
+            id: "badword",
+            enabled: true,
+            phrases: ["badword", "worse word"],
+            action: "timeout",
+            timeoutSeconds: 900,
+          },
+        ]),
+      }),
+      "textRules",
+    );
+
+    expect(parsed).toEqual({
+      ok: true,
+      value: {
+        textRules: [
+          {
+            id: "badword",
+            enabled: true,
+            phrases: ["badword", "worse word"],
+            action: "timeout",
+            timeoutSeconds: 900,
+          },
+        ],
+      },
+    });
+  });
+
+  test("rejects text automod rules without phrases", () => {
+    expect(
+      parseAutomodPatch(
+        form({
+          rules: JSON.stringify([
+            {
+              id: "badword",
+              enabled: true,
+              phrases: [],
+              action: "delete",
+              timeoutSeconds: 300,
+            },
+          ]),
+        }),
+        "textRules",
+      ),
+    ).toEqual({ ok: false, error: "Each text rule needs an id, phrases, action, and timeout." });
+  });
+
   test("rejects invalid image detection tolerance", () => {
     expect(parseAutomodPatch(form({ tolerance: "wild" }), "imageDetection")).toEqual({
       ok: false,
