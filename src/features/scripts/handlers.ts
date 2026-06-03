@@ -1,16 +1,21 @@
 import {
   type ButtonInteraction,
+  type Client,
+  Events,
   MessageFlags,
   type ModalSubmitInteraction,
   PermissionFlagsBits,
 } from "discord.js";
 import { SCRIPT_CAPABILITIES, ScriptDefinition, scriptId } from "@/components/script-definition";
-import { Handle } from "@/framework";
+import { Handle, Listen } from "@/framework";
 import type { BoundComponentHandler, Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { parseCapabilities } from "./model";
 import { resolveRunnable } from "./resolve";
 import { executeRunnable } from "./run";
+import { runScheduleSweep } from "./triggers/schedule";
+
+const SCHEDULE_SWEEP_INTERVAL_MS = 60_000;
 
 function isManageGuild(interaction: {
   memberPermissions: ButtonInteraction["memberPermissions"];
@@ -33,6 +38,20 @@ async function replyEphemeral(
  * press is a fresh interaction that does not pass through the command's gate.
  */
 export default class ScriptHandlers {
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
+
+  @Listen(Events.ClientReady)
+  onReady(client: Client, ctx: Ctx): void {
+    if (this.sweepTimer) return;
+    this.sweepTimer = setInterval(
+      () =>
+        void runScheduleSweep(client, ctx).catch((err) =>
+          ctx.logger.error("Script schedule sweep failed", err),
+        ),
+      SCHEDULE_SWEEP_INTERVAL_MS,
+    );
+  }
+
   @Handle("scr:")
   async onInteraction(interaction: Parameters<BoundComponentHandler>[0], ctx: Ctx): Promise<void> {
     if (interaction.isModalSubmit()) {
@@ -94,6 +113,9 @@ export default class ScriptHandlers {
         description,
         source,
         capabilities: caps.value,
+        trigger: { kind: "manual" },
+        reportChannelId: null,
+        scheduleNextRunAt: null,
         createdBy: interaction.user.id,
         enabled: true,
         createdAt: now,

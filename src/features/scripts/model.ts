@@ -1,8 +1,20 @@
 /**
  * Input parsing for the `/script` surface: names and capability lists.
  */
-import { SCRIPT_CAPABILITIES } from "@/components/script-definition";
+import { SCRIPT_CAPABILITIES, type ScriptTrigger } from "@/components/script-definition";
 import type { Capability } from "./engine";
+
+/** One-line description of how a script is triggered, for `/script list`. */
+export function describeTrigger(trigger: ScriptTrigger): string {
+  switch (trigger.kind) {
+    case "manual":
+      return "manual";
+    case "schedule":
+      return `every ${trigger.intervalHours}h`;
+    case "event":
+      return `on ${trigger.event}`;
+  }
+}
 
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 

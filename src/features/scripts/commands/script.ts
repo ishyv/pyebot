@@ -17,7 +17,7 @@ import {
 import { command, type RunContext } from "@/framework";
 import { type ContainerChild, container, separator, text, type V2Top, v2Message } from "@/ui/v2";
 import { LIBRARY_SCRIPTS } from "../library";
-import { parseScriptName } from "../model";
+import { describeTrigger, parseScriptName } from "../model";
 import { resolveRunnable } from "../resolve";
 import { executeRunnable } from "../run";
 
@@ -35,6 +35,15 @@ const data = command("script")
   )
   .subcommand("list", "List this server's scripts")
   .subcommand("delete", "Delete a script", (s) =>
+    s.string("name", "Script name", { required: true }),
+  )
+  .subcommand("schedule", "Run a script on a recurring interval", (s) =>
+    s
+      .string("name", "Script name", { required: true })
+      .integer("hours", "Interval in hours", { required: true, min: 1, max: 168 })
+      .channel("channel", "Channel to post run summaries in"),
+  )
+  .subcommand("manual", "Clear a script's trigger (run only via /script run)", (s) =>
     s.string("name", "Script name", { required: true }),
   )
   .adminOnly()
@@ -214,7 +223,9 @@ async function handleList(c: Extract<ScriptCtx, { subcommand: "list" }>) {
     const state = def.enabled ? "" : " · disabled";
     children.push(separator("sm"));
     children.push(
-      text(`**${def.name}** — ${caps}${state}\n-# ${def.description || "no description"}`),
+      text(
+        `**${def.name}** — ${caps} · ${describeTrigger(def.trigger)}${state}\n-# ${def.description || "no description"}`,
+      ),
     );
   }
   return v2Message(container("info", ...children));
@@ -245,10 +256,71 @@ async function handleDelete(c: Extract<ScriptCtx, { subcommand: "delete" }>): Pr
   );
 }
 
+/** Loads a stored (non-built-in) script for a trigger-config subcommand, replying on failure. */
+async function loadStoredForConfig(
+  interaction: ChatInputCommandInteraction,
+  ctx: ScriptCtx["ctx"],
+  guildId: string,
+  name: string | null,
+): Promise<ScriptDefinitionValue | null> {
+  if (!name) {
+    await replyEphemeral(interaction, container("danger", text("Invalid script name.")));
+    return null;
+  }
+  if (LIBRARY_SCRIPTS.has(name)) {
+    await replyEphemeral(
+      interaction,
+      container("mute", text(`\`${name}\` is a built-in script and can't be configured.`)),
+    );
+    return null;
+  }
+  const def = await ctx.get(scriptId(guildId, name), ScriptDefinition);
+  if (!def) {
+    await replyEphemeral(interaction, container("mute", text(`No script named \`${name}\`.`)));
+    return null;
+  }
+  return def;
+}
+
+async function handleSchedule(c: Extract<ScriptCtx, { subcommand: "schedule" }>): Promise<void> {
+  const name = parseScriptName(c.options.name);
+  const def = await loadStoredForConfig(c.interaction, c.ctx, c.guildId, name);
+  if (!def) return;
+
+  const hours = c.options.hours;
+  const channel = c.options.channel;
+  await c.ctx.patch(scriptId(c.guildId, def.name), ScriptDefinition, {
+    trigger: { kind: "schedule", intervalHours: hours },
+    reportChannelId: channel?.id ?? def.reportChannelId,
+    scheduleNextRunAt: new Date(Date.now() + hours * 3_600_000),
+    updatedAt: new Date(),
+  });
+  const where = channel ? `, reporting in <#${channel.id}>` : "";
+  await replyEphemeral(
+    c.interaction,
+    container("ok", text(`Scheduled \`${def.name}\` every ${hours}h${where}.`)),
+  );
+}
+
+async function handleManual(c: Extract<ScriptCtx, { subcommand: "manual" }>): Promise<void> {
+  const name = parseScriptName(c.options.name);
+  const def = await loadStoredForConfig(c.interaction, c.ctx, c.guildId, name);
+  if (!def) return;
+
+  await c.ctx.patch(scriptId(c.guildId, def.name), ScriptDefinition, {
+    trigger: { kind: "manual" },
+    scheduleNextRunAt: null,
+    updatedAt: new Date(),
+  });
+  await replyEphemeral(c.interaction, container("ok", text(`\`${def.name}\` is now manual-only.`)));
+}
+
 export default data
   .help({ hints: [] })
   .handle("create", handleCreate)
   .handle("edit", handleEdit)
   .handle("run", handleRun)
   .handle("list", handleList)
-  .handle("delete", handleDelete);
+  .handle("delete", handleDelete)
+  .handle("schedule", handleSchedule)
+  .handle("manual", handleManual);
