@@ -547,7 +547,8 @@ export function buildScriptModal(session: EmbedWizardSession): ModalBuilder {
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
           .setCustomId("script")
-          .setLabel("JS function, e.g. (ctx) => ({ title: ctx.guild.name })")
+          .setLabel("Script (TypeScript body)")
+          .setPlaceholder("return { title: ctx.guild.name };")
           .setStyle(TextInputStyle.Paragraph)
           .setMaxLength(4000)
           .setRequired(false)

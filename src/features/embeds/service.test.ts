@@ -76,7 +76,7 @@ describe("buildEmbed", () => {
     const config = makeConfig({
       embedTitle: "static",
       scriptEnabled: true,
-      script: "(ctx) => ({ title: 'dynamic' })",
+      script: "return { title: 'dynamic' };",
     });
 
     const embed = await buildEmbed(config, BASE_CHANNEL, BASE_GUILD);
@@ -90,7 +90,7 @@ describe("buildEmbed", () => {
       embedFields: [{ name: "Static", value: "Field", inline: false }],
       scriptEnabled: true,
       script:
-        "(ctx) => ({ fields: [{ name: 'Script A', value: 'Val A' }, { name: 'Script B', value: 'Val B' }] })",
+        "return { fields: [{ name: 'Script A', value: 'Val A' }, { name: 'Script B', value: 'Val B' }] };",
     });
 
     const embed = await buildEmbed(config, BASE_CHANNEL, BASE_GUILD);
@@ -113,7 +113,7 @@ describe("buildEmbed", () => {
       embedFields: staticFields,
       scriptEnabled: true,
       script:
-        "(ctx) => ({ fields: [{ name: 'S1', value: 'V1' }, { name: 'S2', value: 'V2' }, { name: 'S3', value: 'V3' }, { name: 'S4', value: 'V4' }, { name: 'S5', value: 'V5' }] })",
+        "return { fields: [{ name: 'S1', value: 'V1' }, { name: 'S2', value: 'V2' }, { name: 'S3', value: 'V3' }, { name: 'S4', value: 'V4' }, { name: 'S5', value: 'V5' }] };",
     });
 
     const embed = await buildEmbed(config, BASE_CHANNEL, BASE_GUILD);
@@ -126,7 +126,7 @@ describe("buildEmbed", () => {
     const config = makeConfig({
       embedTitle: "static",
       scriptEnabled: true,
-      script: '(ctx) => { throw new Error("boom") }',
+      script: 'throw new Error("boom");',
     });
 
     const embed = await buildEmbed(config, BASE_CHANNEL, BASE_GUILD);
@@ -140,7 +140,7 @@ describe("buildEmbed", () => {
       embedTitle: "static",
       scriptEnabled: false,
       // Script sets a different title; if run it would override "static"
-      script: "(ctx) => ({ title: 'should not appear' })",
+      script: "return { title: 'should not appear' };",
     });
 
     const embed = await buildEmbed(config, BASE_CHANNEL, BASE_GUILD);
