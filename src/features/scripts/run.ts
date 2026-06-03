@@ -69,7 +69,11 @@ export async function executeRunnable(
 
   const lines: string[] = [];
   if (result.value !== null && result.value !== undefined) {
-    lines.push(`**Result:** \`${truncate(JSON.stringify(result.value), 300)}\``);
+    const display =
+      typeof result.value === "string"
+        ? truncate(result.value, 1800)
+        : `\`${truncate(JSON.stringify(result.value), 300)}\``;
+    lines.push(`**Result:**\n${display}`);
   }
 
   if (result.operations.length === 0) {
