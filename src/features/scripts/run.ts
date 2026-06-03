@@ -8,8 +8,8 @@
 import type { ContainerBuilder, Guild } from "discord.js";
 import type { ScriptDefinitionValue } from "@/components/script-definition";
 import { type ContainerChild, container, separator, text } from "@/ui/v2";
-import type { Operation, OutputAccent, OutputItem, OutputToken } from "./engine";
-import { isOutputArray, isOutputToken } from "./engine";
+import type { InputField, Operation, OutputAccent, OutputItem, OutputToken } from "./engine";
+import { isOutputArray, isOutputToken, scanInputs } from "./engine";
 import type { StaticScript } from "./library/define";
 import { type RunResult, runSource, runStatic } from "./service";
 import type { SnapshotContext } from "./snapshot";
@@ -26,6 +26,25 @@ export function runnableName(runnable: Runnable): string {
 export interface PresentedRun {
   readonly container: ContainerBuilder;
   readonly operationCount: number;
+}
+
+let _transpiler: Bun.Transpiler | null = null;
+function transpile(source: string): string {
+  _transpiler ??= new Bun.Transpiler({ loader: "ts" });
+  return _transpiler.transformSync(source);
+}
+
+/**
+ * Returns the declared input fields for a runnable. Library scripts have no
+ * dynamic inputs (they're compiled and parametrised by snapshot data).
+ */
+export function scanInputsFromRunnable(runnable: Runnable): InputField[] {
+  if (runnable.kind !== "stored") return [];
+  try {
+    return scanInputs(transpile(runnable.def.source));
+  } catch {
+    return [];
+  }
 }
 
 // ─── Rendering helpers ────────────────────────────────────────────────────────
@@ -161,7 +180,7 @@ function opsText(result: RunResult): string {
 export async function executeRunnable(
   guild: Guild,
   runnable: Runnable,
-  options: { dryRun: boolean } & SnapshotContext,
+  options: { dryRun: boolean; input?: Record<string, string> } & SnapshotContext,
 ): Promise<PresentedRun> {
   const name = runnableName(runnable);
   const run = (): Promise<RunResult> =>
@@ -170,6 +189,7 @@ export async function executeRunnable(
           dryRun: options.dryRun,
           invoker: options.invoker,
           channel: options.channel,
+          input: options.input,
         })
       : runStatic(guild, runnable.script, {
           dryRun: options.dryRun,

@@ -50,6 +50,7 @@ export async function runEmbedScript(
     roles: [],
     channels: [],
     now: Date.now(),
+    input: {},
   };
 
   try {

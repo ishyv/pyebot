@@ -41,6 +41,11 @@ export interface ScriptSnapshot {
   channels: ChannelSnapshot[];
   /** Epoch millis at execution time. */
   now: number;
+  /**
+   * Values collected from the input form before this run. Empty object when the
+   * script declared no inputs or runs via an automated trigger (schedule/event).
+   */
+  input: Record<string, string>;
 }
 
 export interface MemberView {
@@ -51,6 +56,10 @@ export interface MemberView {
   readonly joinedAt: number | null;
   has_role(nameOrId: string): boolean;
   joined_days_ago(): number | null;
+  /** Discord user mention string: `<@userId>` */
+  mention(): string;
+  /** Array of role names for this member (cross-references the guild's role snapshot). */
+  role_names(): string[];
 }
 
 export interface ScriptApi {
@@ -61,6 +70,20 @@ export interface ScriptApi {
   readonly roles: readonly RoleSnapshot[];
   readonly channels: readonly ChannelSnapshot[];
   readonly now: number;
+  /** Values collected from the input form. Empty when no inputs were declared. */
+  readonly input: Readonly<Record<string, string>>;
+  /**
+   * Find a role by name, `@Name`, or Discord mention `<@&id>`.
+   * Case-insensitive name matching. Returns null if not found.
+   */
+  find_role(nameOrMention: string): RoleSnapshot | null;
+  /**
+   * Find a member by tag (`User#1234`), `<@id>` mention, or plain user ID.
+   * Returns null if not found.
+   */
+  find_member(tagOrMention: string): MemberView | null;
+  /** Shorthand: all members who have the given role (resolved via find_role). */
+  members_with_role(nameOrMention: string): MemberView[];
   addRole?(member: MemberView | string, role: string): void;
   removeRole?(member: MemberView | string, role: string): void;
   dm?(member: MemberView | string, content: string): void;
@@ -89,6 +112,32 @@ function userIdOf(member: MemberView | string): string {
 }
 
 /**
+ * Resolves a role name/mention to a RoleSnapshot. Handles:
+ *   "<@&id>"   → find by ID
+ *   "@name"    → find by name (strip @, case-insensitive)
+ *   "name"     → find by ID first, then by name (case-insensitive)
+ */
+function resolveRole(nameOrMention: string, roles: readonly RoleSnapshot[]): RoleSnapshot | null {
+  // Discord role mention: <@&123456789>
+  const mentionMatch = nameOrMention.match(/^<@&(\d+)>$/);
+  if (mentionMatch) return roles.find((r) => r.id === mentionMatch[1]) ?? null;
+
+  // @-prefixed name
+  if (nameOrMention.startsWith("@")) {
+    const name = nameOrMention.slice(1).toLowerCase();
+    return roles.find((r) => r.name.toLowerCase() === name) ?? null;
+  }
+
+  // Plain string: try ID, then case-insensitive name
+  const lower = nameOrMention.toLowerCase();
+  return (
+    roles.find((r) => r.id === nameOrMention) ??
+    roles.find((r) => r.name.toLowerCase() === lower) ??
+    null
+  );
+}
+
+/**
  * Builds `ctx` from a snapshot. Mutating recorders are attached only for granted
  * capabilities, so an ungranted call is `undefined` at runtime (and absent from
  * the type), not a silent no-op.
@@ -98,10 +147,8 @@ export function buildContext(
   capabilities: ReadonlySet<Capability>,
   record: Sink,
 ): ScriptApi {
-  const resolveRoleId = (nameOrId: string): string => {
-    const role = snapshot.roles.find((r) => r.id === nameOrId || r.name === nameOrId);
-    return role?.id ?? nameOrId;
-  };
+  const resolveRoleId = (nameOrId: string): string =>
+    resolveRole(nameOrId, snapshot.roles)?.id ?? nameOrId;
 
   const members: MemberView[] = snapshot.members.map((m) => ({
     id: m.id,
@@ -112,7 +159,11 @@ export function buildContext(
     has_role: (nameOrId: string) => m.roleIds.includes(resolveRoleId(nameOrId)),
     joined_days_ago: () =>
       m.joinedAt === null ? null : Math.floor((snapshot.now - m.joinedAt) / 86_400_000),
+    mention: () => `<@${m.id}>`,
+    role_names: () => m.roleIds.map((id) => snapshot.roles.find((r) => r.id === id)?.name ?? id),
   }));
+
+  const memberIndex = new Map(members.map((m) => [m.id, m]));
 
   const api: Writable<ScriptApi> = {
     guild: snapshot.guild,
@@ -122,6 +173,23 @@ export function buildContext(
     roles: snapshot.roles,
     channels: snapshot.channels,
     now: snapshot.now,
+    input: snapshot.input,
+    find_role: (nameOrMention) => resolveRole(nameOrMention, snapshot.roles),
+    find_member: (tagOrMention) => {
+      // "<@id>" mention
+      const mentionMatch = tagOrMention.match(/^<@!?(\d+)>$/);
+      if (mentionMatch) return memberIndex.get(mentionMatch[1]) ?? null;
+      // plain ID
+      if (memberIndex.has(tagOrMention)) return memberIndex.get(tagOrMention) ?? null;
+      // tag match (case-insensitive)
+      const lower = tagOrMention.toLowerCase();
+      return members.find((m) => m.tag.toLowerCase() === lower) ?? null;
+    },
+    members_with_role: (nameOrMention) => {
+      const role = resolveRole(nameOrMention, snapshot.roles);
+      if (!role) return [];
+      return members.filter((m) => m.has_role(role.id));
+    },
   };
 
   if (capabilities.has("roles")) {

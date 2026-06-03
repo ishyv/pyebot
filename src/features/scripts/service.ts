@@ -40,6 +40,7 @@ export async function runSource(
   const snapshot = await buildSnapshot(guild, {
     channel: options.channel,
     invoker: options.invoker,
+    input: options.input,
   });
 
   const { value, operations } = await execute(source, snapshot, capabilities, {
@@ -64,6 +65,7 @@ export async function runStatic(
   const snapshot = await buildSnapshot(guild, {
     channel: options.channel,
     invoker: options.invoker,
+    input: options.input,
   });
 
   const maxOperations = options.maxOperations ?? 1000;

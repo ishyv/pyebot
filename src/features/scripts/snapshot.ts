@@ -12,6 +12,8 @@ import type { MemberSnapshot, ScriptSnapshot } from "./engine";
 export interface SnapshotContext {
   channel?: { id: string; name: string } | null;
   invoker?: { id: string; tag: string } | null;
+  /** Pre-collected input values from the input form. Defaults to empty. */
+  input?: Record<string, string>;
 }
 
 export async function buildSnapshot(
@@ -38,5 +40,6 @@ export async function buildSnapshot(
     roles,
     channels,
     now: Date.now(),
+    input: context.input ?? {},
   };
 }

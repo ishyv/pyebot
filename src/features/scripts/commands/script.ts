@@ -16,12 +16,14 @@ import {
   type ScriptEvent,
   scriptId,
 } from "@/components/script-definition";
+import { sessions } from "@/core/state";
 import { command, type RunContext } from "@/framework";
 import { type ContainerChild, container, separator, text, type V2Top, v2Message } from "@/ui/v2";
+import type { InputField } from "../engine";
 import { LIBRARY_SCRIPTS } from "../library";
 import { describeTrigger, parseScriptName } from "../model";
 import { resolveRunnable } from "../resolve";
-import { executeRunnable } from "../run";
+import { executeRunnable, scanInputsFromRunnable } from "../run";
 
 const data = command("script")
   .description("Author and run server scripts")
@@ -199,16 +201,51 @@ async function handleEdit(c: Extract<ScriptCtx, { subcommand: "edit" }>): Promis
   await c.interaction.showModal(buildScriptModal(name, def));
 }
 
+function buildInputModal(name: string, fields: InputField[]): ModalBuilder {
+  const modal = new ModalBuilder()
+    .setCustomId(`scr:inp:${name}`)
+    .setTitle(`${name} — inputs`.slice(0, 45));
+  for (const f of fields.slice(0, 5)) {
+    const input = new TextInputBuilder()
+      .setCustomId(f.name)
+      .setLabel(f.label.slice(0, 45))
+      .setStyle(TextInputStyle.Short)
+      .setRequired(f.required)
+      .setMaxLength(200);
+    if (f.placeholder) input.setPlaceholder(f.placeholder);
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+  }
+  return modal;
+}
+
 async function handleRun(c: Extract<ScriptCtx, { subcommand: "run" }>) {
-  await c.ctx.respond.defer({ visibility: "ephemeral" });
+  // Don't defer yet — if the script has inputs we need to showModal first,
+  // and Discord does not allow showModal after a defer/reply.
   const name = parseScriptName(c.options.name);
-  if (!name) return c.fail("Invalid script name.");
+  if (!name) {
+    await replyEphemeral(c.interaction, container("danger", text("Invalid script name.")));
+    return;
+  }
   const runnable = await resolveRunnable(c.ctx, c.guildId, name);
-  if (!runnable) return c.fail(`No script named \`${name}\`.`);
+  if (!runnable) {
+    await replyEphemeral(c.interaction, container("mute", text(`No script named \`${name}\`.`)));
+    return;
+  }
   if (runnable.kind === "stored" && !runnable.def.enabled) {
-    return c.warn(`Script \`${name}\` is disabled.`);
+    await replyEphemeral(c.interaction, container("mute", text(`Script \`${name}\` is disabled.`)));
+    return;
   }
 
+  // Check for declared inputs; if found, show the form and return.
+  const inputFields = scanInputsFromRunnable(runnable);
+  if (inputFields.length > 0) {
+    sessions.set(`scr:${c.userId}:${c.guildId}:${name}`, { runnable });
+    await c.interaction.showModal(buildInputModal(name, inputFields));
+    return;
+  }
+
+  // No inputs — safe to defer and run immediately.
+  await c.ctx.respond.defer({ visibility: "ephemeral" });
   const presented = await executeRunnable(c.guild, runnable, {
     dryRun: true,
     invoker: { id: c.userId, tag: c.user.tag },
@@ -358,11 +395,15 @@ function handleHelp(_c: Extract<ScriptCtx, { subcommand: "help" }>) {
 
     "\n### ctx — available in every script",
     "`ctx.guild` — `{ id, name, memberCount }`",
-    "`ctx.members` — list of members; each has `.has_role(name)` and `.joined_days_ago()`",
+    "`ctx.members` — list of members; each has `.has_role(name)`, `.joined_days_ago()`, `.mention()`, `.role_names()`",
     "`ctx.roles` — list of `{ id, name }` (includes @everyone)",
     "`ctx.channels` — list of `{ id, name }`",
     "`ctx.invoker` — `{ id, tag }` of who triggered the script, or null for automated runs",
     "`ctx.now` — epoch milliseconds",
+    "`ctx.input` — values collected from the input form (e.g. `ctx.input.role`)",
+    '`ctx.find_role("@name" | "<@&id>" | name)` — resolves a role from the snapshot',
+    '`ctx.find_member(tag | "<@id>" | id)` — resolves a member',
+    "`ctx.members_with_role(name)` — all members who have that role",
 
     "\n### Output helpers (use as bare names — no import needed)",
     '`title("text")` — heading at the top of the result',
@@ -372,6 +413,10 @@ function handleHelp(_c: Extract<ScriptCtx, { subcommand: "help" }>) {
     '`display("text")` — plain text block',
     '`color("ok"|"warn"|"danger"|"info"|"mute")` — set the result\'s accent color',
     "-# Arrays return as bullet lists; objects return as key-value pairs automatically.",
+
+    "\n### Inputs",
+    '`input.text("name", "Label")` — declares a required input shown in a form before running',
+    "-# Access collected values via `ctx.input.name`. Declare up to 5 inputs per script.",
 
     "\n### Capabilities (comma-separated in the Capabilities field)",
     "`roles` → `ctx.addRole(member, roleName)`, `ctx.removeRole(member, roleName)`",
@@ -394,6 +439,13 @@ function handleHelp(_c: Extract<ScriptCtx, { subcommand: "help" }>) {
     '`for (const m of n) ctx.addRole(m, "Newcomer");`',
     // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — this is example code shown to users
     '`return [title("Tagged"), footer(`${n.length} members`)];`',
+    "",
+    "**Count members with a specific role (uses inputs)**",
+    '`input.text("role", "Role name or @mention");`',
+    "`const role = ctx.find_role(ctx.input.role);`",
+    '`if (!role) return [title("Not found"), color("danger")];`',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — this is example code shown to users
+    "`return [title(`Members with ${role.name}`), { count: ctx.members_with_role(role.name).length }];`",
   ].join("\n");
 
   return v2Message(container("info", text(HELP_TEXT), separator("sm"), text(EXAMPLES_TEXT)));
