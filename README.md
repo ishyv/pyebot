@@ -82,7 +82,7 @@ tx is latest-only: old feature module objects, old env aliases, old JSON content
 - `src/features/**` — bundled moderation, economy, RPG, AI, tickets, offers, automod, autoroles, admin panels, and counting features.
 - `src/features/rpg/content/**` — active RPG runtime content for gathering, processing, crafting, tools, and expeditions.
 - `src/content/**` — seed/catalog authoring helpers and the extended default content pack.
-- `templates/starter/**` — starter project shape for new bots.
+- `src/features/example/**` — annotated, runnable reference feature; read it to learn the framework. Scaffold new features with `bun run tx -- new feature`.
 - `docs/**` — feature authoring, content/dashboard authoring, storage, and latest-only policy notes.
 
 ## Commands

@@ -1,5 +1,6 @@
 import type { FeatureConfigRegistry } from "@/core/featureCatalog";
 import { countingFeatureConfig } from "./counting/config";
+import { exampleFeatureConfig } from "./example/config";
 
 /**
  * Dashboard-editable config metadata for loaded features.
@@ -8,4 +9,5 @@ import { countingFeatureConfig } from "./counting/config";
  */
 export const FEATURE_CONFIGS = {
   counting: countingFeatureConfig,
+  example: exampleFeatureConfig,
 } satisfies FeatureConfigRegistry;

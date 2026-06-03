@@ -5,6 +5,11 @@ The active runtime scans those folders at startup and compiles one loaded
 feature list for dispatch, command registration, component routing, and admin
 feature summaries.
 
+For a runnable, heavily-commented end-to-end reference, read
+`src/features/example/` — a real feature (shipped disabled) that exercises the
+descriptor, the `command()` DSL with options and subcommands, a Components-V2
+reply with a button, a `@Handle` component route, and feature config.
+
 The local CLI can scaffold the boring parts without becoming a second registry:
 
 ```bash
