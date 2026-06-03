@@ -7,8 +7,9 @@
  */
 import type { ContainerBuilder, Guild } from "discord.js";
 import type { ScriptDefinitionValue } from "@/components/script-definition";
-import { container, text } from "@/ui/v2";
-import type { Operation } from "./engine";
+import { type ContainerChild, container, separator, text } from "@/ui/v2";
+import type { Operation, OutputAccent, OutputItem, OutputToken } from "./engine";
+import { isOutputArray, isOutputToken } from "./engine";
 import type { StaticScript } from "./library/define";
 import { type RunResult, runSource, runStatic } from "./service";
 import type { SnapshotContext } from "./snapshot";
@@ -27,6 +28,8 @@ export interface PresentedRun {
   readonly operationCount: number;
 }
 
+// ─── Rendering helpers ────────────────────────────────────────────────────────
+
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
@@ -36,6 +39,124 @@ function summarizeKinds(operations: readonly Operation[]): string {
   for (const op of operations) counts.set(op.kind, (counts.get(op.kind) ?? 0) + 1);
   return [...counts].map(([kind, n]) => `${n}× ${kind}`).join(", ");
 }
+
+function formatStringArray(items: readonly string[]): string {
+  const visible = items.slice(0, 25);
+  const rest = items.length - visible.length;
+  const lines = visible.map((s) => `• ${s}`);
+  if (rest > 0) lines.push(`-# …and ${rest} more`);
+  return lines.join("\n");
+}
+
+function formatObject(obj: Record<string, unknown>): string {
+  const entries = Object.entries(obj).slice(0, 10);
+  const rest = Object.keys(obj).length - entries.length;
+  const lines = entries.map(([k, v]) => `**${k}** — ${String(v)}`);
+  if (rest > 0) lines.push(`-# …and ${rest} more`);
+  return lines.join("\n");
+}
+
+/**
+ * Converts a script return value into a list of Discord container children
+ * (alternating `text()` blocks and `separator("lg")` dividers) plus a resolved
+ * accent. Handles both the typed `OutputItem[]` DSL and plain primitives/objects.
+ */
+function renderOutput(
+  value: unknown,
+  baseAccent: OutputAccent,
+): { accent: OutputAccent; children: ContainerChild[] } {
+  let accent = baseAccent;
+  const children: ContainerChild[] = [];
+  let pendingLines: string[] = [];
+
+  function flushLines(): void {
+    const content = pendingLines.join("\n").trim();
+    if (content) children.push(text(content));
+    pendingLines = [];
+  }
+
+  function pushSep(): void {
+    flushLines();
+    if (children.length > 0) children.push(separator("lg"));
+  }
+
+  function processToken(token: OutputToken): void {
+    switch (token._t) {
+      case "title":
+        pendingLines.push(`## ${token.text}`);
+        break;
+      case "color":
+        accent = token.accent;
+        break;
+      case "sep":
+        pushSep();
+        break;
+      case "footer":
+        pendingLines.push(`-# ${token.text}`);
+        break;
+      case "display":
+        pendingLines.push(token.content);
+        break;
+      case "field":
+        pendingLines.push(`**${token.name}** — ${token.value}`);
+        break;
+    }
+  }
+
+  function processItem(item: OutputItem): void {
+    if (isOutputToken(item)) {
+      processToken(item);
+      return;
+    }
+    if (Array.isArray(item)) {
+      pendingLines.push(formatStringArray(item as string[]));
+      return;
+    }
+    if (typeof item === "object" && item !== null) {
+      pendingLines.push(formatObject(item as Record<string, unknown>));
+      return;
+    }
+    if (typeof item === "string") {
+      pendingLines.push(truncate(item, 1800));
+      return;
+    }
+    // number, boolean, etc.
+    pendingLines.push(String(item));
+  }
+
+  if (value === null || value === undefined) {
+    // no value section
+  } else if (isOutputArray(value)) {
+    for (const item of value as OutputItem[]) processItem(item);
+  } else if (Array.isArray(value)) {
+    pendingLines.push(formatStringArray(value as string[]));
+  } else if (typeof value === "object") {
+    pendingLines.push(formatObject(value as Record<string, unknown>));
+  } else {
+    pendingLines.push(truncate(String(value), 1800));
+  }
+
+  flushLines();
+  return { accent, children };
+}
+
+function opsText(result: RunResult): string {
+  if (result.operations.length === 0) return "_No operations._";
+  const lines: string[] = [
+    `**Plan:** ${result.operations.length} operation(s) — ${summarizeKinds(result.operations)}`,
+  ];
+  if (result.report.dryRun) {
+    lines.push("-# Dry run — nothing was applied. Confirm below to apply.");
+  } else {
+    lines.push(`**Applied:** ${result.report.applied} • **Failed:** ${result.report.failed}`);
+    for (const r of result.report.results.filter((x) => !x.ok).slice(0, 5)) {
+      lines.push(`• ✗ ${r.operation.kind}: ${truncate(r.error ?? "unknown error", 120)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function executeRunnable(
   guild: Guild,
@@ -67,34 +188,18 @@ export async function executeRunnable(
     };
   }
 
-  const lines: string[] = [];
-  if (result.value !== null && result.value !== undefined) {
-    const display =
-      typeof result.value === "string"
-        ? truncate(result.value, 1800)
-        : `\`${truncate(JSON.stringify(result.value), 300)}\``;
-    lines.push(`**Result:**\n${display}`);
-  }
+  const baseAccent: OutputAccent = result.report.failed > 0 ? "warn" : "ok";
+  const { accent, children } = renderOutput(result.value, baseAccent);
+  const ops = opsText(result);
 
-  if (result.operations.length === 0) {
-    lines.push("_No operations._");
-  } else {
-    lines.push(
-      `**Plan:** ${result.operations.length} operation(s) — ${summarizeKinds(result.operations)}`,
-    );
-    if (result.report.dryRun) {
-      lines.push("-# Dry run — nothing was applied. Confirm below to apply.");
-    } else {
-      lines.push(`**Applied:** ${result.report.applied} • **Failed:** ${result.report.failed}`);
-      for (const r of result.report.results.filter((x) => !x.ok).slice(0, 5)) {
-        lines.push(`• ✗ ${r.operation.kind}: ${truncate(r.error ?? "unknown error", 120)}`);
-      }
-    }
-  }
+  const headerText = text(`## \`${name}\``);
+  const allChildren: ContainerChild[] =
+    children.length > 0
+      ? [headerText, separator("lg"), ...children, separator("lg"), text(ops)]
+      : [headerText, separator("lg"), text(ops)];
 
-  const accent = result.report.failed > 0 ? "warn" : "ok";
   return {
-    container: container(accent, text(`## \`${name}\`\n${lines.join("\n")}`)),
+    container: container(accent, ...allChildren),
     operationCount: result.operations.length,
   };
 }

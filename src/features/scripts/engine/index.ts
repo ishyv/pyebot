@@ -27,3 +27,16 @@ export {
 } from "./apply";
 export { type ExecuteOptions, type ExecutionResult, execute } from "./execute";
 export { type Operation, OperationSchema, OperationsSchema } from "./operations";
+export {
+  color,
+  display,
+  field,
+  footer,
+  isOutputArray,
+  isOutputToken,
+  type OutputAccent,
+  type OutputItem,
+  type OutputToken,
+  sep,
+  title,
+} from "./output";

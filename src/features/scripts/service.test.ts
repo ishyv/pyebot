@@ -80,7 +80,12 @@ describe("runSource", () => {
 describe("runStatic", () => {
   it("runs a built-in script in-process against the snapshot", async () => {
     const result = await runStatic(fakeGuild([]), memberCount);
-    expect(result.value).toEqual({ total: 2, humans: 2, bots: 0 });
+    // member-count returns an OutputItem[] DSL array; check it has content
+    expect(Array.isArray(result.value)).toBe(true);
     expect(result.operations).toEqual([]);
+    // The object payload is the second item: { total, humans, bots }
+    const items = result.value as unknown[];
+    const kvItem = items.find((i) => typeof i === "object" && i !== null && !("_t" in i));
+    expect(kvItem).toMatchObject({ total: 2, humans: 2, bots: 0 });
   });
 });

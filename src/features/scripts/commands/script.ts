@@ -57,6 +57,7 @@ const data = command("script")
   .subcommand("manual", "Clear a script's trigger (run only via /script run)", (s) =>
     s.string("name", "Script name", { required: true }),
   )
+  .subcommand("help", "Show the script authoring reference")
   .adminOnly()
   .guildOnly();
 
@@ -350,6 +351,54 @@ async function handleManual(c: Extract<ScriptCtx, { subcommand: "manual" }>): Pr
   await replyEphemeral(c.interaction, container("ok", text(`\`${def.name}\` is now manual-only.`)));
 }
 
+function handleHelp(_c: Extract<ScriptCtx, { subcommand: "help" }>) {
+  const HELP_TEXT = [
+    "## Script Reference",
+    "-# Scripts are TypeScript bodies — write statements and use `return` to output.",
+
+    "\n### ctx — available in every script",
+    "`ctx.guild` — `{ id, name, memberCount }`",
+    "`ctx.members` — list of members; each has `.has_role(name)` and `.joined_days_ago()`",
+    "`ctx.roles` — list of `{ id, name }` (includes @everyone)",
+    "`ctx.channels` — list of `{ id, name }`",
+    "`ctx.invoker` — `{ id, tag }` of who triggered the script, or null for automated runs",
+    "`ctx.now` — epoch milliseconds",
+
+    "\n### Output helpers (use as bare names — no import needed)",
+    '`title("text")` — heading at the top of the result',
+    "`sep()` — visible divider between sections",
+    '`footer("text")` — small caption at the bottom',
+    '`field("Key", "Value")` — key-value line',
+    '`display("text")` — plain text block',
+    '`color("ok"|"warn"|"danger"|"info"|"mute")` — set the result\'s accent color',
+    "-# Arrays return as bullet lists; objects return as key-value pairs automatically.",
+
+    "\n### Capabilities (comma-separated in the Capabilities field)",
+    "`roles` → `ctx.addRole(member, roleName)`, `ctx.removeRole(member, roleName)`",
+    '`messaging` → `ctx.dm(member, "text")`',
+    "`channels` → `ctx.createChannel({ name, type? })`, `ctx.createRole({ name, color? })`",
+    "-# Scripts without a capability are read-only and cannot perform that action.",
+  ].join("\n");
+
+  const EXAMPLES_TEXT = [
+    "### Examples",
+    "",
+    "**List all roles:**",
+    '`return ctx.roles.filter(r => r.name !== "@everyone").map(r => r.name);`',
+    "",
+    "**Structured result:**",
+    '`return [title("Stats"), { members: ctx.guild.memberCount }, footer(ctx.guild.name)];`',
+    "",
+    "**Grant role to recent joiners (needs** `roles`**)**",
+    "`const n = ctx.members.filter(m => (m.joined_days_ago() ?? 999) < 7);`",
+    '`for (const m of n) ctx.addRole(m, "Newcomer");`',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — this is example code shown to users
+    '`return [title("Tagged"), footer(`${n.length} members`)];`',
+  ].join("\n");
+
+  return v2Message(container("info", text(HELP_TEXT), separator("sm"), text(EXAMPLES_TEXT)));
+}
+
 export default data
   .help({ hints: [] })
   .handle("create", handleCreate)
@@ -359,4 +408,5 @@ export default data
   .handle("delete", handleDelete)
   .handle("schedule", handleSchedule)
   .handle("on", handleOn)
-  .handle("manual", handleManual);
+  .handle("manual", handleManual)
+  .handle("help", handleHelp);

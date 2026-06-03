@@ -9,12 +9,21 @@
  */
 import { buildContext, type WorkerRequest, type WorkerResponse } from "./api";
 import type { Operation } from "./operations";
+import { color, display, field, footer, sep, title } from "./output";
 
 // `new AsyncFunction(...)` so a script body may use `await` and we can uniformly
 // await the result. Sync bodies work unchanged.
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
   ...args: string[]
-) => (ctx: unknown) => Promise<unknown>;
+) => (ctx: unknown, _out: unknown) => Promise<unknown>;
+
+// Output helpers are injected as bare names via a preamble destructure so stored
+// scripts can write `title("...")` without any explicit import.
+const OUTPUT_HELPERS = { title, color, sep, footer, display, field };
+// WHY `display` not `text`: the ui/v2 layer exports a `text` helper used at call
+// sites in the bot; giving this one the same name would shadow it confusingly for
+// library-script authors who might import both. `display(...)` is unambiguous.
+const PREAMBLE = `const { title, color, sep, footer, display, field } = _out;`;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -32,8 +41,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       operations.push(op);
     });
 
-    const body = new AsyncFunction("ctx", `"use strict";\n${code}`);
-    const value = await body(ctx);
+    const body = new AsyncFunction("ctx", "_out", `"use strict";\n${PREAMBLE}\n${code}`);
+    const value = await body(ctx, OUTPUT_HELPERS);
 
     // postMessage needs a structured-cloneable value; strip functions/undefined.
     let safeValue: unknown;
