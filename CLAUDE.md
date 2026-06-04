@@ -60,6 +60,10 @@ For concurrent mutations use `atomicTransition()` (`src/db/transition.ts`) — a
 
 Repositories in `src/db/repositories/` instantiate stores and add query helpers. Path alias `@/*` resolves to `src/*`.
 
+### Entity components (`src/framework/entity*.ts`)
+
+The entity-centric storage model: instead of one collection per `component()`, an **entity kind** (`User`, `Guild` in `src/components/entities.ts`) owns one document per entity, and a **component** declared with `defineComponent(kind, name, schema)` is a namespaced field on that document. Access it through `ctx.of(kind, id)` (`get`/`peek`/`has`/`set`/`update`/`remove`), cross-entity leaderboards through `ctx.select(component)`, and atomic multi-entity writes through `ctx.transaction(fn)` — no collection strings, `_id`, or Mongo operators in feature code. `get` is defaulted (never null). This coexists with legacy `component()`/`ctx.get(id, component)`; there is **no** automated migration. See `docs/entity-components.md` before adding stored data.
+
 ### RPG content (`src/features/rpg/content/`)
 
 The content modules expose live, typed maps — `LOCATIONS`, `MATERIALS`, `TOOLS`, and the recipe maps — plus a `parseXId` boundary helper per catalog (`parseLocationId`, `parseMaterialId`, `parseToolId`, `parseCraftingRecipeId`, `parseProcessingInputId`). IDs are plain `string` (e.g. `type LocationId = string`); narrow an untrusted Discord string **once** at the command/handler edge with the matching `parseXId`, then pass the typed ID inward — domain functions index the live map directly and never re-validate.
