@@ -15,11 +15,11 @@ import { dispatchPanelAction, renderPanelBody } from "./panelDispatcher";
 import { loadGuildConfig } from "./panelHelpers";
 import {
   openPanelFromCommand,
+  type PanelId,
   type PanelPayload,
   type PanelState,
   panelContainer,
   panelSessions,
-  parsePanelCustomId,
   replyPanelError,
   respondToPanelCommand,
   updatePanelMessage,
@@ -80,13 +80,16 @@ export async function renderPanel(session: PanelState): Promise<PanelPayload> {
 
 /**
  * Routes an incoming component or modal interaction through the session guard,
- * the close handler, and then the panel-specific action dispatcher.
+ * the close handler, and then the panel-specific action dispatcher. The custom
+ * id is decoded by the route layer; `panelId` and `action` arrive already typed.
  */
-export async function handlePanelInteraction(interaction: ComponentInteraction): Promise<void> {
-  const parsed = parsePanelCustomId(interaction.customId);
-  if (!parsed) return;
-
-  const session = panelSessions.get(parsed.sessionId);
+export async function handlePanelInteraction(
+  interaction: ComponentInteraction,
+  sessionId: string,
+  panelId: PanelId,
+  action: string,
+): Promise<void> {
+  const session = panelSessions.get(sessionId);
   if (!session) {
     await replyPanelError(
       interaction,
@@ -103,7 +106,7 @@ export async function handlePanelInteraction(interaction: ComponentInteraction):
     return;
   }
 
-  if (parsed.action === "close") {
+  if (action === "close") {
     panelSessions.delete(session.id);
     await updatePanelMessage(interaction, {
       container: panelContainer({ title: "Panel closed", accent: "mute" }),
@@ -113,25 +116,20 @@ export async function handlePanelInteraction(interaction: ComponentInteraction):
   }
 
   // nav action updates the session's active panel then falls through to re-render
-  if (parsed.action === "nav" && interaction.isStringSelectMenu()) {
+  if (action === "nav" && interaction.isStringSelectMenu()) {
     const next = interaction.values[0];
     if (next) session.panelId = next as typeof session.panelId;
     await updatePanelMessage(interaction, await renderPanel(session));
     return;
   }
 
-  if (parsed.action === "refresh") {
+  if (action === "refresh") {
     await updatePanelMessage(interaction, await renderPanel(session));
     return;
   }
 
   try {
-    const shouldRender = await dispatchPanelAction(
-      interaction,
-      session,
-      parsed.panelId,
-      parsed.action,
-    );
+    const shouldRender = await dispatchPanelAction(interaction, session, panelId, action);
     if (!shouldRender) return;
     await updatePanelMessage(interaction, await renderPanel(session));
   } catch (error) {

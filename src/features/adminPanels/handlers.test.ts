@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { getHandleMetadata } from "@/framework/decorators";
-import AdminPanelHandlers from "./handlers";
-import { PANEL_PREFIX } from "./panelRuntime";
+import handlers from "./handlers";
+import { panelRoutes } from "./routes";
 
 describe("admin panel handlers", () => {
-  it("routes panel component custom ids through the framework router", () => {
-    const metadata = getHandleMetadata(new AdminPanelHandlers());
-    expect(metadata.map((entry) => entry.prefix)).toContain(PANEL_PREFIX);
+  it("registers a component route for the panel catch-all prefix", () => {
+    const prefixes = handlers.registrations
+      .filter((r) => r.kind === "component")
+      .map((r) => r.prefix);
+    expect(prefixes).toContain(panelRoutes.c.prefix);
+    expect(panelRoutes.c.prefix).toBe("panel:c:");
   });
 });

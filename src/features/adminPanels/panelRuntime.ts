@@ -28,8 +28,7 @@ import {
 import type { ComponentInteraction } from "@/core/feature";
 import type { AccentKey } from "@/ui/theme";
 import { container, separator, text } from "@/ui/v2";
-
-export const PANEL_PREFIX = "panel:";
+import { panelRoutes } from "./routes";
 
 /** Admin panel sessions are intentionally short-lived and in-memory only. */
 export const PANEL_TTL_MS = 5 * 60_000;
@@ -84,12 +83,6 @@ export interface PanelState {
   selectedNewUsersRuleKind?: string;
   selectedNewUsersScopeIds: string[];
   selectedNewUsersAccessMode: "view" | "send";
-}
-
-export interface PanelCustomId {
-  sessionId: string;
-  panelId: PanelId;
-  action: string;
 }
 
 /**
@@ -171,25 +164,9 @@ export class PanelSessionRegistry {
 
 export const panelSessions = new PanelSessionRegistry();
 
-export function isPanelId(value: string): value is PanelId {
-  return PANEL_DEFINITIONS.some((panel) => panel.id === value);
-}
-
+/** Encodes the session key, active panel, and action into one component id. */
 export function makePanelCustomId(session: PanelState, panelId: PanelId, action: string): string {
-  return `${PANEL_PREFIX}${session.id}:${panelId}:${action}`;
-}
-
-/**
- * Decode the compact Discord custom ID format used by every admin control.
- * Actions may contain additional colons, so only the first two segments after
- * the session key are structural.
- */
-export function parsePanelCustomId(customId: string): PanelCustomId | null {
-  if (!customId.startsWith(PANEL_PREFIX)) return null;
-  const rest = customId.slice(PANEL_PREFIX.length);
-  const [sessionId, panelId, ...actionParts] = rest.split(":");
-  if (!sessionId || !panelId || !actionParts.length || !isPanelId(panelId)) return null;
-  return { sessionId, panelId, action: actionParts.join(":") };
+  return panelRoutes.c.id({ session: session.id, panel: panelId, action });
 }
 
 /**

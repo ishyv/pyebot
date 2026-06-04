@@ -5,27 +5,17 @@ import {
   PANEL_TTL_MS,
   PanelSessionRegistry,
   panelContainer,
-  parsePanelCustomId,
   withNavigationRows,
 } from "./panelRuntime";
 
 describe("panel runtime", () => {
-  it("parses panel custom ids", () => {
+  it("encodes panel custom ids through the route, preserving colon-bearing actions", () => {
     const registry = new PanelSessionRegistry();
     const session = registry.create("user-1", "guild-1", "channels");
     const customId = makePanelCustomId(session, "channels", "managed:add");
 
-    expect(parsePanelCustomId(customId)).toEqual({
-      sessionId: session.id,
-      panelId: "channels",
-      action: "managed:add",
-    });
-  });
-
-  it("rejects malformed custom ids", () => {
-    expect(parsePanelCustomId("nope")).toBeNull();
-    expect(parsePanelCustomId("panel:abc:not-a-panel:refresh")).toBeNull();
-    expect(parsePanelCustomId("panel:abc:channels")).toBeNull();
+    // panel:c:{session}:{panel}:{action} — the action tail keeps its colon.
+    expect(customId).toBe(`panel:c:${session.id}:channels:managed:add`);
   });
 
   it("purges expired sessions", () => {
