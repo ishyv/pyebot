@@ -25,6 +25,7 @@ import {
 import type { AccentKey } from "@/ui/theme";
 import { container, row, separator, text, type V2Top, v2Message } from "@/ui/v2";
 import type { InputField } from "./engine";
+import { scriptRoutes } from "./routes";
 import type { Runnable } from "./run";
 
 export interface ScriptInputSession {
@@ -45,12 +46,12 @@ function isEntity(field: InputField): boolean {
 
 /** Builds the select-menu row for one entity input, reflecting any current value. */
 function entitySelectRow(name: string, field: InputField, currentValue?: string): V2Top {
-  const customId = `scr:sel:${name}:${field.name}`;
+  const args = { name, input: field.name };
   const placeholder = field.label.slice(0, 150);
 
   if (field.type === "role") {
     const menu = new RoleSelectMenuBuilder()
-      .setCustomId(customId)
+      .setCustomId(scriptRoutes["sel-role"].id(args))
       .setPlaceholder(placeholder)
       .setMinValues(field.required ? 1 : 0)
       .setMaxValues(1);
@@ -59,7 +60,7 @@ function entitySelectRow(name: string, field: InputField, currentValue?: string)
   }
   if (field.type === "channel") {
     const menu = new ChannelSelectMenuBuilder()
-      .setCustomId(customId)
+      .setCustomId(scriptRoutes["sel-channel"].id(args))
       .setPlaceholder(placeholder)
       .setMinValues(field.required ? 1 : 0)
       .setMaxValues(1);
@@ -68,7 +69,7 @@ function entitySelectRow(name: string, field: InputField, currentValue?: string)
   }
   // member → user select
   const menu = new UserSelectMenuBuilder()
-    .setCustomId(customId)
+    .setCustomId(scriptRoutes["sel-member"].id(args))
     .setPlaceholder(placeholder)
     .setMinValues(field.required ? 1 : 0)
     .setMaxValues(1);
@@ -114,15 +115,18 @@ export function renderCollector(
   if (fields.some((f) => !isEntity(f))) {
     controls.push(
       new ButtonBuilder()
-        .setCustomId(`scr:txt:${name}`)
+        .setCustomId(scriptRoutes.txt.id({ name }))
         .setLabel("Fill text fields")
         .setStyle(ButtonStyle.Secondary),
     );
   }
   controls.push(
-    new ButtonBuilder().setCustomId(`scr:go:${name}`).setLabel("Run").setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId("scr:cancel")
+      .setCustomId(scriptRoutes.go.id({ name }))
+      .setLabel("Run")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(scriptRoutes.cancel.id({}))
       .setLabel("Cancel")
       .setStyle(ButtonStyle.Secondary),
   );
@@ -135,15 +139,15 @@ export function renderCollector(
 export function applyRow(name: string): V2Top {
   return row(
     new ButtonBuilder()
-      .setCustomId(`scr:apply:${name}`)
+      .setCustomId(scriptRoutes.apply.id({ name }))
       .setLabel("Apply")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId(`scr:back:${name}`)
+      .setCustomId(scriptRoutes.back.id({ name }))
       .setLabel("Back to inputs")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId("scr:cancel")
+      .setCustomId(scriptRoutes.cancel.id({}))
       .setLabel("Cancel")
       .setStyle(ButtonStyle.Secondary),
   );
@@ -153,7 +157,7 @@ export function applyRow(name: string): V2Top {
 export function backRow(name: string): V2Top {
   return row(
     new ButtonBuilder()
-      .setCustomId(`scr:back:${name}`)
+      .setCustomId(scriptRoutes.back.id({ name }))
       .setLabel("Back to inputs")
       .setStyle(ButtonStyle.Secondary),
   );
@@ -166,7 +170,7 @@ export function buildInputModal(
   values: Record<string, string>,
 ): ModalBuilder {
   const modal = new ModalBuilder()
-    .setCustomId(`scr:inp:${name}`)
+    .setCustomId(scriptRoutes.inp.id({ name }))
     .setTitle(`${name} — inputs`.slice(0, 45));
   const textFields = fields.filter((f) => f.type === "text" || f.type === "number").slice(0, 5);
   for (const f of textFields) {

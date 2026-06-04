@@ -8,7 +8,7 @@ import {
 import { sessions } from "@/core/state";
 import type { Component, Ctx } from "@/framework/types";
 import type { InputField } from "./engine";
-import ScriptHandlers from "./handlers";
+import { onBackToInputs, onCollectorRun, onConfirmApply, onModalSubmit } from "./handlers";
 import { type ScriptInputSession, sessionKey } from "./input-collector";
 import type { Runnable } from "./run";
 
@@ -184,7 +184,7 @@ describe("ScriptHandlers", () => {
     const { ctx, writes } = makeCtx(current);
     const { interaction, replies } = modalSubmit();
 
-    await new ScriptHandlers().onInteraction(interaction as never, ctx);
+    await onModalSubmit(interaction as never, "u-role-count", ctx);
 
     expect(writes).toHaveLength(1);
     const write = writes[0] as { value: ScriptDefinitionValue };
@@ -207,7 +207,7 @@ describe("ScriptHandlers", () => {
     seedInputSession("return 'role:' + ctx.input.role;");
     const { interaction, edits } = buttonInteraction("scr:go:u-role-count");
 
-    await new ScriptHandlers().onInteraction(interaction as never, {} as Ctx);
+    await onCollectorRun(interaction as never, "u-role-count");
 
     expect(edits).toHaveLength(1);
     expect(payloadText(edits[0])).toContain("role:r-vet");
@@ -218,7 +218,7 @@ describe("ScriptHandlers", () => {
     seedInputSession("return 'role:' + ctx.input.role;");
     const { interaction, updates } = buttonInteraction("scr:back:u-role-count");
 
-    await new ScriptHandlers().onInteraction(interaction as never, {} as Ctx);
+    await onBackToInputs(interaction as never, "u-role-count");
 
     expect(updates).toHaveLength(1);
     expect(payloadText(updates[0])).toContain("<@&r-vet>");
@@ -229,7 +229,7 @@ describe("ScriptHandlers", () => {
     seedInputSession('ctx.addRole(ctx.members[0], "Veteran"); return "ready";', ["roles"]);
     const { interaction, edits } = buttonInteraction("scr:go:u-role-count");
 
-    await new ScriptHandlers().onInteraction(interaction as never, {} as Ctx);
+    await onCollectorRun(interaction as never, "u-role-count");
 
     expect(edits).toHaveLength(1);
     expect(payloadText(edits[0])).toContain("scr:apply:u-role-count");
@@ -243,7 +243,7 @@ describe("ScriptHandlers", () => {
     const recorded: string[] = [];
     const { interaction, edits } = buttonInteraction("scr:apply:u-role-count", recorded);
 
-    await new ScriptHandlers().onInteraction(interaction as never, {} as Ctx);
+    await onConfirmApply(interaction as never, "u-role-count");
 
     expect(sessions.has(key)).toBe(true);
     expect(recorded).toContain("add:u1:r-vet");
@@ -255,7 +255,7 @@ describe("ScriptHandlers", () => {
     sessions.delete(sessionKey("user-1", "guild-1", "u-role-count"));
     const { interaction, updates } = buttonInteraction("scr:back:u-role-count");
 
-    await new ScriptHandlers().onInteraction(interaction as never, {} as Ctx);
+    await onBackToInputs(interaction as never, "u-role-count");
 
     expect(updates).toHaveLength(1);
     expect(payloadText(updates[0])).toContain("This form expired");

@@ -24,43 +24,60 @@ import { LIBRARY_SCRIPTS } from "../library";
 import { describeTrigger, parseScriptName } from "../model";
 import { saveExistingScript } from "../persistence";
 import { resolveRunnable } from "../resolve";
+import { scriptRoutes } from "../routes";
 import { executeRunnable, scanInputsFromRunnable } from "../run";
 
 const data = command("script")
   .description("Author and run server scripts")
   .defaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .subcommand("create", "Create a new script", (s) =>
-    s.string("name", "Unique script name", { required: true }),
-  )
-  .subcommand("edit", "Edit an existing script", (s) =>
-    s.string("name", "Script name", { required: true }),
-  )
-  .subcommand("run", "Run a script (previews the plan first)", (s) =>
-    s.string("name", "Script name", { required: true }),
-  )
-  .subcommand("list", "List this server's scripts")
-  .subcommand("delete", "Delete a script", (s) =>
-    s.string("name", "Script name", { required: true }),
-  )
-  .subcommand("schedule", "Run a script on a recurring interval", (s) =>
-    s
-      .string("name", "Script name", { required: true })
-      .integer("hours", "Interval in hours", { required: true, min: 1, max: 168 })
-      .channel("channel", "Channel to post run summaries in"),
-  )
-  .subcommand("on", "Run a script when a Discord event fires", (s) =>
-    s
-      .string("name", "Script name", { required: true })
-      .string("event", "Event to bind", {
-        required: true,
-        choices: [{ name: "member join", value: "member-join" }],
-      })
-      .channel("channel", "Channel to post run summaries in"),
-  )
-  .subcommand("manual", "Clear a script's trigger (run only via /script run)", (s) =>
-    s.string("name", "Script name", { required: true }),
-  )
-  .subcommand("help", "Show the script authoring reference")
+  .subcommand({
+    name: "create",
+    description: "Create a new script",
+    options: (s) => s.string("name", "Unique script name", { required: true }),
+  })
+  .subcommand({
+    name: "edit",
+    description: "Edit an existing script",
+    options: (s) => s.string("name", "Script name", { required: true }),
+  })
+  .subcommand({
+    name: "run",
+    description: "Run a script (previews the plan first)",
+    options: (s) => s.string("name", "Script name", { required: true }),
+  })
+  .subcommand({ name: "list", description: "List this server's scripts" })
+  .subcommand({
+    name: "delete",
+    description: "Delete a script",
+    options: (s) => s.string("name", "Script name", { required: true }),
+  })
+  .subcommand({
+    name: "schedule",
+    description: "Run a script on a recurring interval",
+    options: (s) =>
+      s
+        .string("name", "Script name", { required: true })
+        .integer("hours", "Interval in hours", { required: true, min: 1, max: 168 })
+        .channel("channel", "Channel to post run summaries in"),
+  })
+  .subcommand({
+    name: "on",
+    description: "Run a script when a Discord event fires",
+    options: (s) =>
+      s
+        .string("name", "Script name", { required: true })
+        .string("event", "Event to bind", {
+          required: true,
+          choices: [{ name: "member join", value: "member-join" }],
+        })
+        .channel("channel", "Channel to post run summaries in"),
+  })
+  .subcommand({
+    name: "manual",
+    description: "Clear a script's trigger (run only via /script run)",
+    options: (s) => s.string("name", "Script name", { required: true }),
+  })
+  .subcommand({ name: "help", description: "Show the script authoring reference" })
   .adminOnly()
   .guildOnly();
 
@@ -90,7 +107,7 @@ function buildScriptModal(name: string, def: ScriptDefinitionValue | null): Moda
   };
 
   return new ModalBuilder()
-    .setCustomId(`scr:modal:${name}`)
+    .setCustomId(scriptRoutes.modal.id({ name }))
     .setTitle(`Script: ${name}`.slice(0, 45))
     .addComponents(
       field(
@@ -118,11 +135,11 @@ function buildScriptModal(name: string, def: ScriptDefinitionValue | null): Moda
 function confirmRow(name: string): V2Top {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`scr:run:${name}`)
+      .setCustomId(scriptRoutes.run.id({ name }))
       .setLabel("Apply")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId("scr:cancel")
+      .setCustomId(scriptRoutes.cancel.id({}))
       .setLabel("Cancel")
       .setStyle(ButtonStyle.Secondary),
   );
@@ -131,11 +148,11 @@ function confirmRow(name: string): V2Top {
 function deleteRow(name: string): V2Top {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`scr:delete:${name}`)
+      .setCustomId(scriptRoutes.delete.id({ name }))
       .setLabel("Delete")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId("scr:cancel")
+      .setCustomId(scriptRoutes.cancel.id({}))
       .setLabel("Cancel")
       .setStyle(ButtonStyle.Secondary),
   );
