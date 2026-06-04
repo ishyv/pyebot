@@ -14,7 +14,6 @@
  */
 
 import {
-  ButtonBuilder,
   ButtonStyle,
   ChannelType,
   type Client,
@@ -24,6 +23,7 @@ import {
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import { container, row, separator, text, v2Message } from "@/ui/v2";
+import { routes } from "./routes";
 
 const log = createLogger("automod:raid");
 
@@ -129,14 +129,8 @@ async function postRaidAlert(
     ).length;
 
     const alertRow = row(
-      new ButtonBuilder()
-        .setCustomId(`automod:raid:lockdown:${trigger.guild.id}`)
-        .setLabel("Lockdown Server")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`automod:raid:dismiss:${trigger.guild.id}`)
-        .setLabel("Dismiss")
-        .setStyle(ButtonStyle.Secondary),
+      routes["raid-lockdown"].button({}, { label: "Lockdown Server", style: ButtonStyle.Danger }),
+      routes["raid-dismiss"].button({}, { label: "Dismiss", style: ButtonStyle.Secondary }),
     );
 
     const alertPayload = v2Message(

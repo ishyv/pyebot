@@ -4,7 +4,6 @@
 
 import {
   ActionRowBuilder,
-  ButtonBuilder,
   type ButtonInteraction,
   ButtonStyle,
   ChannelType,
@@ -14,28 +13,21 @@ import {
 } from "discord.js";
 import { createLogger } from "@/core/logger";
 import { guardModerationComponentAction } from "@/features/moderation/authorization";
+import { routes } from "../routes";
 
 const log = createLogger("automod:raid-alert");
-
-export const RAID_LOCKDOWN_PREFIX = "automod:raid:lockdown:";
-export const RAID_DISMISS_PREFIX = "automod:raid:dismiss:";
-
-export const isRaidLockdown = (id: string): boolean => id.startsWith(RAID_LOCKDOWN_PREFIX);
-export const isRaidDismiss = (id: string): boolean => id.startsWith(RAID_DISMISS_PREFIX);
 
 async function disableButtons(interaction: ButtonInteraction): Promise<void> {
   try {
     const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId("automod:raid:lockdown:_done")
-        .setLabel("Lockdown Server")
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(true),
-      new ButtonBuilder()
-        .setCustomId("automod:raid:dismiss:_done")
-        .setLabel("Dismiss")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(true),
+      routes["raid-lockdown"].button(
+        {},
+        { label: "Lockdown Server", style: ButtonStyle.Danger, disabled: true },
+      ),
+      routes["raid-dismiss"].button(
+        {},
+        { label: "Dismiss", style: ButtonStyle.Secondary, disabled: true },
+      ),
     );
     await interaction.message.edit({ components: [row] });
   } catch {

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { MemberJoined } from "@/events/member-joined";
-import { getListenMetadata, getOnMetadata } from "@/framework/decorators";
-import AutomodHandlers from "./handlers";
+import handlers from "./handlers";
 
 describe("automod handlers", () => {
-  it("wires message checks, join lifecycle, and expiry sweep through decorators", () => {
-    const handlers = new AutomodHandlers();
+  it("wires message checks, join lifecycle, and expiry sweep as registrations", () => {
+    const regs = handlers.registrations;
 
-    expect(getOnMetadata(handlers).map((entry) => entry.event)).toContain(MemberJoined);
-    expect(getListenMetadata(handlers).map((entry) => entry.event)).toEqual(
+    expect(regs.some((r) => r.kind === "event" && r.ctor === MemberJoined)).toBe(true);
+
+    const listenEvents = regs.filter((r) => r.kind === "listen").map((r) => r.event);
+    expect(listenEvents).toEqual(
       expect.arrayContaining(["messageCreate", "guildMemberUpdate", "clientReady"]),
     );
   });

@@ -1,11 +1,8 @@
 /**
- * AutoMod runtime handlers for raw Discord events and framework components.
- *
- * This class is discovered by the feature loader through the top-level
- * `handlers.ts` convention. It bridges three boundaries:
- * - raw Discord events via `@Listen` for high-volume message/member activity;
- * - framework events via `@On` for internal member-joined flow;
- * - component IDs via `@Handle` for raid alert buttons.
+ * AutoMod runtime handlers — a flat registration list bridging three boundaries:
+ * - raw Discord events via `listen(...)` for high-volume message/member activity;
+ * - framework events via `on(...)` for the internal member-joined flow;
+ * - component routes via `routeHandlers(...)` for raid alert buttons.
  *
  * Invariants:
  * - Message handling must fail closed to the handler, not the bot process.
@@ -13,29 +10,18 @@
  * - TTL indexes are intentionally not used for temp roles because expiry has
  *   Discord side effects: the role must be removed before the grant row is gone.
  */
-import {
-  type ButtonInteraction,
-  type Client,
-  Events,
-  type GuildMember,
-  type Message,
-} from "discord.js";
+import type { GuildMember, Message } from "discord.js";
 import { TempRoleGrant, tempRoleGrantId } from "@/components/temp-role-grant";
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import { MemberJoined } from "@/events/member-joined";
 import { recordAutomodSystemCase } from "@/features/moderation/service";
-import { Handle, Listen, On } from "@/framework";
+import { defineHandlers, listen, on, routeHandlers } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { detectAiClassificationSignals } from "./aiDetector";
 import { detectBannedImageSignals } from "./bannedImages";
 import { detectCrossChannelSpam } from "./crossChannelSpam";
-import {
-  handleRaidDismiss,
-  handleRaidLockdown,
-  RAID_DISMISS_PREFIX,
-  RAID_LOCKDOWN_PREFIX,
-} from "./handlers/raidAlert";
+import { handleRaidDismiss, handleRaidLockdown } from "./handlers/raidAlert";
 import { detectMentionSpam } from "./mentionSpam";
 import {
   evaluatePerUserSlow,
@@ -43,6 +29,7 @@ import {
   type PerUserSlowDecision,
   perUserSlowInputFromMessage,
 } from "./perUserSlow";
+import { routes } from "./routes";
 import {
   applyAutomodDecision,
   detectMessageContentSignals,
@@ -61,22 +48,22 @@ const RECENTLY_JOINED_POLICY_ID = "recentlyJoined";
 const PER_USER_SLOW_POLICY_PREFIX = "perUserSlow:";
 const observedSlowGrantIds = new Set<string>();
 const log = createLogger("automod:handlers");
+// Per-feature state that the handler class used to hold as an instance field is
+// now a module-level closure (one bot per process).
+let expiryTimer: ReturnType<typeof setInterval> | null = null;
 
-export default class AutomodHandlers {
-  private expiryTimer: ReturnType<typeof setInterval> | null = null;
+export default defineHandlers([
+  ...routeHandlers(routes, {
+    // Raid alert buttons carry no args; the handlers act on interaction.guild.
+    "raid-lockdown": async (interaction) => {
+      await handleRaidLockdown(interaction);
+    },
+    "raid-dismiss": async (interaction) => {
+      await handleRaidDismiss(interaction);
+    },
+  }),
 
-  @Handle(RAID_LOCKDOWN_PREFIX)
-  async onRaidLockdown(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleRaidLockdown(interaction);
-  }
-
-  @Handle(RAID_DISMISS_PREFIX)
-  async onRaidDismiss(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleRaidDismiss(interaction);
-  }
-
-  @On(MemberJoined)
-  async onMemberJoined(event: MemberJoined, ctx: Ctx): Promise<void> {
+  on(MemberJoined, async (event, ctx) => {
     const guildResult = await getGuild(event.guildId);
     const guildConfig = guildResult.isOk() ? guildResult.unwrap() : null;
     const policy = guildConfig?.automod.tempRolePolicies.recentlyJoined;
@@ -98,10 +85,9 @@ export default class AutomodHandlers {
     const roleId = policy.roleId;
     if (!roleId) return;
     await grantTempRole(ctx, member, roleId, policy.durationSeconds);
-  }
+  }),
 
-  @Listen("messageCreate")
-  async onMessage(message: Message, ctx: Ctx): Promise<void> {
+  listen("messageCreate", async (message, ctx) => {
     try {
       if (message.author.bot || !message.guild) return;
       const guildResult = await getGuild(message.guild.id);
@@ -149,31 +135,34 @@ export default class AutomodHandlers {
     } catch (error) {
       log.error("AutoMod message handler failed", error);
     }
-  }
+  }),
 
-  @Listen(Events.GuildMemberUpdate)
-  async onMemberUpdated(oldMember: GuildMember, newMember: GuildMember, ctx: Ctx): Promise<void> {
+  listen("guildMemberUpdate", async (oldMember, newMember, ctx) => {
     const guildResult = await getGuild(newMember.guild.id);
     const guild = guildResult.isOk() ? guildResult.unwrap() : null;
     if (!guild) return;
 
-    for (const rule of newlyAddedPerUserSlowRules(guild.automod, oldMember, newMember)) {
+    // oldMember may be partial when uncached; treat as full to match prior behavior.
+    for (const rule of newlyAddedPerUserSlowRules(
+      guild.automod,
+      oldMember as GuildMember,
+      newMember,
+    )) {
       await savePerUserSlowGrant(ctx, newMember, rule.roleId, rule.durationSeconds);
     }
-  }
+  }),
 
-  @Listen(Events.ClientReady)
-  onReady(_client: Client, ctx: Ctx): void {
-    if (this.expiryTimer) return;
+  listen("clientReady", (_client, ctx) => {
+    if (expiryTimer) return;
     // WHY: expiry is a sweep, not Mongo TTL. Deleting the DB row without first
     // removing the Discord role would strand temporary access on the member.
-    this.expiryTimer = setInterval(() => {
+    expiryTimer = setInterval(() => {
       void sweepExpiredTempRoles(ctx).catch((error) => {
         log.error("Failed to sweep temp-role grants", error);
       });
     }, EXPIRY_SWEEP_MS);
-  }
-}
+  }),
+]);
 
 function perUserSlowPolicyId(roleId: string): string {
   return `${PER_USER_SLOW_POLICY_PREFIX}${roleId}`;
