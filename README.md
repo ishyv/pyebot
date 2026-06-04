@@ -1,17 +1,22 @@
 # tx-v2
 
-tx-v2 is a Bun-first TypeScript framework for Discord bots.
+tx-v2 is a Bun-first TypeScript framework and starter bot for Discord projects
+that should feel like normal application code: feature folders, typed command
+modules, explicit persistence, and a dashboard that reads the same metadata the
+runtime uses.
 
-It provides:
+| What you build | What tx gives you |
+| --- | --- |
+| Slash commands | Fluent `command(name)` DSL with typed options, subcommands, cooldowns, permissions, and deferred replies |
+| Feature modules | Folder-based discovery under `src/features/<id>/` with one small descriptor |
+| Components and events | Feature-owned handlers for Discord interactions, framework events, and raw Discord events |
+| State | Mongo-backed `component(...)` models accessed through `Ctx` |
+| Operations | Feature toggles, config metadata, doctor checks, and an embedded Svelte dashboard |
 
-- feature folders under `src/features/<id>/`
-- a typed `command(name)` DSL for slash commands
-- decorated handlers for components and events
-- typed Mongo-backed components through `Ctx`
-- feature toggles and dashboard config metadata
-
-The framework is latest-only. Old authoring APIs and old data shapes are removed
-instead of bridged.
+> [!TIP]
+> New here? Read the Quick Start, skim the Framework API table, then open
+> [`src/features/example/`](./src/features/example/). That example is the boring
+> path on purpose.
 
 ## Quick Start
 
@@ -20,6 +25,8 @@ Requirements:
 - Bun 1.1.0 or newer
 - a Discord application and bot token
 - MongoDB when running the bundled full bot feature set
+
+Install dependencies and check the environment:
 
 ```bash
 bun install
@@ -42,6 +49,10 @@ DB_NAME=txbot
 
 Use `GUILD_ID` while developing slash commands so Discord updates them quickly.
 Leave it empty for global command registration.
+
+> [!NOTE]
+> This repository currently targets Bun. Node support is not a promise until the
+> Bun path is dull, reliable, and worth copying.
 
 ## First Feature
 
@@ -85,6 +96,8 @@ References:
 
 ## Framework API
 
+The common authoring surface fits on one screen:
+
 | Need | Use |
 | --- | --- |
 | Feature descriptor | `defineFeature({ id, name, description, defaultEnabled })` |
@@ -96,8 +109,8 @@ References:
 | Early ACK | `.defer("ephemeral")` or `.defer("public")` |
 | Cooldowns | `.cooldown("24h", "user")` |
 | Permissions | `.defaultMemberPermissions(...)` and `.require("subcommand", permission)` |
-| Component routes | `handlers.ts` methods with `@Handle("prefix:")` |
-| Events | `@On(EventClass)` or `@Listen("discordEvent")` |
+| Component routes | `handlers.ts` with typed route handlers |
+| Events | Framework bus events or raw Discord event listeners |
 | Persistence | `component({ collection, schema })` plus `ctx.get/ensure/set/patch/delete/query` |
 | Replies | return payloads, or use `ctx.respond` for multi-step flows |
 | Dashboard config | `defineFeatureConfig(...)` from `@/core/featureConfig` |
@@ -124,16 +137,16 @@ Do not branch on `c.subcommand`. Use object `run` for inline behavior or
 
 ## Project Map
 
-- `src/framework/**` - loader, decorators, command DSL, component routing, event
-  bus, `World`, and `Ctx`
-- `src/core/**` - DB, logging, response helpers, feature config metadata,
-  result/state helpers, and legacy middleware context
-- `src/features/**` - bundled bot features
-- `src/features/example/**` - annotated reference feature
-- `src/features/rpg/content/**` - active RPG runtime content
-- `src/content/**` - seed/catalog authoring helpers
-- `webapp/**` - embedded Svelte dashboard
-- `docs/**` - authoring references and project notes
+| Path | Purpose |
+| --- | --- |
+| `src/framework/**` | Loader, command DSL, component routing, event bus, `World`, and `Ctx` |
+| `src/core/**` | DB, logging, response helpers, feature config metadata, result/state helpers, and legacy middleware context |
+| `src/features/**` | Bundled moderation, economy, RPG, AI, tickets, offers, automod, autoroles, admin panels, and counting features |
+| `src/features/example/**` | Annotated reference feature |
+| `src/features/rpg/content/**` | Active RPG runtime content |
+| `src/content/**` | Seed/catalog authoring helpers |
+| `webapp/**` | Embedded Svelte dashboard |
+| `docs/**` | Authoring references and project notes |
 
 ## Commands
 
@@ -157,18 +170,9 @@ bun test ./src
 cd webapp && bun run check && bun run test && bun run build
 ```
 
-## Latest-Only Policy
+## Compatibility Boundary
 
-Current public authoring surface:
-
-- `defineFeature({ id, name, description, defaultEnabled })`
-- feature folder discovery under `src/features/<id>/`
-- `command(name)` with typed options, object subcommands, `.run()`, `.handle()`,
-  `.group()`, `.defer()`, `.cooldown()`, and command permission helpers
-- `handlers.ts` classes using `@Handle`, `@Listen`, and `@On`
-- framework `Ctx` plus `component(...)` for typed component persistence
-- dashboard config declared with `defineFeatureConfig(...)`
-- feature toggles stored in `guild_features.overrides` by feature id
-- active RPG runtime content in `src/features/rpg/content/**`
-- seed item catalog in `src/content/packs/default.ts`
-- `DISCORD_TOKEN` as the single Discord token environment key
+tx keeps one current authoring path in the README: feature folders,
+`defineFeature(...)`, `command(name)`, `handlers.ts`, `component(...)`, and
+`defineFeatureConfig(...)`. Older framework shapes are documented in migration
+notes when needed, but new code should follow the surface above.
