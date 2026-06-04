@@ -20,7 +20,7 @@ import {
   successMessage,
   text,
   V2_COMPONENT_LIMIT,
-  V2_TOP_LEVEL_LIMIT,
+  v2Group,
   v2Message,
 } from "./v2";
 
@@ -34,9 +34,11 @@ describe("v2Message", () => {
     expect(() => v2Message()).toThrow(/at least one/i);
   });
 
-  test("throws when top-level count exceeds limit", () => {
-    const tops = Array.from({ length: V2_TOP_LEVEL_LIMIT + 1 }, () => text("x"));
-    expect(() => v2Message(...tops)).toThrow(/top-level/i);
+  test("does not enforce the removed V2 top-level component limit", () => {
+    const tops = Array.from({ length: 11 }, () => text("x"));
+    const payload = v2Message(...tops);
+
+    expect(payload.components).toHaveLength(11);
   });
 
   test("throws when text budget exceeded across multiple text displays", () => {
@@ -60,6 +62,53 @@ describe("v2Message", () => {
     const chunk = "a".repeat(2000);
     const payload = v2Message(container("info", text(chunk), text(chunk)));
     expect(payload.components).toHaveLength(1);
+  });
+});
+
+describe("v2Group", () => {
+  test("keeps exactly forty components in one framed message", () => {
+    const items = Array.from({ length: 38 }, (_, i) => `item ${i + 1}`);
+    const group = v2Group({
+      accent: "info",
+      header: "Items",
+      items,
+      renderItem: (item) => text(item),
+    });
+
+    expect(group.chunks).toHaveLength(1);
+    expect(JSON.stringify(group.chunks[0].components)).not.toContain("Continued");
+    expect(() => v2Message(...group.chunks[0].components)).not.toThrow();
+  });
+
+  test("splits when component count would exceed forty", () => {
+    const items = Array.from({ length: 39 }, (_, i) => `item ${i + 1}`);
+    const group = v2Group({
+      accent: "info",
+      header: "Items",
+      items,
+      renderItem: (item) => text(item),
+    });
+
+    expect(group.chunks).toHaveLength(2);
+    expect(JSON.stringify(group.chunks[1].components)).toContain("Continued 2/2");
+    for (const chunk of group.chunks) {
+      expect(() => v2Message(...chunk.components)).not.toThrow();
+    }
+  });
+
+  test("splits across the V2 text budget", () => {
+    const items = ["a".repeat(1990), "b".repeat(1990), "c".repeat(1990)];
+    const group = v2Group({
+      accent: "info",
+      header: "Big text",
+      items,
+      renderItem: (item) => text(item),
+    });
+
+    expect(group.chunks.length).toBeGreaterThan(1);
+    for (const chunk of group.chunks) {
+      expect(() => v2Message(...chunk.components)).not.toThrow();
+    }
   });
 });
 

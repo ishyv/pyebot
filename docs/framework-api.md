@@ -127,8 +127,8 @@ export default command("modset")
 | `c.expect(result)` | Throw the error from `Err`. |
 | `c.ok/info/warn/fail(markdown)` | Build themed Components V2 responses. |
 
-Use `ctx.respond.defer`, `ctx.respond.send`, and `ctx.respond.fail` for
-multi-step interaction responses.
+Use `ctx.respond.defer`, `ctx.respond.send`, `ctx.respond.sendGroup`, and
+`ctx.respond.fail` for multi-step interaction responses.
 
 ## Handlers And Events
 
@@ -185,6 +185,11 @@ export const PollState = component({
 | `ctx.logger` | Feature-tagged logger. |
 | `ctx.cooldowns`, `ctx.locks`, `ctx.sessions` | Shared runtime state helpers. |
 | `ctx.respond` | Interaction response helper. |
+
+`ctx.respond.sendGroup(v2Group(...))` sends a logical Components V2 response as
+one or more Discord messages when the component/text budget requires it. The
+returned runtime handle can `replace(nextGroup)` or `delete()` the linked
+messages while that interaction token is still usable.
 
 ## Dashboard Config
 

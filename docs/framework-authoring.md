@@ -106,6 +106,9 @@ For multi-step flows, reach for `ctx.respond`:
   (or use the DSL sugar `.defer("ephemeral" | "public")`).
 - `ctx.respond.send(payload)` — reply, edit the deferred reply, or follow up, chosen
   automatically from the interaction's current state. Returns a `Result` instead of throwing.
+- `ctx.respond.sendGroup(v2Group(...))` — send a logical Components V2 response as one or
+  more linked messages when the V2 component/text budget requires it. The returned runtime
+  handle supports `replace(nextGroup)` and `delete()`.
 - `ctx.respond.fail(payload)` — like `send` but forces the message ephemeral; use for errors.
 - `c.unwrap(result)` — unwrap a `Result` or short-circuit `.run()` with a mapped error message.
 

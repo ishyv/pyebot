@@ -5,15 +5,39 @@ import {
   createInteractionResponder,
   validateInteractionPayload,
 } from "@/core/interactionResponder";
+import { container, text, v2Group } from "@/ui/v2";
 
 function fakeInteraction(overrides: Record<string, unknown> = {}) {
   const calls: Array<{ method: string; payload?: unknown }> = [];
+  const messages: Array<{
+    method: string;
+    payload?: unknown;
+    edit(payload: unknown): Promise<unknown>;
+    delete(): Promise<unknown>;
+  }> = [];
+  const makeMessage = (method: string, payload: unknown) => {
+    const message = {
+      method,
+      payload,
+      async edit(next: unknown) {
+        calls.push({ method: `${method}.edit`, payload: next });
+        message.payload = next;
+        return message;
+      },
+      async delete() {
+        calls.push({ method: `${method}.delete` });
+      },
+    };
+    messages.push(message);
+    return message;
+  };
   const interaction = {
     replied: false,
     deferred: false,
     async reply(payload: unknown) {
       calls.push({ method: "reply", payload });
       interaction.replied = true;
+      return makeMessage("reply", payload);
     },
     async deferReply(payload: unknown) {
       calls.push({ method: "deferReply", payload });
@@ -23,13 +47,15 @@ function fakeInteraction(overrides: Record<string, unknown> = {}) {
       calls.push({ method: "editReply", payload });
       interaction.deferred = false;
       interaction.replied = true;
+      return makeMessage("editReply", payload);
     },
     async followUp(payload: unknown) {
       calls.push({ method: "followUp", payload });
+      return makeMessage("followUp", payload);
     },
     ...overrides,
   };
-  return { interaction, calls };
+  return { interaction, calls, messages };
 }
 
 describe("InteractionResponder", () => {
@@ -62,6 +88,109 @@ describe("InteractionResponder", () => {
     await responder.send({ content: "Second message" });
 
     expect(calls.map((call) => call.method)).toEqual(["followUp"]);
+  });
+
+  it("sends a V2 group as one reply plus follow-ups", async () => {
+    const { interaction, calls } = fakeInteraction();
+    const responder = createInteractionResponder(interaction as never);
+    const group = v2Group({
+      accent: "info",
+      header: "Items",
+      items: Array.from({ length: 39 }, (_, i) => `item ${i + 1}`),
+      renderItem: (item) => text(item),
+    });
+
+    const result = await responder.sendGroup(group);
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.map((call) => call.method)).toEqual(["reply", "followUp"]);
+  });
+
+  it("edits a deferred response for the first V2 group chunk", async () => {
+    const { interaction, calls } = fakeInteraction();
+    const responder = createInteractionResponder(interaction as never);
+    const group = v2Group({
+      accent: "info",
+      header: "Items",
+      items: Array.from({ length: 39 }, (_, i) => `item ${i + 1}`),
+      renderItem: (item) => text(item),
+    });
+
+    await responder.defer({ visibility: "ephemeral" });
+    const result = await responder.sendGroup(group);
+
+    expect(result.isOk()).toBe(true);
+    expect(calls.map((call) => call.method)).toEqual(["deferReply", "editReply", "followUp"]);
+  });
+
+  it("keeps follow-up chunks ephemeral after an ephemeral defer", async () => {
+    const { interaction, calls } = fakeInteraction();
+    const responder = createInteractionResponder(interaction as never);
+    const group = v2Group({
+      accent: "info",
+      header: "Items",
+      items: Array.from({ length: 39 }, (_, i) => `item ${i + 1}`),
+      renderItem: (item) => text(item),
+    });
+
+    await responder.defer({ visibility: "ephemeral" });
+    await responder.sendGroup(group);
+
+    const followUp = calls.find((call) => call.method === "followUp");
+    expect((followUp?.payload as { flags: number }).flags & MessageFlags.Ephemeral).toBe(
+      MessageFlags.Ephemeral,
+    );
+  });
+
+  it("replaces and deletes existing V2 group messages as the chunk count changes", async () => {
+    const { interaction, calls } = fakeInteraction();
+    const responder = createInteractionResponder(interaction as never);
+    const initial = v2Group({
+      accent: "info",
+      header: "Items",
+      items: Array.from({ length: 39 }, (_, i) => `item ${i + 1}`),
+      renderItem: (item) => text(item),
+    });
+    const next = v2Group({
+      accent: "info",
+      header: "Items",
+      items: ["item 1"],
+      renderItem: (item) => text(item),
+    });
+
+    const sent = await responder.sendGroup(initial);
+    expect(sent.isOk()).toBe(true);
+    if (sent.isErr()) return;
+    const replaced = await sent.value.replace(next);
+
+    expect(replaced.isOk()).toBe(true);
+    expect(calls.map((call) => call.method)).toEqual([
+      "reply",
+      "followUp",
+      "reply.edit",
+      "followUp.delete",
+    ]);
+  });
+
+  it("returns an invalid payload error when a V2 group chunk cannot be sent", async () => {
+    const { interaction } = fakeInteraction();
+    const responder = createInteractionResponder(interaction as never);
+
+    const result = await responder.sendGroup({
+      chunks: [
+        {
+          components: [container("info", text("ok"))],
+          flags: MessageFlags.IsComponentsV2,
+        },
+        {
+          components: [],
+          flags: MessageFlags.IsComponentsV2,
+        },
+      ],
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) expect(result.error.kind).toBe("invalid_payload");
   });
 
   it("clears deferred loading state when reporting a failure", async () => {
@@ -125,15 +254,14 @@ describe("interaction payload validation", () => {
     expect(result.isOk()).toBe(true);
   });
 
-  it("rejects more than ten top-level components even for Components V2", () => {
+  it("does not reject more than ten top-level components for Components V2", () => {
     const components = Array.from({ length: 11 }, () => ({ type: 1, components: [] }));
     const result = validateInteractionPayload({
       components,
       flags: MessageFlags.IsComponentsV2,
     });
 
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) expect(result.error.message).toContain("10");
+    expect(result.isOk()).toBe(true);
   });
 
   it("rejects oversized content and embed arrays before Discord does", () => {

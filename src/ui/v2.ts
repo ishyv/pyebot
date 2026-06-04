@@ -49,9 +49,6 @@ export const V2_COMPONENT_LIMIT = 40;
 /** Discord's hard limit on summed TextDisplay characters per message. */
 export const V2_TEXT_BUDGET = 4000;
 
-/** Discord's hard limit on top-level components per message. */
-export const V2_TOP_LEVEL_LIMIT = 10;
-
 /**
  * A top-level component allowed at the root of a V2 message.
  *
@@ -86,15 +83,39 @@ export type RowChild =
   | UserSelectMenuBuilder
   | MentionableSelectMenuBuilder;
 
+/** The plain payload shape produced by Components V2 message helpers. */
+export interface V2MessagePayload {
+  components: V2Top[];
+  flags: MessageFlags.IsComponentsV2;
+}
+
+/** A logical Components V2 response split into Discord-sized message chunks. */
+export interface V2MessageGroup {
+  readonly chunks: readonly V2MessagePayload[];
+}
+
+export interface V2GroupArgs<T> {
+  /** Accent used for every chunk's repeated frame. */
+  readonly accent: AccentKey;
+  /** Header repeated at the top of every chunk. */
+  readonly header: string;
+  /** Ordered content entries that may span several Discord messages. */
+  readonly items: readonly T[];
+  /** Render one content entry as a child inside that chunk's container. */
+  readonly renderItem: (item: T, index: number) => ContainerChild;
+  /** Optional control rows appended after all content entries. */
+  readonly controls?: readonly ContainerChild[];
+}
+
 /**
  * Wraps one or more top-level components into a V2 message payload.
  *
  * - Sets `MessageFlags.IsComponentsV2`. Callers must NOT add `content`, `embeds`,
  *   `poll`, or `stickers` to the resulting object — Discord rejects V2 payloads
  *   that carry any of those fields.
- * - Enforces the three V2 limits up front: top-level count, total component
- *   count, and summed TextDisplay characters. Violations throw at construction
- *   time, surfacing the failure at the view that produced the bad tree.
+ * - Enforces V2's message-wide budgets up front: total component count and
+ *   summed TextDisplay characters. Violations throw at construction time,
+ *   surfacing the failure at the view that produced the bad tree.
  *
  * Returned shape is intentionally a plain object so it can be passed to either
  * `interaction.reply`/`editReply`/`update` or `channel.send` without further
@@ -106,11 +127,6 @@ export function v2Message(...children: V2Top[]): {
 } {
   if (children.length === 0) {
     throw new Error("v2Message requires at least one top-level component.");
-  }
-  if (children.length > V2_TOP_LEVEL_LIMIT) {
-    throw new Error(
-      `v2Message: ${children.length} top-level components exceeds limit ${V2_TOP_LEVEL_LIMIT}.`,
-    );
   }
   let totalComponents = 0;
   let totalChars = 0;
@@ -128,6 +144,26 @@ export function v2Message(...children: V2Top[]): {
     throw new Error(`v2Message: ${totalChars} text chars exceeds budget ${V2_TEXT_BUDGET}.`);
   }
   return { components: children, flags: MessageFlags.IsComponentsV2 };
+}
+
+/**
+ * Renders one logical V2 response as one or more valid Discord messages.
+ *
+ * This helper is explicit so `v2Message(...)` can stay strict for normal views.
+ * Every chunk repeats the same container accent/header; continuation markers are
+ * added only when the group actually spans multiple Discord messages.
+ */
+export function v2Group<T>(args: V2GroupArgs<T>): V2MessageGroup {
+  const singlePass = chunkV2Group(args);
+  if (singlePass.length === 1) return { chunks: singlePass };
+
+  let total = singlePass.length;
+  for (let i = 0; i < 5; i++) {
+    const chunks = chunkV2Group(args, total);
+    if (chunks.length === total) return { chunks };
+    total = chunks.length;
+  }
+  return { chunks: chunkV2Group(args, total) };
 }
 
 /** Standard success response for short command confirmations. */
@@ -283,6 +319,66 @@ export function gallery(...items: MediaGalleryItemBuilder[]): MediaGalleryBuilde
     throw new Error(`gallery: ${items.length} items; valid range is 1..10.`);
   }
   return new MediaGalleryBuilder().addItems(...items);
+}
+
+type GroupEntry = { readonly child: ContainerChild; readonly label: string };
+
+function chunkV2Group<T>(args: V2GroupArgs<T>, continuationTotal?: number): V2MessagePayload[] {
+  const entries: GroupEntry[] = [
+    ...args.items.map((item, index) => ({
+      child: args.renderItem(item, index),
+      label: `item ${index + 1}`,
+    })),
+    ...(args.controls ?? []).map((child, index) => ({ child, label: `control ${index + 1}` })),
+  ];
+
+  const chunks: ContainerChild[][] = [];
+  let current: ContainerChild[] = [];
+
+  for (const entry of entries) {
+    const candidate = [...current, entry.child];
+    if (canBuildGroupChunk(args, candidate, chunks.length + 1, continuationTotal)) {
+      current = candidate;
+      continue;
+    }
+    if (current.length === 0) {
+      throw new Error(`v2Group: ${entry.label} cannot fit in one V2 message chunk.`);
+    }
+    chunks.push(current);
+    current = [entry.child];
+    if (!canBuildGroupChunk(args, current, chunks.length + 1, continuationTotal)) {
+      throw new Error(`v2Group: ${entry.label} cannot fit in one V2 message chunk.`);
+    }
+  }
+
+  chunks.push(current);
+  return chunks.map((children, index) =>
+    buildGroupChunk(args, children, index + 1, continuationTotal),
+  );
+}
+
+function canBuildGroupChunk<T>(
+  args: V2GroupArgs<T>,
+  children: readonly ContainerChild[],
+  index: number,
+  total?: number,
+): boolean {
+  try {
+    buildGroupChunk(args, children, index, total);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildGroupChunk<T>(
+  args: V2GroupArgs<T>,
+  children: readonly ContainerChild[],
+  index: number,
+  total?: number,
+): V2MessagePayload {
+  const marker = total && total > 1 ? [text(`-# Continued ${index}/${total}`)] : [];
+  return v2Message(container(args.accent, text(`## ${args.header}`), ...marker, ...children));
 }
 
 // ---------------------------------------------------------------------------
