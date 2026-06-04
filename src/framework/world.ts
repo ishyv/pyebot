@@ -46,7 +46,7 @@
 
 import type { Client, Interaction } from "discord.js";
 import type { Collection, Db, Document, Filter as MongoFilter } from "mongodb";
-import { getDb } from "@/core/db";
+import { getDb, getMongoClient } from "@/core/db";
 import { createInteractionResponder, type InteractionResponder } from "@/core/interactionResponder";
 import { createLogger, type Logger } from "@/core/logger";
 import { cooldowns, locks, sessions } from "@/core/state";
@@ -54,7 +54,7 @@ import type { EntityComponent, EntityKind } from "./entity";
 import { EntityCache, EntityHandle, EntityQuery } from "./entity-handle";
 import { EntityStore } from "./entity-store";
 import { EventBus } from "./event-bus";
-import type { Component, ComponentRecord, Ctx, Entity } from "./types";
+import type { Component, ComponentRecord, Ctx, Entity, Transaction } from "./types";
 
 // Helper: identify a cache row for a (collection, id) tuple.
 function cacheKey(collection: string, id: Entity): string {
@@ -346,6 +346,26 @@ class InteractionCtx implements Ctx {
 
   select<T>(component: EntityComponent<T>): EntityQuery<T> {
     return new EntityQuery(this.world.entities, component);
+  }
+
+  async transaction<R>(fn: (tx: Transaction) => Promise<R>): Promise<R> {
+    const client = await getMongoClient();
+    const session = client.startSession();
+    try {
+      let result!: R;
+      // withTransaction may re-run fn on transient errors; rebuild the tx cache
+      // each attempt so a retry never reads a prior attempt's snapshot.
+      await session.withTransaction(async () => {
+        const cache = new EntityCache(this.world.entities, session);
+        const tx: Transaction = {
+          of: (kind, id) => new EntityHandle(this.world.entities, cache, kind, id, session),
+        };
+        result = await fn(tx);
+      });
+      return result;
+    } finally {
+      await session.endSession();
+    }
   }
 
   emit<E>(event: E): Promise<void> {

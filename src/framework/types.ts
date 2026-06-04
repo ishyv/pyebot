@@ -73,6 +73,16 @@ export interface Component<T> {
 /** Convenience: a component value with its `_id` attached (as returned by `ctx.query`). */
 export type ComponentRecord<T> = T & { _id: Entity };
 
+/**
+ * The entity surface available inside `ctx.transaction(...)`. Intentionally
+ * narrow — single-entity reads/writes that share the transaction's session.
+ * Cross-entity `select` is deliberately omitted; add it only if a real
+ * transactional query appears.
+ */
+export interface Transaction {
+  of(kind: EntityKind, id: Entity): EntityHandle;
+}
+
 // ─── Events ────────────────────────────────────────────────────────────────
 
 /**
@@ -282,6 +292,13 @@ export interface Ctx {
    * still occupies that name; it can reclaim it once the legacy surface retires.
    */
   select<T>(component: EntityComponent<T>): EntityQuery<T>;
+
+  /**
+   * Run a closure inside a MongoDB transaction. The `tx` handles thread a shared
+   * session, so every write commits or rolls back together. Requires a replica
+   * set (as the marketplace already does). Returns the closure's result.
+   */
+  transaction<R>(fn: (tx: Transaction) => Promise<R>): Promise<R>;
 
   // -- Events -------------------------------------------------------------
 

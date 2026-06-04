@@ -64,6 +64,9 @@ function fakeCtx(state: ComponentState, failOnSet = false): Ctx {
     select: (() => {
       throw new Error("entity API not used in this mock");
     }) as Ctx["select"],
+    transaction: (() => {
+      throw new Error("entity API not used in this mock");
+    }) as Ctx["transaction"],
   };
 }
 

@@ -100,6 +100,9 @@ function makeCtx(
     select: () => {
       throw new Error("entity API not used in this mock");
     },
+    transaction: () => {
+      throw new Error("entity API not used in this mock");
+    },
   } as Ctx;
 }
 

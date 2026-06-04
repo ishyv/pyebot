@@ -10,6 +10,7 @@
  * that entity within the same interaction is free and sees prior writes.
  */
 
+import type { ClientSession } from "mongodb";
 import type { EntityComponent, EntityKind } from "./entity";
 import { parseComponentField } from "./entity";
 import {
@@ -34,7 +35,15 @@ import type { Entity } from "./types";
 export class EntityCache {
   private readonly docs = new Map<string, EntityDoc | null>();
 
-  constructor(private readonly store: EntityStore) {}
+  /**
+   * `session`, when present, scopes every read to a transaction so the cache
+   * sees the transaction's own view. A transaction therefore uses its own
+   * cache, separate from the surrounding interaction's.
+   */
+  constructor(
+    private readonly store: EntityStore,
+    private readonly session?: ClientSession,
+  ) {}
 
   private key(kind: EntityKind, id: Entity): string {
     return `${kind.collection}::${id}`;
@@ -45,7 +54,7 @@ export class EntityCache {
     const key = this.key(kind, id);
     const cached = this.docs.get(key);
     if (cached !== undefined) return cached;
-    const doc = await this.store.loadDoc(kind, id);
+    const doc = await this.store.loadDoc(kind, id, this.session);
     this.docs.set(key, doc);
     return doc;
   }
@@ -79,11 +88,17 @@ export class EntityCache {
  * fresh one per call, all sharing the Ctx's cache.
  */
 export class EntityHandle {
+  /**
+   * `session` is set only for handles minted inside `ctx.transaction(...)`; it
+   * threads into every write so the whole closure commits or rolls back as one.
+   * The shared `cache` carries the matching session for reads.
+   */
   constructor(
     private readonly store: EntityStore,
     private readonly cache: EntityCache,
     private readonly kind: EntityKind,
     private readonly id: Entity,
+    private readonly session?: ClientSession,
   ) {}
 
   /**
@@ -111,7 +126,7 @@ export class EntityHandle {
 
   /** Replace a component's value wholesale. Prefer `update` for read-modify-write. */
   async set<T>(component: EntityComponent<T>, value: T): Promise<void> {
-    await this.store.setComponent(this.id, component, value);
+    await this.store.setComponent(this.id, component, value, this.session);
     this.cache.setField(this.kind, this.id, component.name, value);
   }
 
@@ -125,13 +140,13 @@ export class EntityHandle {
     patch: Partial<T> | ((current: T) => Partial<T>),
   ): Promise<void> {
     const partial = typeof patch === "function" ? patch(await this.get(component)) : patch;
-    const doc = await this.store.updateComponent(this.id, component, partial);
+    const doc = await this.store.updateComponent(this.id, component, partial, this.session);
     this.cache.replaceDoc(this.kind, this.id, doc);
   }
 
   /** Remove a component from the entity, leaving its other components intact. */
   async remove<T>(component: EntityComponent<T>): Promise<void> {
-    await this.store.removeComponent(this.id, component);
+    await this.store.removeComponent(this.id, component, this.session);
     this.cache.removeField(this.kind, this.id, component.name);
   }
 }
