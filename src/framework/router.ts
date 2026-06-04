@@ -1,7 +1,8 @@
 /**
- * Component router — routes button / select-menu interactions to the
- * correct feature handler by matching the longest `@Handle("prefix:")`
- * declared across all loaded features.
+ * Component router — routes button / select-menu / modal interactions to the
+ * correct handler by matching the longest route prefix across all loaded
+ * features. Prefixes come from `defineRoutes` (`ns:route:`); bootstrap adds one
+ * per component registration via `add`.
  *
  * Why longest-prefix-wins?
  *
@@ -15,8 +16,7 @@
  * would add code for no measurable benefit.
  */
 
-import { getHandleMetadata } from "./decorators";
-import type { BoundComponentHandler, LoadedFeature } from "./types";
+import type { BoundComponentHandler } from "./types";
 
 interface Route {
   readonly prefix: string;
@@ -28,24 +28,10 @@ export class ComponentRouter {
   /** Sorted by prefix length descending so longest matches win. */
   private readonly routes: Route[] = [];
 
-  /** Add a single route. Bootstrap uses this for the framework's own /features routes. */
+  /** Add a single route. Bootstrap adds one per component registration. */
   add(prefix: string, featureId: string, handler: BoundComponentHandler): void {
     this.routes.push({ prefix, featureId, handler });
     this.routes.sort((a, b) => b.prefix.length - a.prefix.length);
-  }
-
-  /** Register every @Handle method on a feature's handlers instance. */
-  registerFeature(feature: LoadedFeature): void {
-    if (!feature.handlers) return;
-    const entries = getHandleMetadata(feature.handlers);
-    for (const entry of entries) {
-      const method = (feature.handlers as Record<string, unknown>)[entry.methodKey];
-      if (typeof method !== "function") continue;
-      const bound = (method as (...a: unknown[]) => unknown).bind(
-        feature.handlers,
-      ) as BoundComponentHandler;
-      this.add(entry.prefix, feature.descriptor.id, bound);
-    }
   }
 
   /**

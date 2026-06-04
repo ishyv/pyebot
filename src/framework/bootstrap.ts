@@ -8,10 +8,9 @@
  *   2. Construct the World (which owns the EventBus).
  *   3. Build the command map: every feature's commands plus the
  *      framework's auto-generated `/features`.
- *   4. Register event listeners by reading @On metadata off each
- *      feature's handlers instance.
- *   5. Build the ComponentRouter from @Handle metadata, plus the
- *      framework's own `features:toggle:` route for the panel buttons.
+ *   4. Wire each feature's normalized registrations: events onto the bus,
+ *      raw listeners onto the client, component routes onto the router.
+ *   5. Add the framework's own `features:toggle:` route for the panel buttons.
  *   6. Return a single `dispatch(interaction)` function that the
  *      `client.on("interactionCreate", ...)` handler invokes.
  *

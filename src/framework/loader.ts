@@ -113,24 +113,12 @@ async function loadCommands(featureDir: string): Promise<CommandModule[]> {
   return result;
 }
 
-interface LoadedHandlers {
-  /** Legacy class instance (or null) — kept only for back-compat during migration. */
-  readonly instance: object | null;
-  /** Normalized triggers consumed by bootstrap and the capability graph. */
-  readonly registrations: RuntimeRegistration[];
-}
-
-const EMPTY_HANDLERS: LoadedHandlers = { instance: null, registrations: [] };
-
 /**
- * Load a feature's `handlers.ts` and normalize it into `RuntimeRegistration`s,
- * supporting BOTH authoring styles during the routing migration:
- *
- *   - new: `export default defineHandlers([...])` → a registration array.
- *   - legacy: `export default class { @On/@Handle/@Listen }` → read prototype
- *     metadata and bind each decorated method.
+ * Load a feature's `handlers.ts` and normalize its `defineHandlers([...])`
+ * default export into `RuntimeRegistration`s. A handlers file that doesn't
+ * default-export a `defineHandlers(...)` result is a boot-time authoring error.
  */
-async function loadHandlers(featureDir: string): Promise<LoadedHandlers> {
+async function loadHandlers(featureDir: string): Promise<RuntimeRegistration[]> {
   const handlersFile = join(featureDir, "handlers.ts");
   const handlersFileJs = join(featureDir, "handlers.js");
   const path = (await fileExists(handlersFile))
@@ -138,19 +126,16 @@ async function loadHandlers(featureDir: string): Promise<LoadedHandlers> {
     : (await fileExists(handlersFileJs))
       ? handlersFileJs
       : null;
-  if (!path) return EMPTY_HANDLERS;
+  if (!path) return [];
 
   const exported = await importDefault<unknown>(path);
-
-  // New style: defineHandlers([...]) — no class instance.
-  if (isFeatureHandlers(exported)) {
-    return { instance: null, registrations: registrationsFromHandlers(exported) };
+  if (!isFeatureHandlers(exported)) {
+    throw new Error(
+      `${path}: handlers.ts must default-export defineHandlers([...]). ` +
+        `The legacy decorated-class handler style has been removed.`,
+    );
   }
-
-  // Legacy style: a decorated class — instantiate, then read prototype metadata.
-  const HandlerClass = exported as new () => object;
-  const instance = new HandlerClass();
-  return { instance, registrations: registrationsFromHandlers(instance) };
+  return registrationsFromHandlers(exported);
 }
 
 /**
@@ -187,15 +172,10 @@ export async function loadFeatures(): Promise<LoadedFeature[]> {
       );
     }
     const commands = await loadCommands(featureDir);
-    const handlers = await loadHandlers(featureDir);
-    features.push({
-      descriptor,
-      commands,
-      handlers: handlers.instance,
-      registrations: handlers.registrations,
-    });
+    const registrations = await loadHandlers(featureDir);
+    features.push({ descriptor, commands, registrations });
     log.info(
-      `Loaded feature: ${descriptor.id} (${commands.length} commands, ${handlers.registrations.length} registrations)`,
+      `Loaded feature: ${descriptor.id} (${commands.length} commands, ${registrations.length} registrations)`,
     );
   }
   return features;

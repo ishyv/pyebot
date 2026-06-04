@@ -79,70 +79,81 @@ function planCommand(command: NewCommandCommand, cwd: string): FilePlan {
 }
 
 function planHandler(command: NewHandlerCommand, cwd: string): FilePlan {
-  const className = `${toPascal(command.feature)}Handlers`;
+  const dir = featureDir(cwd, command.feature);
+  if (command.handlerKind === "handle") {
+    return {
+      files: [
+        { path: join(dir, "routes.ts"), content: componentRoutes(command) },
+        { path: join(dir, "handlers.ts"), content: componentHandler() },
+      ],
+      notes: [],
+    };
+  }
   return {
     files: [
       {
-        path: join(featureDir(cwd, command.feature), "handlers.ts"),
-        content:
-          command.handlerKind === "listen"
-            ? listenHandler(command, className)
-            : command.handlerKind === "handle"
-              ? componentHandler(command, className)
-              : eventHandler(command, className),
+        path: join(dir, "handlers.ts"),
+        content: command.handlerKind === "listen" ? listenHandler(command) : eventHandler(command),
       },
     ],
     notes: [],
   };
 }
 
-function listenHandler(command: NewHandlerCommand, className: string): string {
+function listenHandler(command: NewHandlerCommand): string {
   const event = command.event ?? "messageCreate";
-  const method = command.method ?? `on${toPascal(event)}`;
   return [
-    'import { type Ctx, Listen } from "@/framework";',
+    'import { defineHandlers, listen } from "@/framework";',
     "",
-    `export default class ${className} {`,
-    `  @Listen(${quote(event)})`,
-    `  async ${method}(_event: unknown, _ctx: Ctx): Promise<void> {`,
+    "export default defineHandlers([",
+    `  listen(${quote(event)}, async (..._args) => {`,
     "    // Add feature-owned event handling here.",
-    "  }",
-    "}",
+    "  }),",
+    "]);",
     "",
   ].join("\n");
 }
 
-function componentHandler(command: NewHandlerCommand, className: string): string {
-  const prefix = command.prefix ?? `${command.feature}:`;
-  const method = command.method ?? "onComponent";
+function componentRoutes(command: NewHandlerCommand): string {
   return [
-    'import { type ButtonInteraction } from "discord.js";',
-    'import { type Ctx, Handle } from "@/framework";',
+    'import { defineRoutes } from "@/framework";',
     "",
-    `export default class ${className} {`,
-    `  @Handle(${quote(prefix)})`,
-    `  async ${method}(_interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {`,
-    "    // Add feature-owned component handling here.",
-    "  }",
-    "}",
+    "// One declaration drives both the customId encoding and the typed handler.",
+    `export const routes = defineRoutes(${quote(command.feature)}, {`,
+    "  action: {},",
+    "});",
     "",
   ].join("\n");
 }
 
-function eventHandler(command: NewHandlerCommand, className: string): string {
+function componentHandler(): string {
+  return [
+    'import { defineHandlers, routeHandlers } from "@/framework";',
+    'import { routes } from "./routes";',
+    "",
+    "export default defineHandlers([",
+    "  ...routeHandlers(routes, {",
+    "    action: async (_interaction, _args, _ctx) => {",
+    "      // Add feature-owned component handling here.",
+    "    },",
+    "  }),",
+    "]);",
+    "",
+  ].join("\n");
+}
+
+function eventHandler(command: NewHandlerCommand): string {
   const event = command.event ?? `${toPascal(command.feature)}Event`;
-  const method = command.method ?? `on${toPascal(event)}`;
   return [
-    'import { type Ctx, On } from "@/framework";',
+    'import { defineHandlers, on } from "@/framework";',
     "",
     `class ${event} {}`,
     "",
-    `export default class ${className} {`,
-    `  @On(${event})`,
-    `  async ${method}(_event: ${event}, _ctx: Ctx): Promise<void> {`,
+    "export default defineHandlers([",
+    `  on(${event}, async (_event, _ctx) => {`,
     "    // Replace the local event token with a shared event class when another feature emits it.",
-    "  }",
-    "}",
+    "  }),",
+    "]);",
     "",
   ].join("\n");
 }

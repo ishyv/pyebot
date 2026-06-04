@@ -11,7 +11,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { ButtonBuilder, ButtonStyle, MessageFlags } from "discord.js";
-import { parseCustomId } from "./customId";
 import {
   configUpdateMessage,
   container,
@@ -121,21 +120,5 @@ describe("progress", () => {
   });
   test("negative value yields empty bar without throwing", () => {
     expect(() => progress(-5, 10)).not.toThrow();
-  });
-});
-
-describe("parseCustomId", () => {
-  test("returns null when segment count mismatches", () => {
-    expect(parseCustomId("a:b", ["x", "y", "z"] as const)).toBeNull();
-  });
-
-  test("maps positional segments to named keys", () => {
-    const parts = parseCustomId("mod:ban:U123", ["feature", "action", "id"] as const);
-    expect(parts).toEqual({ feature: "mod", action: "ban", id: "U123" });
-  });
-
-  test("preserves trailing empty segment", () => {
-    const parts = parseCustomId("mod:ban:", ["feature", "action", "id"] as const);
-    expect(parts).toEqual({ feature: "mod", action: "ban", id: "" });
   });
 });

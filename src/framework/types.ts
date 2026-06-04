@@ -125,14 +125,6 @@ export interface CommandModule {
 
 // ─── Component (button/select) handlers ────────────────────────────────────
 
-/** What `@Handle("prefix:")` produces under the hood. */
-export interface ComponentRoute {
-  /** The customId prefix this route matches (e.g. "trivia:" or "features:toggle:"). */
-  readonly prefix: string;
-  /** The method name on the handlers class — used only by the framework loader. */
-  readonly methodKey: string;
-}
-
 /** A bound component handler ready to be invoked by the router. */
 export type BoundComponentHandler = (
   interaction:
@@ -204,20 +196,14 @@ export interface FeatureDescriptor {
 
 /**
  * What `loadFeatures()` produces for each discovered feature folder. The
- * loader attaches the auto-discovered commands and handler class to the
- * developer-authored descriptor.
+ * loader attaches the auto-discovered commands and normalized handler
+ * registrations to the developer-authored descriptor.
  */
 export interface LoadedFeature {
   readonly descriptor: FeatureDescriptor;
   /** Auto-discovered command modules from `<feature>/commands/*.ts`. */
   readonly commands: ReadonlyArray<CommandModule>;
-  /**
-   * Legacy handler-class instance (one per feature) with @On/@Handle/@Listen
-   * methods, or null. Retained only during the routing migration; bootstrap and
-   * the capability graph read `registrations` instead.
-   */
-  readonly handlers: object | null;
-  /** Normalized triggers from either the legacy class or the new registration array. */
+  /** Normalized triggers from the feature's `defineHandlers([...])` export. */
   readonly registrations: ReadonlyArray<RuntimeRegistration>;
 }
 

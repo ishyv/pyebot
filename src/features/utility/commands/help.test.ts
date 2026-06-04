@@ -23,7 +23,6 @@ function feature(id: string, name: string, commands: CommandModule[]): LoadedFea
       defaultEnabled: true,
     },
     commands,
-    handlers: null,
     registrations: [],
   };
 }

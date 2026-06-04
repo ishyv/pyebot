@@ -27,7 +27,6 @@ describe("feature catalog", () => {
             defaultEnabled: false,
           },
           commands: [],
-          handlers: null,
           registrations: [],
         },
         {
@@ -37,7 +36,6 @@ describe("feature catalog", () => {
             description: "Utility commands.",
           },
           commands: [],
-          handlers: null,
           registrations: [],
         },
       ],

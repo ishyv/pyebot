@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { ChannelType } from "discord.js";
-import { Handle, Listen, On } from "@/framework/decorators";
+import {
+  defineHandlers,
+  defineRoutes,
+  type FeatureHandlers,
+  listen,
+  on,
+  routeHandlers,
+} from "@/framework";
 import { registrationsFromHandlers } from "@/framework/routing/normalize";
 import type { CommandModule, LoadedFeature } from "@/framework/types";
 import {
@@ -14,22 +21,19 @@ class ReviewNeeded {
   constructor(readonly id: string) {}
 }
 
-class CapabilityHandlers {
-  @Listen("messageCreate")
-  async onMessageCreate() {}
+const capRoutes = defineRoutes("cap", { test: {} });
 
-  @On(ReviewNeeded)
-  async onReviewNeeded() {}
+const capabilityHandlers = defineHandlers([
+  listen("messageCreate", async () => {}),
+  on(ReviewNeeded, async () => {}),
+  ...routeHandlers(capRoutes, { test: async () => {} }),
+]);
 
-  @Handle("cap:test:")
-  async onComponent() {}
-}
-
-class DuplicateHandlers {
-  @Handle("dup:")
-  @Handle("dup:")
-  async onDuplicate() {}
-}
+// Two component registrations sharing the `cap:test:` prefix — a duplicate route.
+const duplicateHandlers = defineHandlers([
+  ...routeHandlers(capRoutes, { test: async () => {} }),
+  ...routeHandlers(capRoutes, { test: async () => {} }),
+]);
 
 const config = defineFeatureConfig({
   fields: {
@@ -64,7 +68,7 @@ function command(
 function feature(
   id: string,
   commands: readonly CommandModule[],
-  handlers: object | null = null,
+  handlers: FeatureHandlers | null = null,
 ): LoadedFeature {
   return {
     descriptor: {
@@ -73,13 +77,12 @@ function feature(
       description: `${id} feature`,
     },
     commands,
-    handlers,
     registrations: registrationsFromHandlers(handlers),
   };
 }
 
 describe("capability graph", () => {
-  it("extracts commands, hints, config, and decorator routes into one graph", () => {
+  it("extracts commands, hints, config, and registration routes into one graph", () => {
     const graph = buildCapabilityGraph({
       features: [
         feature("counting", [
@@ -90,7 +93,7 @@ describe("capability graph", () => {
           }),
           command("hidden-count", false, true),
         ]),
-        feature("utility", [command("help", { hints: [] })], new CapabilityHandlers()),
+        feature("utility", [command("help", { hints: [] })], capabilityHandlers),
       ],
       configs: { counting: config },
     });
@@ -143,7 +146,7 @@ describe("capability graph", () => {
 
     expect(() =>
       buildCapabilityGraph({
-        features: [feature("utility", [], new DuplicateHandlers())],
+        features: [feature("utility", [], duplicateHandlers)],
       }),
     ).toThrow("duplicate node id");
   });

@@ -25,7 +25,6 @@ const bootstrapDependencies = {
         description: "Feature with an admin command",
       },
       commands: [adminCommand],
-      handlers: null,
       registrations: [],
     },
   ],

@@ -4,8 +4,6 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": false,
     "noImplicitAny": true,
     "strictNullChecks": true,
     "noUnusedLocals": true,

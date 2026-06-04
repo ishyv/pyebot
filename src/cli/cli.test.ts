@@ -8,14 +8,16 @@ import {
   runTxCli,
   TxCliUsageError,
 } from "@/cli";
-import { Handle } from "@/framework/decorators";
+import { defineHandlers, defineRoutes, routeHandlers } from "@/framework";
 import { registrationsFromHandlers } from "@/framework/routing/normalize";
 
-class DuplicateAuthoringHandlers {
-  @Handle("dup:")
-  @Handle("dup:")
-  async onDuplicate() {}
-}
+const dupRoutes = defineRoutes("dup", { x: {} });
+
+// Two registrations sharing the `dup:x:` prefix — a duplicate component route.
+const duplicateAuthoringHandlers = defineHandlers([
+  ...routeHandlers(dupRoutes, { x: async () => {} }),
+  ...routeHandlers(dupRoutes, { x: async () => {} }),
+]);
 
 const memoryFs = (
   existing: readonly string[] = [],
@@ -250,7 +252,6 @@ describe("checkAuthoring", () => {
               execute: async () => {},
             },
           ],
-          handlers: null,
           registrations: [],
         },
       ],
@@ -284,8 +285,7 @@ describe("checkAuthoring", () => {
               execute: async () => {},
             },
           ],
-          handlers: null,
-          registrations: registrationsFromHandlers(new DuplicateAuthoringHandlers()),
+          registrations: registrationsFromHandlers(duplicateAuthoringHandlers),
         },
       ],
       featureConfigs: { missing: { fields: {} } },
@@ -314,8 +314,7 @@ describe("checkAuthoring", () => {
             defaultEnabled: true,
           },
           commands: [],
-          handlers: null,
-          registrations: registrationsFromHandlers(new DuplicateAuthoringHandlers()),
+          registrations: registrationsFromHandlers(duplicateAuthoringHandlers),
         },
       ],
       featureConfigs: {},
