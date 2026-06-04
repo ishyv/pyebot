@@ -1,50 +1,36 @@
-import type { ButtonInteraction, StringSelectMenuInteraction } from "discord.js";
-import { Handle } from "@/framework/decorators";
-import type { Ctx } from "@/framework/types";
+/**
+ * RPG component handlers — a flat registration list. Each route declares its
+ * component kind (see ./routes.ts), so the interaction type is narrowed for
+ * each handler (button vs select) with no casts.
+ */
+import { defineHandlers, routeHandlers } from "@/framework";
 import { handleCombatMove } from "./handlers/combatMove";
 import { handleEquipSelect } from "./handlers/equip";
-import { handleExpeditionButton } from "./handlers/expedition";
+import {
+  handleExpeditionDeeper,
+  handleExpeditionGather,
+  handleExpeditionLeave,
+  handleExpeditionStart,
+} from "./handlers/expedition";
 import { handleFightAccept } from "./handlers/fightAccept";
 import { handleOnboard } from "./handlers/onboard";
+import { equipRoutes, expeditionRoutes, fightRoutes, onboardRoutes } from "./routes";
 
-export default class RpgHandlers {
-  @Handle("fight_accept:")
-  async onFightAccept(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-    ctx: Ctx,
-  ): Promise<void> {
-    await handleFightAccept(interaction as ButtonInteraction, ctx);
-  }
-
-  @Handle("fight_move:")
-  async onFightMove(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-    ctx: Ctx,
-  ): Promise<void> {
-    await handleCombatMove(interaction as ButtonInteraction, ctx);
-  }
-
-  @Handle("equip:")
-  async onEquipSelect(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-    ctx: Ctx,
-  ): Promise<void> {
-    await handleEquipSelect(interaction as StringSelectMenuInteraction, ctx);
-  }
-
-  @Handle("rpg:onboard:")
-  async onOnboard(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-    ctx: Ctx,
-  ): Promise<void> {
-    await handleOnboard(interaction as ButtonInteraction, ctx);
-  }
-
-  @Handle("expedition:")
-  async onExpedition(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-    ctx: Ctx,
-  ): Promise<void> {
-    await handleExpeditionButton(interaction as ButtonInteraction, ctx);
-  }
-}
+export default defineHandlers([
+  ...routeHandlers(fightRoutes, {
+    accept: (interaction, args, ctx) => handleFightAccept(interaction, args, ctx),
+    move: (interaction, args, ctx) => handleCombatMove(interaction, args, ctx),
+  }),
+  ...routeHandlers(equipRoutes, {
+    select: (interaction, _args, ctx) => handleEquipSelect(interaction, ctx),
+  }),
+  ...routeHandlers(onboardRoutes, {
+    onboard: (interaction, args, ctx) => handleOnboard(interaction, args, ctx),
+  }),
+  ...routeHandlers(expeditionRoutes, {
+    start: (interaction, args, ctx) => handleExpeditionStart(interaction, args, ctx),
+    gather: (interaction, args, ctx) => handleExpeditionGather(interaction, args, ctx),
+    deeper: (interaction, args, ctx) => handleExpeditionDeeper(interaction, args, ctx),
+    leave: (interaction) => handleExpeditionLeave(interaction),
+  }),
+]);

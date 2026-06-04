@@ -1,6 +1,6 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ActionRowBuilder, type ButtonBuilder, ButtonStyle } from "discord.js";
 import { RpgProfile } from "@/components/rpg-profile";
-import { ONBOARD_PREFIX } from "@/features/rpg/handlers/onboard";
+import { onboardRoutes } from "@/features/rpg/routes";
 import { command } from "@/framework";
 import { container, section, text, thumb, v2Message } from "@/ui/v2";
 
@@ -19,15 +19,15 @@ export default command("rpg-profile")
         return { content: "That user hasn't started their RPG journey yet." };
       }
 
-      const minerButton = new ButtonBuilder()
-        .setCustomId(`${ONBOARD_PREFIX}miner`)
-        .setLabel("⛏️ Miner")
-        .setStyle(ButtonStyle.Primary);
+      const minerButton = onboardRoutes.onboard.button(
+        { profession: "miner" },
+        { label: "⛏️ Miner", style: ButtonStyle.Primary },
+      );
 
-      const lumberButton = new ButtonBuilder()
-        .setCustomId(`${ONBOARD_PREFIX}lumber`)
-        .setLabel("🪓 Lumberjack")
-        .setStyle(ButtonStyle.Success);
+      const lumberButton = onboardRoutes.onboard.button(
+        { profession: "lumber" },
+        { label: "🪓 Lumberjack", style: ButtonStyle.Success },
+      );
 
       const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         minerButton,

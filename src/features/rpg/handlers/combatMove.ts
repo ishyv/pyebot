@@ -8,37 +8,38 @@
 
 import {
   ActionRowBuilder,
-  ButtonBuilder,
+  type ButtonBuilder,
   type ButtonInteraction,
   ButtonStyle,
   MessageFlags,
 } from "discord.js";
-import type { CombatMove } from "@/features/rpg/combat/engine";
 import { getFightSession, submitMove } from "@/features/rpg/combat/fight";
+import { fightRoutes } from "@/features/rpg/routes";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
-export const FIGHT_MOVE_PREFIX = "fight_move:";
-
-export function isFightMoveButton(customId: string): boolean {
-  return customId.startsWith(FIGHT_MOVE_PREFIX);
+/** The Attack / Block action row for a round, shared by fight-accept and -move. */
+export function moveButtons(sessionId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    fightRoutes.move.button(
+      { session: sessionId, move: "attack" },
+      { label: "⚔️ Attack", style: ButtonStyle.Danger },
+    ),
+    fightRoutes.move.button(
+      { session: sessionId, move: "block" },
+      { label: "🛡️ Block", style: ButtonStyle.Primary },
+    ),
+  );
 }
 
-export async function handleCombatMove(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
-  // customId: "fight_move:{sessionId}:{move}"
-  const rest = interaction.customId.slice(FIGHT_MOVE_PREFIX.length);
-  const lastColon = rest.lastIndexOf(":");
-  const sessionId = rest.slice(0, lastColon);
-  const move = rest.slice(lastColon + 1) as CombatMove;
-
-  if (!sessionId || (move !== "attack" && move !== "block")) {
-    await interaction.reply({ content: "Invalid move button.", flags: MessageFlags.Ephemeral });
-    return;
-  }
-
+export async function handleCombatMove(
+  interaction: ButtonInteraction,
+  { session: sessionId, move }: { session: string; move: "attack" | "block" },
+  ctx: Ctx,
+): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const result = await submitMove(ctx, sessionId, interaction.user.id, move as "attack" | "block");
+  const result = await submitMove(ctx, sessionId, interaction.user.id, move);
 
   if (result.isErr()) {
     await interaction.editReply({ content: `Move error: ${result.error.message}` });
@@ -88,16 +89,7 @@ export async function handleCombatMove(interaction: ButtonInteraction, ctx: Ctx)
   }
 
   // Show round result and next round buttons
-  const moveRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`fight_move:${sessionId}:attack`)
-      .setLabel("⚔️ Attack")
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId(`fight_move:${sessionId}:block`)
-      .setLabel("🛡️ Block")
-      .setStyle(ButtonStyle.Primary),
-  );
+  const moveRow = moveButtons(sessionId);
 
   const roundSummary = v2Message(
     container(

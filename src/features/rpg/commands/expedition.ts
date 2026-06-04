@@ -1,5 +1,6 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ActionRowBuilder, type ButtonBuilder, ButtonStyle } from "discord.js";
 import { getRpgProfile } from "@/features/rpg/profile";
+import { expeditionRoutes } from "@/features/rpg/routes";
 import { command } from "@/framework";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
@@ -16,15 +17,15 @@ export default command("expedition")
       };
     }
 
-    const mineButton = new ButtonBuilder()
-      .setCustomId("expedition:start:mine")
-      .setLabel("⛏️ Enter Mine")
-      .setStyle(ButtonStyle.Primary);
+    const mineButton = expeditionRoutes.start.button(
+      { biome: "mine" },
+      { label: "⛏️ Enter Mine", style: ButtonStyle.Primary },
+    );
 
-    const forestButton = new ButtonBuilder()
-      .setCustomId("expedition:start:forest")
-      .setLabel("🌲 Enter Forest")
-      .setStyle(ButtonStyle.Success);
+    const forestButton = expeditionRoutes.start.button(
+      { biome: "forest" },
+      { label: "🌲 Enter Forest", style: ButtonStyle.Success },
+    );
 
     const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(mineButton, forestButton);
 

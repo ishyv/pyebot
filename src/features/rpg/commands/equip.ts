@@ -6,6 +6,7 @@ import {
 import { EQUIPABLE_TOOLS } from "@/features/rpg/handlers/equip";
 import { getStackQuantity } from "@/features/rpg/inventory";
 import { getRpgProfile } from "@/features/rpg/profile";
+import { equipRoutes } from "@/features/rpg/routes";
 import { command } from "@/framework";
 import { container, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
@@ -54,7 +55,7 @@ export default command("equip")
     });
 
     const select = new StringSelectMenuBuilder()
-      .setCustomId("equip:select")
+      .setCustomId(equipRoutes.select.id({}))
       .setPlaceholder("Choose a tool to equip…")
       .addOptions(selectOptions);
 

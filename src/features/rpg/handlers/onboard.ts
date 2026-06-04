@@ -5,12 +5,6 @@ import { patchRpgProfile } from "@/features/rpg/profile";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 
-export const ONBOARD_PREFIX = "rpg:onboard:";
-
-export function isOnboardButton(customId: string): boolean {
-  return customId.startsWith(ONBOARD_PREFIX);
-}
-
 const STARTER_TOOLS: Record<StarterKitTypeValue, EquippedItemValue> = {
   miner: {
     instanceId: "starter",
@@ -24,14 +18,11 @@ const STARTER_TOOLS: Record<StarterKitTypeValue, EquippedItemValue> = {
   },
 };
 
-export async function handleOnboard(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
-  const profession = interaction.customId.slice(ONBOARD_PREFIX.length) as StarterKitTypeValue;
-
-  if (profession !== "miner" && profession !== "lumber") {
-    await interaction.reply({ content: "Unknown profession.", flags: MessageFlags.Ephemeral });
-    return;
-  }
-
+export async function handleOnboard(
+  interaction: ButtonInteraction,
+  { profession }: { profession: StarterKitTypeValue },
+  ctx: Ctx,
+): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const starterTool = STARTER_TOOLS[profession];

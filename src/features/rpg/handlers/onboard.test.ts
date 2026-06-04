@@ -72,14 +72,21 @@ const { handleOnboard } = await import("./onboard");
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeInteraction(profession: "miner" | "lumber", userId = "user1") {
+function makeInteraction(userId = "user1") {
   return {
-    customId: `rpg:onboard:${profession}`,
     user: { id: userId },
     deferReply: mock(async () => {}),
     editReply: mock(async () => {}),
     reply: mock(async () => {}),
   } as unknown as import("discord.js").ButtonInteraction;
+}
+
+/** Runs the handler with a decoded profession arg, as routeHandlers would. */
+function onboard(
+  interaction: import("discord.js").ButtonInteraction,
+  profession: "miner" | "lumber",
+) {
+  return handleOnboard(interaction, { profession }, makeCtx());
 }
 
 function makeCtx(): Ctx {
@@ -114,8 +121,8 @@ describe("handleOnboard", () => {
   beforeEach(resetAll);
 
   test("miner: stores starter_pickaxe in loadout.weapon", async () => {
-    const interaction = makeInteraction("miner", "user_miner");
-    await handleOnboard(interaction, makeCtx());
+    const interaction = makeInteraction("user_miner");
+    await onboard(interaction, "miner");
 
     const profile = expectStoredProfile("user_miner");
     const weapon = profile.loadout.weapon;
@@ -129,8 +136,8 @@ describe("handleOnboard", () => {
   });
 
   test("lumber: stores starter_axe in loadout.weapon", async () => {
-    const interaction = makeInteraction("lumber", "user_lumber");
-    await handleOnboard(interaction, makeCtx());
+    const interaction = makeInteraction("user_lumber");
+    await onboard(interaction, "lumber");
 
     const profile = expectStoredProfile("user_lumber");
     const weapon = profile.loadout.weapon;
@@ -144,8 +151,8 @@ describe("handleOnboard", () => {
   });
 
   test("miner: starter_pickaxe has instanceId 'starter' and durability 50", async () => {
-    const interaction = makeInteraction("miner", "user_miner2");
-    await handleOnboard(interaction, makeCtx());
+    const interaction = makeInteraction("user_miner2");
+    await onboard(interaction, "miner");
 
     const profile = expectStoredProfile("user_miner2");
     const weapon = profile.loadout.weapon as EquippedItemValue;
@@ -154,8 +161,8 @@ describe("handleOnboard", () => {
   });
 
   test("lumber: starter_axe has instanceId 'starter' and durability 50", async () => {
-    const interaction = makeInteraction("lumber", "user_lumber2");
-    await handleOnboard(interaction, makeCtx());
+    const interaction = makeInteraction("user_lumber2");
+    await onboard(interaction, "lumber");
 
     const profile = expectStoredProfile("user_lumber2");
     const weapon = profile.loadout.weapon as EquippedItemValue;
@@ -163,28 +170,17 @@ describe("handleOnboard", () => {
     expect(weapon.durability).toBe(50);
   });
 
-  test("unknown profession: replies with error and does not patch", async () => {
-    const interaction = {
-      customId: "rpg:onboard:wizard",
-      user: { id: "user_wizard" },
-      deferReply: mock(async () => {}),
-      editReply: mock(async () => {}),
-      reply: mock(async () => {}),
-    } as unknown as import("discord.js").ButtonInteraction;
-
-    await handleOnboard(interaction, makeCtx());
-
-    expect(interaction.reply).toHaveBeenCalled();
-    expect(profileStore.has("user_wizard")).toBe(false);
-  });
+  // An unknown profession can no longer reach the handler: the `onboard` route's
+  // oneOf(["miner","lumber"]) codec fails to decode it and the dispatch is
+  // skipped before the handler runs (see routes.ts + the framework decode tests).
 
   test("patchRpgProfile failure: replies with failure message", async () => {
     mockPatchRpgProfile.mockImplementation(async () => {
       throw new Error("DB down");
     });
 
-    const interaction = makeInteraction("miner", "user_fail");
-    await handleOnboard(interaction, makeCtx());
+    const interaction = makeInteraction("user_fail");
+    await onboard(interaction, "miner");
 
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining("Failed") }),
@@ -196,15 +192,15 @@ describe("handleOnboard", () => {
   // early return or error path for duplicate calls, so the second call must
   // also succeed and leave the profile in a valid state.
   test("re-onboard (double-click): second call overwrites without crashing", async () => {
-    const interaction1 = makeInteraction("miner", "user_reoard");
-    await handleOnboard(interaction1, makeCtx());
+    const interaction1 = makeInteraction("user_reoard");
+    await onboard(interaction1, "miner");
 
     const profileAfterFirst = profileStore.get("user_reoard");
     expect(profileAfterFirst?.starterKitType).toBe("miner");
 
     // Second call — different profession simulating a button re-click
-    const interaction2 = makeInteraction("lumber", "user_reoard");
-    await handleOnboard(interaction2, makeCtx());
+    const interaction2 = makeInteraction("user_reoard");
+    await onboard(interaction2, "lumber");
 
     // No crash; second call should succeed and overwrite
     expect(interaction2.editReply).toHaveBeenCalled();

@@ -1,8 +1,8 @@
 /**
  * Equip select-menu handler.
  *
- * Custom ID: `equip:select`
- * Called when a user picks a tool from the dropdown shown by /equip.
+ * Route: `equip:select:` (see ../routes.ts). Called when a user picks a tool
+ * from the dropdown shown by /equip; the chosen tool is in interaction.values.
  */
 
 import { MessageFlags, type StringSelectMenuInteraction } from "discord.js";
@@ -14,14 +14,8 @@ import type { Ctx } from "@/framework/types";
 import { container, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
 
-export const EQUIP_CUSTOM_ID = "equip:select";
-
 /** All item IDs that can be equipped into the weapon slot. */
 export const EQUIPABLE_TOOLS: ReadonlySet<string> = new Set(Object.keys(TOOLS));
-
-export function isEquipSelect(customId: string): boolean {
-  return customId === EQUIP_CUSTOM_ID;
-}
 
 export async function handleEquipSelect(
   interaction: StringSelectMenuInteraction,

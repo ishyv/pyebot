@@ -1,5 +1,6 @@
-import { ButtonBuilder, ButtonStyle } from "discord.js";
+import { ButtonStyle } from "discord.js";
 import { initiateFight } from "@/features/rpg/combat/fight";
+import { fightRoutes } from "@/features/rpg/routes";
 import { command } from "@/framework";
 import { container, section, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
@@ -26,10 +27,10 @@ export default command("fight")
     const { sessionId, expiresAt } = result.unwrap();
     const expiryTimestamp = Math.floor(expiresAt.getTime() / 1000);
 
-    const acceptButton = new ButtonBuilder()
-      .setCustomId(`fight_accept:${sessionId}`)
-      .setLabel("Accept")
-      .setStyle(ButtonStyle.Success);
+    const acceptButton = fightRoutes.accept.button(
+      { session: sessionId },
+      { label: "Accept", style: ButtonStyle.Success },
+    );
 
     return v2Message(
       container(

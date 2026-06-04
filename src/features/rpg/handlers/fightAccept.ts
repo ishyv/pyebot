@@ -5,19 +5,17 @@
  * Calls acceptFight() and transitions session to active, then shows combat move buttons.
  */
 
-import { ActionRowBuilder, ButtonBuilder, type ButtonInteraction, ButtonStyle } from "discord.js";
+import type { ButtonInteraction } from "discord.js";
 import { acceptFight, getFightSession } from "@/features/rpg/combat/fight";
 import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
+import { moveButtons } from "./combatMove";
 
-export const FIGHT_ACCEPT_PREFIX = "fight_accept:";
-
-export function isFightAcceptButton(customId: string): boolean {
-  return customId.startsWith(FIGHT_ACCEPT_PREFIX);
-}
-
-export async function handleFightAccept(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
-  const sessionId = interaction.customId.slice(FIGHT_ACCEPT_PREFIX.length);
+export async function handleFightAccept(
+  interaction: ButtonInteraction,
+  { session: sessionId }: { session: string },
+  ctx: Ctx,
+): Promise<void> {
   const accepterId = interaction.user.id;
 
   await interaction.deferReply();
@@ -36,16 +34,7 @@ export async function handleFightAccept(interaction: ButtonInteraction, ctx: Ctx
   }
 
   // Build move buttons for both players
-  const moveRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`fight_move:${sessionId}:attack`)
-      .setLabel("⚔️ Attack")
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId(`fight_move:${sessionId}:block`)
-      .setLabel("🛡️ Block")
-      .setStyle(ButtonStyle.Primary),
-  );
+  const moveRow = moveButtons(sessionId);
 
   await interaction.editReply({
     ...v2Message(
