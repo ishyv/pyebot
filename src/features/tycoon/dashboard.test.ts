@@ -136,7 +136,7 @@ describe("renderDashboard()", () => {
     expect(body).toContain("Shift Briefing");
     expect(body).toContain("Collect ready output");
     expect(json).toContain("Collect Ready");
-    expect(json).toContain("tycoon:collect:ready");
+    expect(json).toContain("tycoon:collect:");
   });
 
   test("first-run primary button charters the first line in one tap", async () => {
@@ -147,7 +147,7 @@ describe("renderDashboard()", () => {
       }),
       USER,
     );
-    expect(payloadJson(payload)).toContain("tycoon:do:charter:lumber_mill");
+    expect(payloadJson(payload)).toContain("tycoon:do-charter:lumber_mill");
   });
 
   test("offers a one-tap fix-bottleneck button when no output is ready", async () => {
@@ -174,7 +174,7 @@ describe("renderDashboard()", () => {
       }),
       USER,
     );
-    expect(payloadJson(payload)).toContain("tycoon:do:upgrade:lumber_mill");
+    expect(payloadJson(payload)).toContain("tycoon:do-upgrade:lumber_mill");
   });
 
   test("shows the next ×2 milestone goal on the bottleneck line", async () => {

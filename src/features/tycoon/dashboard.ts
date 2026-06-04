@@ -24,6 +24,7 @@ import {
   type StageKind,
 } from "./content/lines";
 import { netWorth } from "./operations";
+import { tycoonRoutes } from "./routes";
 
 const STAGE_EMOJI: Record<StageKind, string> = {
   extractor: "⛏️",
@@ -261,7 +262,7 @@ export function buildConsoleBriefing(
       const first = (Object.keys(LINES) as LineId[])[0];
       primaryAction = {
         label: `🏛️ Charter ${LINES[first].name} (${LINES[first].charterCost.toLocaleString()})`,
-        customId: `tycoon:do:charter:${first}`,
+        customId: tycoonRoutes["do-charter"].id({ line: first }),
       };
       return `🎯 Charter ${LINES[first].name} to start. The loop: collect output, upgrade the slowest stage, expand into new lines.`;
     }
@@ -277,7 +278,7 @@ export function buildConsoleBriefing(
     if (capped) {
       primaryAction = {
         label: `👷 Automate ${LINES[capped.lineId].name} (${LINES[capped.lineId].automationCost.toLocaleString()})`,
-        customId: `tycoon:do:automate:${capped.lineId}`,
+        customId: tycoonRoutes["do-automate"].id({ line: capped.lineId }),
       };
       return `👷 Automate ${LINES[capped.lineId].name} soon; manual storage is full.`;
     }
@@ -287,14 +288,14 @@ export function buildConsoleBriefing(
       const cost = upgradeCost(stageDef, fix.line.stages[fix.bottleneck].level);
       primaryAction = {
         label: `🔧 Fix ${stageDef.name} (${cost.toLocaleString()})`,
-        customId: `tycoon:do:upgrade:${fix.lineId}:${fix.bottleneck}`,
+        customId: tycoonRoutes["do-upgrade"].id({ line: fix.lineId, stage: fix.bottleneck }),
       };
       return `🔧 Fix bottleneck: upgrade ${LINES[fix.lineId].name} ${stageDef.name}.`;
     }
     if (nextLine) {
       primaryAction = {
         label: `🏛️ Charter ${LINES[nextLine].name} (${LINES[nextLine].charterCost.toLocaleString()})`,
-        customId: `tycoon:do:charter:${nextLine}`,
+        customId: tycoonRoutes["do-charter"].id({ line: nextLine }),
       };
       return `🏛️ Charter ${LINES[nextLine].name} when you want a new production chain.`;
     }
@@ -344,21 +345,21 @@ function dashboardRows(
   if (briefing.readyLines.length > 0) {
     buttons.push(
       new ButtonBuilder()
-        .setCustomId("tycoon:collect:ready")
+        .setCustomId(tycoonRoutes.collect.id({}))
         .setLabel("Collect Ready")
         .setStyle(ButtonStyle.Success),
     );
   }
   buttons.push(
     new ButtonBuilder()
-      .setCustomId("tycoon:refresh")
+      .setCustomId(tycoonRoutes.refresh.id({}))
       .setLabel("Refresh")
       .setStyle(ButtonStyle.Secondary),
   );
   if (scrip > 0) {
     buttons.push(
       new ButtonBuilder()
-        .setCustomId("tycoon:exchange")
+        .setCustomId(tycoonRoutes.exchange.id({}))
         .setLabel("Exchange")
         .setStyle(ButtonStyle.Primary),
     );
@@ -368,7 +369,7 @@ function dashboardRows(
 
   if (briefing.upgradeOptions.length > 0) {
     const select = new StringSelectMenuBuilder()
-      .setCustomId("tycoon:upgrade")
+      .setCustomId(tycoonRoutes.upgrade.id({}))
       .setPlaceholder("Fix bottleneck...")
       .addOptions([...briefing.upgradeOptions]);
     rows.push(
@@ -380,7 +381,7 @@ function dashboardRows(
 
   if (briefing.expansionOptions.length > 0) {
     const select = new StringSelectMenuBuilder()
-      .setCustomId("tycoon:expand")
+      .setCustomId(tycoonRoutes.expand.id({}))
       .setPlaceholder("Expand or automate...")
       .addOptions([...briefing.expansionOptions]);
     rows.push(
@@ -392,7 +393,7 @@ function dashboardRows(
 
   if (briefing.outputOptions.length > 0) {
     const select = new StringSelectMenuBuilder()
-      .setCustomId("tycoon:mode")
+      .setCustomId(tycoonRoutes.mode.id({}))
       .setPlaceholder("Manage output...")
       .addOptions([...briefing.outputOptions]);
     rows.push(

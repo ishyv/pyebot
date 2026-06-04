@@ -36,13 +36,13 @@
           "components": [
             {
               "type": 2,
-              "custom_id": "tycoon:do:charter:lumber_mill",
+              "custom_id": "tycoon:do-charter:lumber_mill",
               "label": "🏛️ Charter Lumber Mill (500)",
               "style": 1
             },
             {
               "type": 2,
-              "custom_id": "tycoon:refresh",
+              "custom_id": "tycoon:refresh:",
               "label": "Refresh",
               "style": 2
             }
@@ -53,7 +53,7 @@
           "components": [
             {
               "type": 3,
-              "custom_id": "tycoon:expand",
+              "custom_id": "tycoon:expand:",
               "placeholder": "Expand or automate...",
               "options": [
                 {
@@ -95,7 +95,7 @@
           "components": [
             {
               "type": 10,
-              "content": "# 🏛️ Guild Automated Works\n⚜️ 1,240 Scrip  •  🪙 8,300 Coins  •  Net worth: 🪙 55,313 Coins\nLines: 2/4  •  Ready: ⚜️ 15,840 Scrip ready"
+              "content": "# 🏛️ Guild Automated Works\n⚜️ 1,240 Scrip  •  🪙 8,300 Coins  •  Net worth: 🪙 55,313 Coins\nLines: 2/4  •  Ready: ⚜️ 13,140 Scrip ready"
             },
             {
               "type": 14,
@@ -111,7 +111,7 @@
             },
             {
               "type": 10,
-              "content": "## 🏭 Iron Works  [SELL → ⚜️]  📦 Ready\n⛏️ Lv7 154/h  🔥 Lv4 76/h 🔴  🔧 Lv7 112/h\n→ 76/h Iron Fittings (⚜️ 1,140 Scrip/h)\nBottleneck: 🔴 Blast Smelter • Pending: ██████░░░░ 456/760 • Next ×2: Lv21 (+17)\n\n## 🏭 Lumber Mill  [SELL → ⚜️]  👷 Automated\n⛏️ Lv5 150/h  🔥 Lv5 120/h  🔧 Lv5 100/h 🔴\n→ 100/h Oak Furniture (⚜️ 300 Scrip/h)\nBottleneck: 🔴 Carpentry • Pending: 3,000 stored (no cap) • Next ×2: Lv26 (+21)\n\n-# Advanced: Fix bottleneck with the select, or use /tycoon collect, /tycoon upgrade, /tycoon exchange."
+              "content": "## 🏭 Iron Works  [SELL → ⚜️]  📦 Ready\n⛏️ Lv7 154/h  🔥 Lv4 76/h 🔴  🔧 Lv7 112/h\n→ 76/h Iron Fittings (⚜️ 1,140 Scrip/h)\nBottleneck: 🔴 Blast Smelter • Pending: ██████░░░░ 456/760 • Next ×2: Lv21 (+17)\n\n## 🏭 Lumber Mill  [SELL → ⚜️]  👷 Automated\n⛏️ Lv5 150/h  🔥 Lv5 120/h  🔧 Lv5 100/h 🔴\n→ 100/h Oak Furniture (⚜️ 300 Scrip/h)\nBottleneck: 🔴 Carpentry • Pending: 3,000 stored (no cap) • Next ×2: Lv26 (+21)\n🎲 Event queued: 🪨 Cave-in — output −30%.\n\n-# Advanced: Fix bottleneck with the select, or use /tycoon collect, /tycoon upgrade, /tycoon exchange."
             }
           ]
         },
@@ -120,19 +120,19 @@
           "components": [
             {
               "type": 2,
-              "custom_id": "tycoon:collect:ready",
+              "custom_id": "tycoon:collect:",
               "label": "Collect Ready",
               "style": 3
             },
             {
               "type": 2,
-              "custom_id": "tycoon:refresh",
+              "custom_id": "tycoon:refresh:",
               "label": "Refresh",
               "style": 2
             },
             {
               "type": 2,
-              "custom_id": "tycoon:exchange",
+              "custom_id": "tycoon:exchange:",
               "label": "Exchange",
               "style": 1
             }
@@ -143,7 +143,7 @@
           "components": [
             {
               "type": 3,
-              "custom_id": "tycoon:upgrade",
+              "custom_id": "tycoon:upgrade:",
               "placeholder": "Fix bottleneck...",
               "options": [
                 {
@@ -185,7 +185,7 @@
           "components": [
             {
               "type": 3,
-              "custom_id": "tycoon:expand",
+              "custom_id": "tycoon:expand:",
               "placeholder": "Expand or automate...",
               "options": [
                 {
@@ -212,7 +212,7 @@
           "components": [
             {
               "type": 3,
-              "custom_id": "tycoon:mode",
+              "custom_id": "tycoon:mode:",
               "placeholder": "Manage output...",
               "options": [
                 {
@@ -244,7 +244,7 @@
           "components": [
             {
               "type": 10,
-              "content": "# 🏛️ Guild Automated Works\n⚜️ 0 Scrip  •  🪙 400 Coins  •  Net worth: 🪙 1,100 Coins\nLines: 1/4  •  Ready: ⚜️ 480 Scrip ready"
+              "content": "# 🏛️ Guild Automated Works\n⚜️ 0 Scrip  •  🪙 400 Coins  •  Net worth: 🪙 1,100 Coins\nLines: 1/4  •  Ready: ⚜️ 600 Scrip ready"
             },
             {
               "type": 14,
@@ -260,7 +260,7 @@
             },
             {
               "type": 10,
-              "content": "## 🏭 Lumber Mill  [SELL → ⚜️]  ⚠️ Manual full\n⛏️ Lv1 30/h  🔥 Lv1 24/h  🔧 Lv1 20/h 🔴\n→ 20/h Oak Furniture (⚜️ 60 Scrip/h)\nBottleneck: 🔴 Carpentry • Pending: ██████████ 160/160 ⚠️ full • Next ×2: Lv26 (+25)\n💸 Storage full — ~20/h idle. Collect or automate.\n\n-# Advanced: Fix bottleneck with the select, or use /tycoon collect, /tycoon upgrade, /tycoon exchange."
+              "content": "## 🏭 Lumber Mill  [SELL → ⚜️]  ⚠️ Manual full\n⛏️ Lv1 30/h  🔥 Lv1 24/h  🔧 Lv1 20/h 🔴\n→ 20/h Oak Furniture (⚜️ 60 Scrip/h)\nBottleneck: 🔴 Carpentry • Pending: ██████████ 160/160 ⚠️ full • Next ×2: Lv26 (+25)\n💸 Storage full — ~20/h idle. Collect or automate.\n🎲 Event queued: 📦 Surplus Order — output +25%!\n\n-# Advanced: Fix bottleneck with the select, or use /tycoon collect, /tycoon upgrade, /tycoon exchange."
             }
           ]
         },
@@ -269,13 +269,13 @@
           "components": [
             {
               "type": 2,
-              "custom_id": "tycoon:collect:ready",
+              "custom_id": "tycoon:collect:",
               "label": "Collect Ready",
               "style": 3
             },
             {
               "type": 2,
-              "custom_id": "tycoon:refresh",
+              "custom_id": "tycoon:refresh:",
               "label": "Refresh",
               "style": 2
             }
@@ -286,7 +286,7 @@
           "components": [
             {
               "type": 3,
-              "custom_id": "tycoon:upgrade",
+              "custom_id": "tycoon:upgrade:",
               "placeholder": "Fix bottleneck...",
               "options": [
                 {
@@ -313,7 +313,7 @@
           "components": [
             {
               "type": 3,
-              "custom_id": "tycoon:expand",
+              "custom_id": "tycoon:expand:",
               "placeholder": "Expand or automate...",
               "options": [
                 {
@@ -345,7 +345,7 @@
           "components": [
             {
               "type": 3,
-              "custom_id": "tycoon:mode",
+              "custom_id": "tycoon:mode:",
               "placeholder": "Manage output...",
               "options": [
                 {

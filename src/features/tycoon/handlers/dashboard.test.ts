@@ -7,7 +7,15 @@ import { UserCurrency } from "@/components/user-currency";
 import { UserFactory } from "@/components/user-factory";
 import { locks } from "@/core/state";
 import type { Component, Ctx } from "@/framework/types";
-import { handleTycoonComponent } from "./dashboard";
+import {
+  handleCollect,
+  handleDoCharter,
+  handleDoUpgrade,
+  handleExchangeButton,
+  handleExchangeSubmit,
+  handleExpandSelect,
+  handleModeSelect,
+} from "./dashboard";
 
 const USER = "user-1";
 
@@ -112,12 +120,12 @@ function interaction(customId: string, values: string[] = [], fields?: Record<st
   };
 }
 
-describe("handleTycoonComponent()", () => {
+describe("tycoon dashboard handlers", () => {
   test("collect-ready button collects and refreshes the same console", async () => {
     const ctx = makeCtx({ ...wallet(0, 0), ...factoryWithLumber() });
-    const i = interaction("tycoon:collect:ready");
+    const i = interaction("tycoon:collect:");
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleCollect(i as never, {}, ctx);
 
     const walletDoc = await ctx.get(USER, UserCurrency);
     expect(walletDoc?.balances.scrip).toBeGreaterThan(0);
@@ -127,9 +135,9 @@ describe("handleTycoonComponent()", () => {
 
   test("expand select charters a new line", async () => {
     const ctx = makeCtx({ ...wallet(1000, 0) });
-    const i = interaction("tycoon:expand", ["charter:lumber_mill"]);
+    const i = interaction("tycoon:expand:", ["charter:lumber_mill"]);
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleExpandSelect(i as never, {}, ctx);
 
     const factory = await ctx.get(USER, UserFactory);
     expect(factory?.lines.lumber_mill).toBeDefined();
@@ -138,9 +146,9 @@ describe("handleTycoonComponent()", () => {
 
   test("expand select automates an owned line", async () => {
     const ctx = makeCtx({ ...wallet(10_000, 0), ...factoryWithLumber() });
-    const i = interaction("tycoon:expand", ["automate:lumber_mill"]);
+    const i = interaction("tycoon:expand:", ["automate:lumber_mill"]);
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleExpandSelect(i as never, {}, ctx);
 
     const factory = await ctx.get(USER, UserFactory);
     expect(factory?.lines.lumber_mill?.automated).toBe(true);
@@ -149,9 +157,9 @@ describe("handleTycoonComponent()", () => {
 
   test("output select toggles sell and stockpile mode", async () => {
     const ctx = makeCtx({ ...wallet(0, 0), ...factoryWithLumber() });
-    const i = interaction("tycoon:mode", ["lumber_mill:stockpile"]);
+    const i = interaction("tycoon:mode:", ["lumber_mill:stockpile"]);
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleModeSelect(i as never, {}, ctx);
 
     const factory = await ctx.get(USER, UserFactory);
     expect(factory?.lines.lumber_mill?.mode).toBe("stockpile");
@@ -160,9 +168,9 @@ describe("handleTycoonComponent()", () => {
 
   test("next-action button performs the charter in one tap", async () => {
     const ctx = makeCtx(wallet(1000, 0));
-    const i = interaction("tycoon:do:charter:lumber_mill");
+    const i = interaction("tycoon:do-charter:lumber_mill");
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleDoCharter(i as never, { line: "lumber_mill" }, ctx);
 
     const factory = await ctx.get(USER, UserFactory);
     expect(factory?.lines.lumber_mill).toBeDefined();
@@ -171,9 +179,9 @@ describe("handleTycoonComponent()", () => {
 
   test("next-action button upgrades a stage in one tap", async () => {
     const ctx = makeCtx({ ...wallet(5000, 0), ...factoryWithLumber() });
-    const i = interaction("tycoon:do:upgrade:lumber_mill:refinery");
+    const i = interaction("tycoon:do-upgrade:lumber_mill:refinery");
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleDoUpgrade(i as never, { line: "lumber_mill", stage: "refinery" }, ctx);
 
     const factory = await ctx.get(USER, UserFactory);
     expect(factory?.lines.lumber_mill?.stages.refinery.level).toBe(2);
@@ -182,9 +190,9 @@ describe("handleTycoonComponent()", () => {
 
   test("exchange button opens a modal when scrip is available", async () => {
     const ctx = makeCtx(wallet(0, 500));
-    const i = interaction("tycoon:exchange");
+    const i = interaction("tycoon:exchange:");
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleExchangeButton(i as never, {}, ctx);
 
     expect(i.calls.showModal).toBe(1);
     expect(i.calls.editReply).toBe(0);
@@ -192,9 +200,9 @@ describe("handleTycoonComponent()", () => {
 
   test("exchange button replies instead of opening a modal with no scrip", async () => {
     const ctx = makeCtx(wallet(0, 0));
-    const i = interaction("tycoon:exchange");
+    const i = interaction("tycoon:exchange:");
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleExchangeButton(i as never, {}, ctx);
 
     expect(i.calls.showModal).toBe(0);
     expect(i.calls.reply).toBe(1);
@@ -202,9 +210,9 @@ describe("handleTycoonComponent()", () => {
 
   test("exchange modal submit converts scrip and refreshes the console", async () => {
     const ctx = makeCtx(wallet(0, 500));
-    const i = interaction("tycoon:exchange:submit", [], { amount: "200" });
+    const i = interaction("tycoon:exchange-submit:", [], { amount: "200" });
 
-    await handleTycoonComponent(i as never, ctx);
+    await handleExchangeSubmit(i as never, {}, ctx);
 
     const walletDoc = await ctx.get(USER, UserCurrency);
     expect(walletDoc?.balances.scrip).toBe(300);

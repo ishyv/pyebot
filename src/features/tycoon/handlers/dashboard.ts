@@ -1,12 +1,9 @@
 /**
- * Dashboard interaction handler.
- *
- * CustomId scheme:
- *   tycoon:collect:ready — collect every ready owned line
- *   tycoon:refresh      — re-render the dashboard
- *   tycoon:upgrade      — string-select; value is `<lineId>:<stage>`
- *   tycoon:expand       — string-select; value is `charter:<lineId>` or `automate:<lineId>`
- *   tycoon:mode         — string-select; value is `<lineId>:<mode>`
+ * Dashboard interaction handlers — one exported function per route (see
+ * ../routes.ts). Buttons (collect / refresh / exchange / the do-* one-tap
+ * actions) and the exchange modal are typed directly; the upgrade / expand /
+ * mode select menus read their choice from interaction.values, so those routes
+ * carry no customId args.
  *
  * All interactions update the original ephemeral dashboard in place via
  * deferUpdate + editReply, mirroring the expedition handler.
@@ -38,6 +35,7 @@ import {
   setMode,
   upgrade,
 } from "../operations";
+import { tycoonRoutes } from "../routes";
 
 type TycoonInteraction = ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction;
 
@@ -45,7 +43,7 @@ type TycoonInteraction = ButtonInteraction | StringSelectMenuInteraction | Modal
 function buildExchangeModal(scrip: number): ModalBuilder {
   const coinsEach = SCRIP_TO_COINS_RATE * (1 - EXCHANGE_FEE);
   return new ModalBuilder()
-    .setCustomId("tycoon:exchange:submit")
+    .setCustomId(tycoonRoutes["exchange-submit"].id({}))
     .setTitle("Guild Exchange")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -68,6 +66,22 @@ async function refresh(interaction: TycoonInteraction, ctx: Ctx, userId: string)
   await interaction.editReply(payload);
 }
 
+/** Re-render the dashboard, then surface an optional operation error as a toast. */
+async function refreshThen(
+  interaction: TycoonInteraction,
+  ctx: Ctx,
+  userId: string,
+  errMsg: string | null,
+): Promise<void> {
+  await refresh(interaction, ctx, userId);
+  if (errMsg) {
+    await interaction.followUp({ content: `❌ ${errMsg}`, flags: MessageFlags.Ephemeral });
+  }
+}
+
+const errOf = (result: { isErr(): boolean; error: { message: string } }): string | null =>
+  result.isErr() ? result.error.message : null;
+
 async function collectAll(ctx: Ctx, userId: string): Promise<string> {
   const factory = await ctx.get(userId, UserFactory);
   const ids = Object.keys(factory?.lines ?? {}) as LineId[];
@@ -87,152 +101,151 @@ async function collectAll(ctx: Ctx, userId: string): Promise<string> {
   return `📦 Collected:\n${parts.join("\n")}\n\nTotal: ${coins(totalScrip, "scrip")}`;
 }
 
-export async function handleTycoonComponent(
-  interaction: TycoonInteraction,
+// ── Select menus (payload in interaction.values) ───────────────────────────
+
+export async function handleUpgradeSelect(
+  interaction: StringSelectMenuInteraction,
+  _args: Record<string, never>,
   ctx: Ctx,
 ): Promise<void> {
+  await interaction.deferUpdate();
   const userId = interaction.user.id;
-  const cid = interaction.customId;
+  const [lineRaw, stageRaw] = (interaction.values[0] ?? "").split(":");
+  const lineId = parseLineId(lineRaw);
+  const stage = STAGES.includes(stageRaw as StageKind) ? (stageRaw as StageKind) : null;
+  const errMsg = lineId && stage ? errOf(await upgrade(ctx, userId, lineId, stage)) : null;
+  await refreshThen(interaction, ctx, userId, errMsg);
+}
 
-  if (cid === "tycoon:upgrade" && interaction.isStringSelectMenu()) {
-    await interaction.deferUpdate();
-    const [lineRaw, stageRaw] = (interaction.values[0] ?? "").split(":");
-    const lineId = parseLineId(lineRaw);
-    const stage = STAGES.includes(stageRaw as StageKind) ? (stageRaw as StageKind) : null;
-    if (lineId && stage) {
-      const result = await upgrade(ctx, userId, lineId, stage);
-      if (result.isErr()) {
-        await interaction.followUp({
-          content: `❌ ${result.error.message}`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-    }
-    await refresh(interaction, ctx, userId);
-    return;
-  }
+export async function handleExpandSelect(
+  interaction: StringSelectMenuInteraction,
+  _args: Record<string, never>,
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const [action, rawLine] = (interaction.values[0] ?? "").split(":");
+  const lineId = parseLineId(rawLine);
+  let errMsg: string | null = null;
+  if (lineId && action === "charter") errMsg = errOf(await charter(ctx, userId, lineId));
+  else if (lineId && action === "automate") errMsg = errOf(await automate(ctx, userId, lineId));
+  await refreshThen(interaction, ctx, userId, errMsg);
+}
 
-  if (cid === "tycoon:expand" && interaction.isStringSelectMenu()) {
-    await interaction.deferUpdate();
-    const [action, rawLine] = (interaction.values[0] ?? "").split(":");
-    const lineId = parseLineId(rawLine);
-    if (lineId && action === "charter") {
-      const result = await charter(ctx, userId, lineId);
-      if (result.isErr()) {
-        await interaction.followUp({
-          content: `❌ ${result.error.message}`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-    } else if (lineId && action === "automate") {
-      const result = await automate(ctx, userId, lineId);
-      if (result.isErr()) {
-        await interaction.followUp({
-          content: `❌ ${result.error.message}`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-    }
-    await refresh(interaction, ctx, userId);
-    return;
-  }
+export async function handleModeSelect(
+  interaction: StringSelectMenuInteraction,
+  _args: Record<string, never>,
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const [lineRaw, modeRaw] = (interaction.values[0] ?? "").split(":");
+  const lineId = parseLineId(lineRaw);
+  const mode = modeRaw === "sell" || modeRaw === "stockpile" ? modeRaw : null;
+  if (lineId && mode) await setMode(ctx, userId, lineId, mode);
+  await refresh(interaction, ctx, userId);
+}
 
-  if (cid === "tycoon:automate" && interaction.isStringSelectMenu()) {
-    await interaction.deferUpdate();
-    const lineId = parseLineId(interaction.values[0]);
-    if (lineId) {
-      const result = await automate(ctx, userId, lineId);
-      if (result.isErr()) {
-        await interaction.followUp({
-          content: `❌ ${result.error.message}`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-    }
-    await refresh(interaction, ctx, userId);
-    return;
-  }
+// ── One-tap "next action" buttons ───────────────────────────────────────────
 
-  if (cid === "tycoon:mode" && interaction.isStringSelectMenu()) {
-    await interaction.deferUpdate();
-    const [lineRaw, modeRaw] = (interaction.values[0] ?? "").split(":");
-    const lineId = parseLineId(lineRaw);
-    const mode = modeRaw === "sell" || modeRaw === "stockpile" ? modeRaw : null;
-    if (lineId && mode) await setMode(ctx, userId, lineId, mode);
-    await refresh(interaction, ctx, userId);
-    return;
-  }
+export async function handleDoUpgrade(
+  interaction: ButtonInteraction,
+  { line, stage }: { line: string; stage: StageKind },
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const lineId = parseLineId(line);
+  const errMsg = lineId ? errOf(await upgrade(ctx, userId, lineId, stage)) : null;
+  await refreshThen(interaction, ctx, userId, errMsg);
+}
 
-  // One-tap "next action" buttons mirroring the Shift Briefing's recommendation.
-  if (cid.startsWith("tycoon:do:") && interaction.isButton()) {
-    await interaction.deferUpdate();
-    const [action, lineRaw, stageRaw] = cid.slice("tycoon:do:".length).split(":");
-    const lineId = parseLineId(lineRaw);
-    let errMsg: string | null = null;
-    if (lineId && action === "upgrade" && STAGES.includes(stageRaw as StageKind)) {
-      const r = await upgrade(ctx, userId, lineId, stageRaw as StageKind);
-      if (r.isErr()) errMsg = r.error.message;
-    } else if (lineId && action === "automate") {
-      const r = await automate(ctx, userId, lineId);
-      if (r.isErr()) errMsg = r.error.message;
-    } else if (lineId && action === "charter") {
-      const r = await charter(ctx, userId, lineId);
-      if (r.isErr()) errMsg = r.error.message;
-    }
-    await refresh(interaction, ctx, userId);
-    if (errMsg) {
-      await interaction.followUp({ content: `❌ ${errMsg}`, flags: MessageFlags.Ephemeral });
-    }
-    return;
-  }
+export async function handleDoAutomate(
+  interaction: ButtonInteraction,
+  { line }: { line: string },
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const lineId = parseLineId(line);
+  const errMsg = lineId ? errOf(await automate(ctx, userId, lineId)) : null;
+  await refreshThen(interaction, ctx, userId, errMsg);
+}
 
-  if (cid === "tycoon:collect:ready" || cid === "tycoon:collect:all") {
-    await interaction.deferUpdate();
-    const summary = await collectAll(ctx, userId);
-    await refresh(interaction, ctx, userId);
-    await interaction.followUp({ content: summary, flags: MessageFlags.Ephemeral });
-    return;
-  }
+export async function handleDoCharter(
+  interaction: ButtonInteraction,
+  { line }: { line: string },
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const lineId = parseLineId(line);
+  const errMsg = lineId ? errOf(await charter(ctx, userId, lineId)) : null;
+  await refreshThen(interaction, ctx, userId, errMsg);
+}
 
-  if (cid === "tycoon:refresh") {
-    await interaction.deferUpdate();
-    await refresh(interaction, ctx, userId);
-    return;
-  }
+// ── Standalone buttons + modal ──────────────────────────────────────────────
 
-  if (cid === "tycoon:exchange" && interaction.isButton()) {
-    const scrip = await getScrip(ctx, userId);
-    if (scrip <= 0) {
-      await interaction.reply({
-        content: "🏦 No scrip is ready for exchange yet.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    // Opening a modal must NOT be preceded by deferUpdate.
-    await interaction.showModal(buildExchangeModal(scrip));
-    return;
-  }
+export async function handleCollect(
+  interaction: ButtonInteraction,
+  _args: Record<string, never>,
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const summary = await collectAll(ctx, userId);
+  await refresh(interaction, ctx, userId);
+  await interaction.followUp({ content: summary, flags: MessageFlags.Ephemeral });
+}
 
-  if (cid === "tycoon:exchange:submit" && interaction.isModalSubmit()) {
-    await interaction.deferUpdate();
-    const raw = interaction.fields.getTextInputValue("amount").trim();
-    const amount = Number.parseInt(raw, 10);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      await interaction.followUp({
-        content: "❌ Enter a positive whole number of scrip.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const result = await exchange(ctx, userId, amount);
-    await refresh(interaction, ctx, userId);
-    await interaction.followUp({
-      content: result.isErr()
-        ? `❌ ${result.error.message}`
-        : `🏦 Converted ${coins(result.unwrap().scripSpent, "scrip")} → ${coins(result.unwrap().coinsGained)}.`,
+export async function handleRefresh(
+  interaction: ButtonInteraction,
+  _args: Record<string, never>,
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  await refresh(interaction, ctx, interaction.user.id);
+}
+
+export async function handleExchangeButton(
+  interaction: ButtonInteraction,
+  _args: Record<string, never>,
+  ctx: Ctx,
+): Promise<void> {
+  const scrip = await getScrip(ctx, interaction.user.id);
+  if (scrip <= 0) {
+    await interaction.reply({
+      content: "🏦 No scrip is ready for exchange yet.",
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
+  // Opening a modal must NOT be preceded by deferUpdate.
+  await interaction.showModal(buildExchangeModal(scrip));
+}
+
+export async function handleExchangeSubmit(
+  interaction: ModalSubmitInteraction,
+  _args: Record<string, never>,
+  ctx: Ctx,
+): Promise<void> {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const raw = interaction.fields.getTextInputValue("amount").trim();
+  const amount = Number.parseInt(raw, 10);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    await interaction.followUp({
+      content: "❌ Enter a positive whole number of scrip.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const result = await exchange(ctx, userId, amount);
+  await refresh(interaction, ctx, userId);
+  await interaction.followUp({
+    content: result.isErr()
+      ? `❌ ${result.error.message}`
+      : `🏦 Converted ${coins(result.unwrap().scripSpent, "scrip")} → ${coins(result.unwrap().coinsGained)}.`,
+    flags: MessageFlags.Ephemeral,
+  });
 }
