@@ -13,7 +13,8 @@ import {
   type AutoroleTriggerValue,
   autoroleRuleId,
 } from "@/components/autorole-rule";
-import { autoroleButtonId, normalizeEmoji, parseDurationMs } from "@/features/autoroles/rules";
+import { routes } from "@/features/autoroles/routes";
+import { normalizeEmoji, parseDurationMs } from "@/features/autoroles/rules";
 import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { container, section, text, v2Message } from "@/ui/v2";
@@ -186,7 +187,7 @@ async function handlePrompt(
   const label = interaction.options.getString("label") ?? role.name;
   const name = interaction.options.getString("name") ?? `button-${message.id}-${role.id}`;
   const selfRoleButton = new ButtonBuilder()
-    .setCustomId(autoroleButtonId(message.id, role.id))
+    .setCustomId(routes.toggle.id({ message: message.id, role: role.id }))
     .setLabel(label)
     .setStyle(ButtonStyle.Primary);
   await message.edit({
@@ -234,7 +235,7 @@ async function handleAttach(
   await ctx.respond.send({
     content:
       sub === "button"
-        ? `Rule saved. Add a button with custom ID \`${autoroleButtonId(messageId, role.id)}\` to that message.`
+        ? `Rule saved. Add a button with custom ID \`${routes.toggle.id({ message: messageId, role: role.id })}\` to that message.`
         : "Reaction rule saved.",
   });
 }

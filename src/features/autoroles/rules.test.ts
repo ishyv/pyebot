@@ -1,13 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { AutoroleRuleValue } from "@/components/autorole-rule";
+import { routes } from "./routes";
 import {
-  AUTOROLE_TOGGLE_PREFIX,
-  autoroleButtonId,
   findButtonRules,
   findMessageRules,
   findReactRules,
   normalizeEmoji,
-  parseAutoroleButtonId,
   parseDurationMs,
   timedGrantId,
 } from "./rules";
@@ -76,11 +74,12 @@ describe("autorole rule helpers", () => {
     expect(findMessageRules(rules, "ALPHA arrived").map((r) => r.name)).toEqual(["hit"]);
   });
 
-  it("encodes button custom IDs and matches enabled button rules", () => {
-    const customId = autoroleButtonId("m1", "r1");
-    expect(customId.startsWith(AUTOROLE_TOGGLE_PREFIX)).toBe(true);
-    expect(parseAutoroleButtonId(customId)).toEqual({ messageId: "m1", roleId: "r1" });
+  it("encodes button custom IDs from the route table", () => {
+    expect(routes.toggle.id({ message: "123", role: "456" })).toBe("autorole:toggle:123:456");
+    expect(routes.toggle.prefix).toBe("autorole:toggle:");
+  });
 
+  it("matches enabled button rules by message and role", () => {
     const rules = [
       rule("hit", { trigger: { type: "onButton", messageId: "m1", label: "Join" }, roleId: "r1" }),
       rule("wrong-role", {
@@ -93,7 +92,7 @@ describe("autorole rule helpers", () => {
       }),
     ];
 
-    expect(findButtonRules(rules, customId).map((r) => r.name)).toEqual(["hit"]);
+    expect(findButtonRules(rules, "m1", "r1").map((r) => r.name)).toEqual(["hit"]);
   });
 
   it("uses a stable timed grant id", () => {

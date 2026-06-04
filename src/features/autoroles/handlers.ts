@@ -1,15 +1,4 @@
-import {
-  type ButtonInteraction,
-  type Client,
-  Events,
-  type GuildMember,
-  type Message,
-  MessageFlags,
-  type MessageReaction,
-  type PartialMessageReaction,
-  type PartialUser,
-  type User,
-} from "discord.js";
+import { type GuildMember, MessageFlags } from "discord.js";
 import {
   AutoroleRule,
   type AutoroleRuleValue,
@@ -17,10 +6,10 @@ import {
   TimedAutoroleGrant,
 } from "@/components/autorole-rule";
 import { MemberJoined } from "@/events/member-joined";
-import { Handle, Listen, On } from "@/framework";
+import { defineHandlers, listen, on, routeHandlers } from "@/framework";
 import type { Ctx } from "@/framework/types";
+import { routes } from "./routes";
 import {
-  AUTOROLE_TOGGLE_PREFIX,
   findButtonRules,
   findJoinRules,
   findMessageRules,
@@ -30,62 +19,50 @@ import {
 } from "./rules";
 
 const EXPIRY_SWEEP_MS = 60_000;
+// Per-feature state that the handler class used to hold as an instance field is
+// now a module-level closure — simpler, and there is exactly one bot per process.
+let expiryTimer: ReturnType<typeof setInterval> | null = null;
 
-export default class AutoroleHandlers {
-  private expiryTimer: ReturnType<typeof setInterval> | null = null;
-
-  @On(MemberJoined)
-  async onMemberJoined(event: MemberJoined, ctx: Ctx): Promise<void> {
+export default defineHandlers([
+  on(MemberJoined, async (event, ctx) => {
     const guild = await ctx.client.guilds.fetch(event.guildId).catch(() => null);
     const member = guild ? await guild.members.fetch(event.userId).catch(() => null) : null;
     if (!guild || !member) return;
     await applyRules(ctx, member, findJoinRules(await guildRules(ctx, event.guildId)));
-  }
+  }),
 
-  @Listen("messageReactionAdd")
-  async onReactionAdd(
-    reaction: MessageReaction | PartialMessageReaction,
-    user: User | PartialUser,
-    ctx: Ctx,
-  ): Promise<void> {
+  // discord.js v14 emits a third `details` arg on reaction events; `ctx` is last.
+  listen("messageReactionAdd", async (reaction, user, _details, ctx) => {
     if (user.bot) return;
     const fullReaction = reaction.partial ? await reaction.fetch().catch(() => null) : reaction;
     const guild = fullReaction?.message.guild;
     if (!fullReaction || !guild) return;
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (!member) return;
-
     const rules = findReactRules(
       await guildRules(ctx, guild.id),
       fullReaction.message.id,
       reactionEmojiKey(fullReaction),
     );
     await applyRules(ctx, member, rules);
-  }
+  }),
 
-  @Listen("messageReactionRemove")
-  async onReactionRemove(
-    reaction: MessageReaction | PartialMessageReaction,
-    user: User | PartialUser,
-    ctx: Ctx,
-  ): Promise<void> {
+  listen("messageReactionRemove", async (reaction, user, _details, ctx) => {
     if (user.bot) return;
     const fullReaction = reaction.partial ? await reaction.fetch().catch(() => null) : reaction;
     const guild = fullReaction?.message.guild;
     if (!fullReaction || !guild) return;
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (!member) return;
-
     const rules = findReactRules(
       await guildRules(ctx, guild.id),
       fullReaction.message.id,
       reactionEmojiKey(fullReaction),
     );
     await revokeRules(ctx, member, rules);
-  }
+  }),
 
-  @Listen("messageCreate")
-  async onMessage(message: Message, ctx: Ctx): Promise<void> {
+  listen("messageCreate", async (message, ctx) => {
     if (message.author.bot || !message.guild) return;
     const member =
       message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
@@ -95,58 +72,60 @@ export default class AutoroleHandlers {
       member,
       findMessageRules(await guildRules(ctx, message.guild.id), message.content),
     );
-  }
+  }),
 
-  @Handle(AUTOROLE_TOGGLE_PREFIX)
-  async onButton(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
-    if (!interaction.guild) {
-      await interaction.reply({ content: "Use this in a server.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-    const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!member) {
-      await interaction.reply({
-        content: "Could not resolve your server member.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const rules = findButtonRules(
-      await guildRules(ctx, interaction.guild.id),
-      interaction.customId,
-    );
-    if (rules.length === 0) {
-      await interaction.reply({
-        content: "That autorole button is no longer active.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
+  ...routeHandlers(routes, {
+    // args: { message, role } — decoded from the toggle button's customId.
+    toggle: async (interaction, args, ctx) => {
+      if (!interaction.guild) {
+        await interaction.reply({
+          content: "Use this in a server.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+      if (!member) {
+        await interaction.reply({
+          content: "Could not resolve your server member.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const rules = findButtonRules(
+        await guildRules(ctx, interaction.guild.id),
+        args.message,
+        args.role,
+      );
+      if (rules.length === 0) {
+        await interaction.reply({
+          content: "That autorole button is no longer active.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
 
-    // rules.length > 0 is guaranteed above; TypeScript still widens array index to T | undefined.
-    const primaryRoleId = rules[0]?.roleId;
-    if (!primaryRoleId) return;
-    const hasRole = member.roles.cache.has(primaryRoleId);
-    if (hasRole) {
-      await revokeRules(ctx, member, rules);
-      await interaction.reply({ content: "Role removed.", flags: MessageFlags.Ephemeral });
-      return;
-    }
+      const primaryRoleId = rules[0]?.roleId;
+      if (!primaryRoleId) return;
+      if (member.roles.cache.has(primaryRoleId)) {
+        await revokeRules(ctx, member, rules);
+        await interaction.reply({ content: "Role removed.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await applyRules(ctx, member, rules);
+      await interaction.reply({ content: "Role added.", flags: MessageFlags.Ephemeral });
+    },
+  }),
 
-    await applyRules(ctx, member, rules);
-    await interaction.reply({ content: "Role added.", flags: MessageFlags.Ephemeral });
-  }
-
-  @Listen(Events.ClientReady)
-  onReady(_client: Client, ctx: Ctx): void {
-    if (this.expiryTimer) return;
-    this.expiryTimer = setInterval(() => {
+  listen("clientReady", (_client, ctx) => {
+    if (expiryTimer) return;
+    expiryTimer = setInterval(() => {
       void sweepExpiredGrants(ctx).catch((error) => {
         ctx.logger.error("Failed to sweep expired autoroles", error);
       });
     }, EXPIRY_SWEEP_MS);
-  }
-}
+  }),
+]);
 
 async function guildRules(ctx: Ctx, guildId: string): Promise<readonly AutoroleRuleValue[]> {
   return ctx.query(AutoroleRule, { filter: { guildId } });

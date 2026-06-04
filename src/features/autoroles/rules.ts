@@ -1,7 +1,5 @@
 import type { AutoroleRuleValue } from "@/components/autorole-rule";
 
-export const AUTOROLE_TOGGLE_PREFIX = "autorole:toggle:";
-
 /**
  * Parses admin-entered temporary role durations at the command boundary.
  * A null result means the role is permanent.
@@ -37,19 +35,6 @@ export function reactionEmojiKey(input: {
   readonly emoji: { readonly name: string | null; readonly id: string | null };
 }): string {
   return input.emoji.id ? `${input.emoji.name}:${input.emoji.id}` : (input.emoji.name ?? "?");
-}
-
-export function autoroleButtonId(messageId: string, roleId: string): string {
-  return `${AUTOROLE_TOGGLE_PREFIX}${messageId}:${roleId}`;
-}
-
-export function parseAutoroleButtonId(
-  customId: string,
-): { messageId: string; roleId: string } | null {
-  if (!customId.startsWith(AUTOROLE_TOGGLE_PREFIX)) return null;
-  const rest = customId.slice(AUTOROLE_TOGGLE_PREFIX.length);
-  const [messageId, roleId] = rest.split(":");
-  return messageId && roleId ? { messageId, roleId } : null;
 }
 
 export function timedGrantId(
@@ -94,15 +79,14 @@ export function findMessageRules(
 
 export function findButtonRules(
   rules: readonly AutoroleRuleValue[],
-  customId: string,
+  messageId: string,
+  roleId: string,
 ): AutoroleRuleValue[] {
-  const parsed = parseAutoroleButtonId(customId);
-  if (!parsed) return [];
   return rules.filter(
     (rule) =>
       rule.enabled &&
       rule.trigger.type === "onButton" &&
-      rule.trigger.messageId === parsed.messageId &&
-      rule.roleId === parsed.roleId,
+      rule.trigger.messageId === messageId &&
+      rule.roleId === roleId,
   );
 }
