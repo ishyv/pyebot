@@ -6,7 +6,7 @@
  *
  *   index.ts     — this descriptor (the only thing the loader requires)
  *   commands/    — the `command()` DSL: options, subcommands, Components-V2 replies
- *   handlers.ts  — component routes (@Handle) and event hooks (@On / @Listen)
+ *   handlers.ts  — `defineHandlers` with typed component routes and event hooks
  *   config.ts    — dashboard-editable feature config
  *
  * It lives under `src/features/` (not `templates/`) on purpose: the loader
@@ -23,8 +23,6 @@ export default defineFeature({
   id: "example", // MUST equal the folder name — the loader asserts this.
   name: "Example",
   description: "Annotated reference feature — read the source to learn the framework.",
-  // Off by default. The dispatcher gates execution on this toggle, so the
-  // /example command registers globally but replies "feature disabled" until
-  // enabled per-guild. That round trip is itself a demonstration of the toggle.
-  defaultEnabled: false,
+  // Enabled by default so the reference command stays runnable in local smoke tests.
+  defaultEnabled: true,
 });

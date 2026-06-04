@@ -57,10 +57,18 @@ export type _GuildAssertions = [
 
 const dispatch = command("dispatch")
   .description("Subcommand dispatch")
-  .subcommand("create", "Create", (s) => s.string("title", "Title", { required: true }))
-  .subcommand("remove", "Remove", (s) => s.integer("id", "Id"))
+  .subcommand({
+    name: "create",
+    description: "Create",
+    options: (s) => s.string("title", "Title", { required: true }),
+  })
+  .subcommand({ name: "remove", description: "Remove", options: (s) => s.integer("id", "Id") })
   .group("admin", "Admin", (g) =>
-    g.subcommand("reset", "Reset", (s) => s.boolean("confirm", "Confirm")),
+    g.subcommand({
+      name: "reset",
+      description: "Reset",
+      options: (s) => s.boolean("confirm", "Confirm"),
+    }),
   )
   .run(() => undefined);
 
@@ -78,10 +86,80 @@ export type _DispatchAssertions = [
   Expect<Equal<ResetCtx["subcommandGroup"], "admin">>,
 ];
 
+const objectDispatch = command("object-dispatch")
+  .description("Object subcommand dispatch")
+  .guildOnly()
+  .subcommand({
+    name: "create",
+    description: "Create",
+    options: (s) => s.string("title", "Title", { required: true }),
+    run: (c) => {
+      const inlineAssertions: [
+        Expect<Equal<typeof c.options.title, string>>,
+        Expect<Equal<typeof c.subcommand, "create">>,
+        Expect<Equal<typeof c.subcommandGroup, null>>,
+        Expect<Equal<typeof c.guildId, string>>,
+      ] = [true, true, true, true];
+      void inlineAssertions;
+      return undefined;
+    },
+  })
+  .subcommand({
+    name: "remove",
+    description: "Remove",
+    options: (s) => s.integer("id", "Id"),
+  })
+  .subcommand({
+    name: "status",
+    description: "Status",
+    run: (c) => {
+      const noOptionAssertions: [
+        Expect<Equal<typeof c.options, Readonly<Record<string, never>>>>,
+        Expect<Equal<typeof c.guildId, string>>,
+      ] = [true, true];
+      void noOptionAssertions;
+      return undefined;
+    },
+  })
+  .group("admin", "Admin", (g) =>
+    g.subcommand({
+      name: "reset",
+      description: "Reset",
+      options: (s) => s.boolean("confirm", "Confirm"),
+      run: (c) => {
+        const groupAssertions: [
+          Expect<Equal<typeof c.options.confirm, boolean | null>>,
+          Expect<Equal<typeof c.subcommand, "reset">>,
+          Expect<Equal<typeof c.subcommandGroup, "admin">>,
+          Expect<Equal<typeof c.guildId, string>>,
+        ] = [true, true, true, true];
+        void groupAssertions;
+        return undefined;
+      },
+    }),
+  )
+  .run(() => undefined);
+
+type ObjectDispatchCtx = RunContext<typeof objectDispatch>;
+type ObjectCreateCtx = Extract<ObjectDispatchCtx, { subcommand: "create" }>;
+type ObjectRemoveCtx = Extract<ObjectDispatchCtx, { subcommand: "remove" }>;
+type ObjectStatusCtx = Extract<ObjectDispatchCtx, { subcommand: "status" }>;
+type ObjectResetCtx = Extract<ObjectDispatchCtx, { subcommand: "reset" }>;
+
+export type _ObjectDispatchAssertions = [
+  Expect<Equal<ObjectCreateCtx["options"]["title"], string>>,
+  Expect<Equal<ObjectRemoveCtx["options"]["id"], number | null>>,
+  Expect<Equal<ObjectStatusCtx["options"], Readonly<Record<string, never>>>>,
+  Expect<Equal<ObjectResetCtx["options"]["confirm"], boolean | null>>,
+  Expect<Equal<ObjectResetCtx["subcommandGroup"], "admin">>,
+  Expect<Equal<ObjectResetCtx["guildId"], string>>,
+];
+
 describe("command DSL typed context", () => {
   it("constructs the sample builders used by the compile-time assertions", () => {
     expect(typeof topLevel.execute).toBe("function");
     expect(typeof guildScoped.execute).toBe("function");
     expect(typeof dispatch.execute).toBe("function");
+    expect(typeof objectDispatch.execute).toBe("function");
   });
 });

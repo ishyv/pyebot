@@ -6,7 +6,7 @@ export default command("roles")
   .description("Manage moderated role policies")
   .defaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .dmPermission(false)
-  .subcommand("dashboard", "Open the role moderation dashboard")
+  .subcommand({ name: "dashboard", description: "Open the role moderation dashboard" })
   .hidden()
   .run(async ({ interaction }) => {
     if (!(await assertPanelPermission(interaction))) return;

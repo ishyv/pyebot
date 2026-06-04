@@ -9,37 +9,6 @@ import type { QuestProgressDoc } from "@/db/schemas/quest";
 import type { User } from "@/db/schemas/user";
 
 // ---------------------------------------------------------------------------
-// Mock @/core/state BEFORE importing quests
-// ---------------------------------------------------------------------------
-
-const lockState = new Set<string>();
-
-mock.module("@/core/state", () => ({
-  cooldowns: {
-    isOnCooldown: mock(() => false),
-    getRemainingMs: mock(() => 0),
-    set: mock(() => {}),
-  },
-  locks: {
-    tryAcquire: mock((key: string) => {
-      if (lockState.has(key)) return false;
-      lockState.add(key);
-      return true;
-    }),
-    release: mock((key: string) => {
-      lockState.delete(key);
-    }),
-    isHeld: mock((key: string) => lockState.has(key)),
-  },
-  sessions: {
-    get: mock(() => undefined),
-    set: mock(() => {}),
-    delete: mock(() => {}),
-    has: mock(() => false),
-  },
-}));
-
-// ---------------------------------------------------------------------------
 // Mock @/db/repositories/users BEFORE importing quests
 // (adjustBalance inside claimRewards uses userStore)
 // ---------------------------------------------------------------------------
@@ -156,7 +125,6 @@ function makeCtx() {
 
 function resetAll() {
   questStore.clear();
-  lockState.clear();
   mockQuestGet.mockReset();
   mockQuestSet.mockReset();
   mockGetActiveQuests.mockReset();

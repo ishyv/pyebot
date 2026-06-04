@@ -63,13 +63,17 @@ const dispatch: Record<string, Handler> = {
 
 **Case B — logic lives inline (no separate handler function):**
 ```ts
-.subcommand("add", "...", s => s.user("user", ...).string("reason", ...))
-.handle("add", async (c) => {
-  const { user, reason } = c.options; // typed to this subcommand only
+.subcommand({
+  name: "add",
+  description: "...",
+  options: s => s.user("user", ...).string("reason", ...),
+  run: async (c) => {
+    const { user, reason } = c.options; // typed to this subcommand only
+  },
 })
 ```
 
-Use `.handle()` for typed options access. Use the `dispatch` dict to route to existing handler functions. Never write `if (c.subcommand === "x") { … }`.
+Use object subcommand `run` for inline logic. Use `.handle(name, fn)` or the `dispatch` dict for existing handler functions. Never write `if (c.subcommand === "x") { … }`.
 
 ## Bloat detection checklist
 

@@ -1,15 +1,15 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { handleDbError } from "@/core/responseHelpers";
 import { getGuild } from "@/db/repositories/guilds";
 import { saveAutomodSettings } from "@/features/adminPanels/configMutations";
 import { invalidatePatternCache } from "@/features/automod/service";
 import { configUpdateMessage } from "@/ui/v2";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod text` list/add/remove for moderator-friendly text rules. */
 export async function handleText(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
@@ -33,14 +33,14 @@ export async function handleText(
   await addTextRule(interaction, ctx, id);
 }
 
-async function loadTextRules(ctx: CommandContext) {
+async function loadTextRules(ctx: AutomodSubcommandContext) {
   const guildResult = await getGuild(ctx.guildId);
   if (await handleDbError(guildResult, ctx, "Failed to load config.")) return null;
   const guild = guildResult.unwrap();
   return guild?.automod.textRules ?? [];
 }
 
-async function listTextRules(ctx: CommandContext): Promise<void> {
+async function listTextRules(ctx: AutomodSubcommandContext): Promise<void> {
   const rules = await loadTextRules(ctx);
   if (!rules) return;
   if (rules.length === 0) {
@@ -54,7 +54,7 @@ async function listTextRules(ctx: CommandContext): Promise<void> {
   await ctx.respond.send({ content: lines.join("\n") });
 }
 
-async function removeTextRule(ctx: CommandContext, id: string): Promise<void> {
+async function removeTextRule(ctx: AutomodSubcommandContext, id: string): Promise<void> {
   const rules = await loadTextRules(ctx);
   if (!rules) return;
   const updated = rules.filter((rule) => rule.id !== id);
@@ -72,7 +72,7 @@ async function removeTextRule(ctx: CommandContext, id: string): Promise<void> {
 
 async function addTextRule(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
   id: string,
 ): Promise<void> {
   const phrases = parsePhraseList(interaction.options.getString("phrase"));

@@ -1,16 +1,25 @@
 # tx-v2
 
-tx-v2 is a Bun-first TypeScript framework and starter codebase for building Discord bots through code.
+tx-v2 is a Bun-first TypeScript framework for Discord bots.
 
-The goal is not visual scripting, mystery globals, or "hope Discord likes this payload" nonsense. Bot authors write normal TypeScript: feature folders, command modules, typed config, explicit persistence, and tests.
+It provides:
+
+- feature folders under `src/features/<id>/`
+- a typed `command(name)` DSL for slash commands
+- decorated handlers for components and events
+- typed Mongo-backed components through `Ctx`
+- feature toggles and dashboard config metadata
+
+The framework is latest-only. Old authoring APIs and old data shapes are removed
+instead of bridged.
 
 ## Quick Start
 
 Requirements:
 
 - Bun 1.1.0 or newer
-- A Discord application and bot token
-- MongoDB only if you run the bundled full bot feature set
+- a Discord application and bot token
+- MongoDB when running the bundled full bot feature set
 
 ```bash
 bun install
@@ -31,13 +40,12 @@ MONGO_URI=mongodb://localhost:27017
 DB_NAME=txbot
 ```
 
-Use `GUILD_ID` while developing commands so Discord updates them quickly. Leave it empty when you intentionally want global command registration.
+Use `GUILD_ID` while developing slash commands so Discord updates them quickly.
+Leave it empty for global command registration.
 
-## First Bot Code
+## First Feature
 
-New bundled features live under `src/features/<id>/`. The framework scans
-those folders at startup, so adding a feature is adding a folder with an
-`index.ts` descriptor and optional `commands/` or `handlers.ts` files.
+Create a feature folder with an `index.ts` descriptor.
 
 ```ts
 // src/features/hello/index.ts
@@ -51,39 +59,81 @@ export default defineFeature({
 });
 ```
 
-`defineFeature` accepts exactly `id`, `name`, `description`, and optional
-`defaultEnabled`. Put commands in `commands/*.ts`, component/event handlers in
-`handlers.ts`, and dashboard config in feature-owned config modules; unsupported
-descriptor metadata is a type error.
+`defineFeature` accepts only `id`, `name`, `description`, and optional
+`defaultEnabled`. Commands, handlers, config, and gates live in separate files.
+
+Add commands under `commands/*.ts`.
 
 ```ts
 // src/features/hello/commands/hello.ts
 import { command } from "@/framework";
-import { container, section, v2Message } from "@/ui/v2";
 
 export default command("hello")
   .description("Say hello")
-  .help({ hints: ["Replies with a small greeting."] })
-  .run(async ({ user }) =>
-    v2Message(container("ok", section(`Hello, ${user.username}.`))),
-  );
+  .string("message", "Greeting text", { required: true })
+  .guildOnly()
+  .defer("ephemeral")
+  .cooldown("30s")
+  .run(async (c) => c.ok(`Hello, ${c.user.username}. ${c.options.message}`));
 ```
 
-Commands use the fluent `command(name)` DSL (typed options, `.run()` returns the
-response payload) — not `defineCommand` or a raw `SlashCommandBuilder`. See
-`docs/framework-authoring.md` for the full surface.
+References:
 
-tx is latest-only: old feature module objects, old env aliases, old JSON content packs, and old persisted data shapes are not supported.
+- [`docs/framework-api.md`](./docs/framework-api.md) - compact API reference
+- [`docs/framework-authoring.md`](./docs/framework-authoring.md) - authoring guide
+- [`src/features/example/`](./src/features/example/) - runnable reference feature
+
+## Framework API
+
+| Need | Use |
+| --- | --- |
+| Feature descriptor | `defineFeature({ id, name, description, defaultEnabled })` |
+| Slash command | `command("name").description("...").run(...)` |
+| Typed options | `.string`, `.integer`, `.boolean`, `.user`, `.channel`, `.role`, `.mentionable`, `.attachment` |
+| Subcommands | `.subcommand({ name, description, options, run })` |
+| Subcommand groups | `.group("admin", "...", (g) => g.subcommand({ ... }))` |
+| Guild-only commands | `.guildOnly()` |
+| Early ACK | `.defer("ephemeral")` or `.defer("public")` |
+| Cooldowns | `.cooldown("24h", "user")` |
+| Permissions | `.defaultMemberPermissions(...)` and `.require("subcommand", permission)` |
+| Component routes | `handlers.ts` methods with `@Handle("prefix:")` |
+| Events | `@On(EventClass)` or `@Listen("discordEvent")` |
+| Persistence | `component({ collection, schema })` plus `ctx.get/ensure/set/patch/delete/query` |
+| Replies | return payloads, or use `ctx.respond` for multi-step flows |
+| Dashboard config | `defineFeatureConfig(...)` from `@/core/featureConfig` |
+
+Use object subcommands for inline handlers.
+
+```ts
+export default command("note")
+  .description("Manage notes")
+  .subcommand({
+    name: "add",
+    description: "Add a note",
+    options: (s) =>
+      s.user("user", "Who", { required: true }).string("text", "Note", { required: true }),
+    run: async (c) => {
+      const { user, text } = c.options;
+      return c.ok(`Noted ${user.username}: ${text}`);
+    },
+  });
+```
+
+Do not branch on `c.subcommand`. Use object `run` for inline behavior or
+`.handle(name, fn)` for separated handler functions.
 
 ## Project Map
 
-- `src/framework/**` — active feature runtime: loader, decorators, dispatch, command/component routing, and `Ctx`.
-- `src/core/**` — shared infrastructure used by the bot and bundled features: DB, logging, result/state helpers, feature config metadata, and legacy middleware context.
-- `src/features/**` — bundled moderation, economy, RPG, AI, tickets, offers, automod, autoroles, admin panels, and counting features.
-- `src/features/rpg/content/**` — active RPG runtime content for gathering, processing, crafting, tools, and expeditions.
-- `src/content/**` — seed/catalog authoring helpers and the extended default content pack.
-- `src/features/example/**` — annotated, runnable reference feature; read it to learn the framework. Scaffold new features with `bun run tx -- new feature`.
-- `docs/**` — feature authoring, content/dashboard authoring, storage, and latest-only policy notes.
+- `src/framework/**` - loader, decorators, command DSL, component routing, event
+  bus, `World`, and `Ctx`
+- `src/core/**` - DB, logging, response helpers, feature config metadata,
+  result/state helpers, and legacy middleware context
+- `src/features/**` - bundled bot features
+- `src/features/example/**` - annotated reference feature
+- `src/features/rpg/content/**` - active RPG runtime content
+- `src/content/**` - seed/catalog authoring helpers
+- `webapp/**` - embedded Svelte dashboard
+- `docs/**` - authoring references and project notes
 
 ## Commands
 
@@ -92,13 +142,13 @@ bun run doctor       # Check local runtime/env before startup
 bun run tx -- check authoring
 bun run tx -- new feature --id hello --name Hello --description "Hello commands"
 bun run dev          # Start with watch mode
-bun run start        # Start once
+bun run start        # Build dashboard, then start once
 bun test             # Run tests
 bun run typecheck    # TypeScript compile check
-bun run check        # Biome lint + format check (read-only)
+bun run check        # Biome lint + format check, read-only
 ```
 
-CI runs the same root gates plus the embedded dashboard gates:
+CI should run:
 
 ```bash
 bun run check
@@ -107,27 +157,18 @@ bun test ./src
 cd webapp && bun run check && bun run test && bun run build
 ```
 
-This repository currently uses Bun as the supported runtime. Node support is not a promise yet, because pretending two runtimes are supported before one path is boringly reliable is how frameworks get cursed.
-
-## Framework Philosophy
-
-- Explicit metadata: feature descriptors and handler decorators produce one loader result that bootstrap validates.
-- Typed failures: expected domain failures use `Result` or typed errors; unexpected exceptions are caught at framework boundaries.
-- Storage boundary: the active bundled bot uses Mongo-backed `World` components and repositories.
-- No hidden registration soup: features are discovered by folder, commands by `commands/*.ts`, and component/event routes by `handlers.ts`.
-- Source comments explain policy and boundaries, not every obvious line of code.
-
 ## Latest-Only Policy
-
-tx does not preserve compatibility with previous framework versions. When the framework shape changes, old authoring APIs and old data loaders are removed instead of bridged. Keep rollback through git checkpoints, not runtime compatibility branches.
 
 Current public authoring surface:
 
-- `defineFeature({ id, name, description, defaultEnabled })`; no gates, config, commands, handlers, or arbitrary metadata in the descriptor
-- the `command(name)` DSL (typed options, `.run()` / `.handle()` returning the response payload)
+- `defineFeature({ id, name, description, defaultEnabled })`
+- feature folder discovery under `src/features/<id>/`
+- `command(name)` with typed options, object subcommands, `.run()`, `.handle()`,
+  `.group()`, `.defer()`, `.cooldown()`, and command permission helpers
 - `handlers.ts` classes using `@Handle`, `@Listen`, and `@On`
 - framework `Ctx` plus `component(...)` for typed component persistence
+- dashboard config declared with `defineFeatureConfig(...)`
 - feature toggles stored in `guild_features.overrides` by feature id
 - active RPG runtime content in `src/features/rpg/content/**`
-- seed item catalog in `src/content/packs/default.ts` (gameplay content in `src/features/rpg/content/**`)
+- seed item catalog in `src/content/packs/default.ts`
 - `DISCORD_TOKEN` as the single Discord token environment key

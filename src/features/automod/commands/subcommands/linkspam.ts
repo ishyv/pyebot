@@ -1,13 +1,13 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { handleDbError } from "@/core/responseHelpers";
 import { saveAutomodSettings } from "@/features/adminPanels/configMutations";
 import { configUpdateMessage } from "@/ui/v2";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod linkspam` without owning the slash-command routing table. */
 export async function handleLinkspam(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 

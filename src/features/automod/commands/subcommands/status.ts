@@ -1,13 +1,13 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { handleDbError } from "@/core/responseHelpers";
 import { getGuild } from "@/db/repositories/guilds";
 import { failureMessage } from "@/ui/v2";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod status`, the plain-text operational config summary. */
 export async function handleStatus(
   _interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 

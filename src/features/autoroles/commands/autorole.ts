@@ -24,74 +24,101 @@ const data = command("autorole")
   .defaultMemberPermissions(PermissionFlagsBits.ManageRoles)
   .guildOnly()
   .defer("ephemeral")
-  .subcommand("create", "Create a rule", (s) =>
-    s
-      .string("name", "Unique rule name", { required: true })
-      .string("trigger", "When to grant the role", {
-        required: true,
-        choices: [
-          { name: "On Join", value: "onJoin" },
-          { name: "On Reaction", value: "onReact" },
-          { name: "Message Contains", value: "messageContains" },
-        ],
-      })
-      .role("role", "Role to grant", { required: true })
-      .string("message_id", "Message ID for reactions")
-      .string("emoji", "Emoji for reactions, or *")
-      .string("keywords", "Comma-separated keywords")
-      .string("duration", "Optional duration: 30m, 2h, 7d"),
-  )
-  .subcommand("delete", "Delete a rule", (s) => s.string("name", "Rule name", { required: true }))
-  .subcommand("list", "List rules")
-  .subcommand("enable", "Enable a rule", (s) => s.string("name", "Rule name", { required: true }))
-  .subcommand("disable", "Disable a rule", (s) => s.string("name", "Rule name", { required: true }))
+  .subcommand({
+    name: "create",
+    description: "Create a rule",
+    options: (s) =>
+      s
+        .string("name", "Unique rule name", { required: true })
+        .string("trigger", "When to grant the role", {
+          required: true,
+          choices: [
+            { name: "On Join", value: "onJoin" },
+            { name: "On Reaction", value: "onReact" },
+            { name: "Message Contains", value: "messageContains" },
+          ],
+        })
+        .role("role", "Role to grant", { required: true })
+        .string("message_id", "Message ID for reactions")
+        .string("emoji", "Emoji for reactions, or *")
+        .string("keywords", "Comma-separated keywords")
+        .string("duration", "Optional duration: 30m, 2h, 7d"),
+  })
+  .subcommand({
+    name: "delete",
+    description: "Delete a rule",
+    options: (s) => s.string("name", "Rule name", { required: true }),
+  })
+  .subcommand({ name: "list", description: "List rules" })
+  .subcommand({
+    name: "enable",
+    description: "Enable a rule",
+    options: (s) => s.string("name", "Rule name", { required: true }),
+  })
+  .subcommand({
+    name: "disable",
+    description: "Disable a rule",
+    options: (s) => s.string("name", "Rule name", { required: true }),
+  })
   .group("prompt", "Post a self-role prompt and create its rule", (g) =>
     g
-      .subcommand("reaction", "Post a reaction-role prompt", (s) =>
-        s
-          .channel("channel", "Channel to post in", {
-            required: true,
-            channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
-          })
-          .role("role", "Role to grant", { required: true })
-          .string("emoji", "Reaction emoji", { required: true })
-          .string("title", "Prompt title")
-          .string("description", "Prompt text")
-          .string("duration", "Optional duration: 30m, 2h, 7d")
-          .string("name", "Rule name"),
-      )
-      .subcommand("button", "Post a button self-role prompt", (s) =>
-        s
-          .channel("channel", "Channel to post in", {
-            required: true,
-            channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
-          })
-          .role("role", "Role to toggle", { required: true })
-          .string("label", "Button label")
-          .string("title", "Prompt title")
-          .string("description", "Prompt text")
-          .string("duration", "Optional duration: 30m, 2h, 7d")
-          .string("name", "Rule name"),
-      ),
+      .subcommand({
+        name: "reaction",
+        description: "Post a reaction-role prompt",
+        options: (s) =>
+          s
+            .channel("channel", "Channel to post in", {
+              required: true,
+              channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+            })
+            .role("role", "Role to grant", { required: true })
+            .string("emoji", "Reaction emoji", { required: true })
+            .string("title", "Prompt title")
+            .string("description", "Prompt text")
+            .string("duration", "Optional duration: 30m, 2h, 7d")
+            .string("name", "Rule name"),
+      })
+      .subcommand({
+        name: "button",
+        description: "Post a button self-role prompt",
+        options: (s) =>
+          s
+            .channel("channel", "Channel to post in", {
+              required: true,
+              channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+            })
+            .role("role", "Role to toggle", { required: true })
+            .string("label", "Button label")
+            .string("title", "Prompt title")
+            .string("description", "Prompt text")
+            .string("duration", "Optional duration: 30m, 2h, 7d")
+            .string("name", "Rule name"),
+      }),
   )
   .group("attach", "Attach a rule to an existing prompt message", (g) =>
     g
-      .subcommand("reaction", "Attach a reaction-role rule", (s) =>
-        s
-          .string("message_id", "Message ID", { required: true })
-          .role("role", "Role to grant", { required: true })
-          .string("emoji", "Reaction emoji", { required: true })
-          .string("duration", "Optional duration: 30m, 2h, 7d")
-          .string("name", "Rule name"),
-      )
-      .subcommand("button", "Attach a button self-role rule", (s) =>
-        s
-          .string("message_id", "Message ID", { required: true })
-          .role("role", "Role to toggle", { required: true })
-          .string("label", "Button label")
-          .string("duration", "Optional duration: 30m, 2h, 7d")
-          .string("name", "Rule name"),
-      ),
+      .subcommand({
+        name: "reaction",
+        description: "Attach a reaction-role rule",
+        options: (s) =>
+          s
+            .string("message_id", "Message ID", { required: true })
+            .role("role", "Role to grant", { required: true })
+            .string("emoji", "Reaction emoji", { required: true })
+            .string("duration", "Optional duration: 30m, 2h, 7d")
+            .string("name", "Rule name"),
+      })
+      .subcommand({
+        name: "button",
+        description: "Attach a button self-role rule",
+        options: (s) =>
+          s
+            .string("message_id", "Message ID", { required: true })
+            .role("role", "Role to toggle", { required: true })
+            .string("label", "Button label")
+            .string("duration", "Optional duration: 30m, 2h, 7d")
+            .string("name", "Rule name"),
+      }),
   );
 
 async function handleCreate(interaction: ChatInputCommandInteraction, ctx: Ctx): Promise<void> {

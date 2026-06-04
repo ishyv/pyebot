@@ -1,10 +1,14 @@
-import { describe, expect, test, vi } from "vitest";
 import { trace } from "@opentelemetry/api";
 import type { Cookies } from "@sveltejs/kit";
+import { describe, expect, test, vi } from "vitest";
 import { exchangeDiscordCode } from "$lib/server/discord";
 import { createSession } from "$lib/server/session";
 import { GET } from "./+server";
 import type { RequestEvent } from "./$types";
+
+type RejectableMock = {
+  mockRejectedValue(error: unknown): void;
+};
 
 vi.mock("$lib/server/auth", () => ({
   requireEnv: () => ({
@@ -66,7 +70,9 @@ function makeEvent(): RequestEvent {
 
 describe("Discord OAuth callback", () => {
   test("redirects to login when Discord rejects the code exchange", async () => {
-    vi.mocked(exchangeDiscordCode).mockRejectedValue(new Error("Discord OAuth exchange failed: 401"));
+    (exchangeDiscordCode as unknown as RejectableMock).mockRejectedValue(
+      new Error("Discord OAuth exchange failed: 401"),
+    );
 
     await expect(GET(makeEvent())).rejects.toMatchObject({
       status: 303,

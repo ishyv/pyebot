@@ -1,13 +1,13 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { handleDbError } from "@/core/responseHelpers";
 import { saveAutomodSettings } from "@/features/adminPanels/configMutations";
 import { configUpdateMessage } from "@/ui/v2";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod policy` updates for the tiered evidence policy. */
 export async function handlePolicy(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 

@@ -1,15 +1,15 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { handleDbError } from "@/core/responseHelpers";
 import { getGuild } from "@/db/repositories/guilds";
 import { saveAutomodSettings } from "@/features/adminPanels/configMutations";
 import { invalidatePatternCache } from "@/features/automod/service";
 import { configUpdateMessage, failureMessage } from "@/ui/v2";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod pattern` list/add/remove for custom content regexes. */
 export async function handlePattern(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
@@ -34,7 +34,7 @@ export async function handlePattern(
   await addPattern(interaction, ctx, name);
 }
 
-async function listPatterns(ctx: CommandContext): Promise<void> {
+async function listPatterns(ctx: AutomodSubcommandContext): Promise<void> {
   const guildResult = await getGuild(ctx.guildId);
   if (await handleDbError(guildResult, ctx, "Failed to load config.")) return;
   const guild = guildResult.unwrap();
@@ -53,7 +53,7 @@ async function listPatterns(ctx: CommandContext): Promise<void> {
   await ctx.respond.send({ content: lines.join("\n") });
 }
 
-async function removePattern(ctx: CommandContext, name: string): Promise<void> {
+async function removePattern(ctx: AutomodSubcommandContext, name: string): Promise<void> {
   const guildResult = await getGuild(ctx.guildId);
   if (await handleDbError(guildResult, ctx, "Failed to load config.")) return;
   const guild = guildResult.unwrap();
@@ -77,7 +77,7 @@ async function removePattern(ctx: CommandContext, name: string): Promise<void> {
 
 async function addPattern(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
   name: string,
 ): Promise<void> {
   const regex = interaction.options.getString("regex");

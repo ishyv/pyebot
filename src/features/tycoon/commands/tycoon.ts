@@ -30,36 +30,52 @@ const data = command("tycoon")
   .description("Manage your automated production lines")
   .guildOnly()
   .defer("ephemeral")
-  .subcommand("play", "Open the Guild Automated Works console")
-  .subcommand("charter", "Charter (buy) a new production line", (s) =>
-    s.string("line", "Which line to charter", { required: true, autocomplete: true }),
-  )
-  .subcommand("collect", "Collect pending output from your lines", (s) =>
-    s.string("line", "A specific line (default: all lines)", { autocomplete: true }),
-  )
-  .subcommand("upgrade", "Upgrade one stage of a line by a level", (s) =>
-    s
-      .string("line", "Which line", { required: true, autocomplete: true })
-      .string("stage", "Which stage to upgrade", { required: true, choices: STAGE_CHOICES }),
-  )
-  .subcommand("automate", "Hire an automation module so a line never hits its offline cap", (s) =>
-    s.string("line", "Which line", { required: true, autocomplete: true }),
-  )
-  .subcommand("mode", "Set a line to sell for scrip or stockpile refined materials", (s) =>
-    s
-      .string("line", "Which line", { required: true, autocomplete: true })
-      .string("mode", "Output mode", {
-        required: true,
-        choices: [
-          { name: "Sell for scrip", value: "sell" },
-          { name: "Stockpile materials", value: "stockpile" },
-        ],
-      }),
-  )
-  .subcommand("exchange", "Convert scrip to coins at the Guild Exchange", (s) =>
-    s.integer("amount", "How much scrip to convert", { required: true, min: 1 }),
-  )
-  .subcommand("leaderboard", "See the richest Guild magnates");
+  .subcommand({ name: "play", description: "Open the Guild Automated Works console" })
+  .subcommand({
+    name: "charter",
+    description: "Charter (buy) a new production line",
+    options: (s) =>
+      s.string("line", "Which line to charter", { required: true, autocomplete: true }),
+  })
+  .subcommand({
+    name: "collect",
+    description: "Collect pending output from your lines",
+    options: (s) =>
+      s.string("line", "A specific line (default: all lines)", { autocomplete: true }),
+  })
+  .subcommand({
+    name: "upgrade",
+    description: "Upgrade one stage of a line by a level",
+    options: (s) =>
+      s
+        .string("line", "Which line", { required: true, autocomplete: true })
+        .string("stage", "Which stage to upgrade", { required: true, choices: STAGE_CHOICES }),
+  })
+  .subcommand({
+    name: "automate",
+    description: "Hire an automation module so a line never hits its offline cap",
+    options: (s) => s.string("line", "Which line", { required: true, autocomplete: true }),
+  })
+  .subcommand({
+    name: "mode",
+    description: "Set a line to sell for scrip or stockpile refined materials",
+    options: (s) =>
+      s
+        .string("line", "Which line", { required: true, autocomplete: true })
+        .string("mode", "Output mode", {
+          required: true,
+          choices: [
+            { name: "Sell for scrip", value: "sell" },
+            { name: "Stockpile materials", value: "stockpile" },
+          ],
+        }),
+  })
+  .subcommand({
+    name: "exchange",
+    description: "Convert scrip to coins at the Guild Exchange",
+    options: (s) => s.integer("amount", "How much scrip to convert", { required: true, min: 1 }),
+  })
+  .subcommand({ name: "leaderboard", description: "See the richest Guild magnates" });
 
 /**
  * Autocomplete label for a line, annotated with the price relevant to the

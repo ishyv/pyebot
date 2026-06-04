@@ -1,14 +1,14 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { handleDbError } from "@/core/responseHelpers";
 import { getGuild } from "@/db/repositories/guilds";
 import { saveAutomodSettings } from "@/features/adminPanels/configMutations";
 import { configUpdateMessage } from "@/ui/v2";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod whitelist` domain add/remove operations. */
 export async function handleWhitelist(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 

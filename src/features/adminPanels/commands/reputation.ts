@@ -6,7 +6,7 @@ export default command("rep")
   .description("Open reputation configuration")
   .defaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .dmPermission(false)
-  .subcommand("panel", "Open the reputation panel")
+  .subcommand({ name: "panel", description: "Open the reputation panel" })
   .hidden()
   .run(async ({ interaction }) => {
     if (!(await assertPanelPermission(interaction))) return;

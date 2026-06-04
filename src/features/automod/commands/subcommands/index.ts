@@ -1,5 +1,4 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { handleCrossChannel } from "./crosschannel";
 import { handleImageAdd } from "./imageAdd";
 import { handleImageChannel } from "./imageChannel";
@@ -16,6 +15,7 @@ import { handleReportChannel } from "./reportChannel";
 import { handleSlowmode } from "./slowmode";
 import { handleStatus } from "./status";
 import { handleText } from "./text";
+import type { AutomodSubcommandContext } from "./types";
 import { handleWhitelist } from "./whitelist";
 
 /**
@@ -24,7 +24,7 @@ import { handleWhitelist } from "./whitelist";
  */
 export type AutomodSubcommandHandler = (
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ) => Promise<void>;
 
 /** Dispatch table for `/automod`, kept data-only so the entrypoint stays thin. */

@@ -127,6 +127,7 @@ function automodInteraction(
 ) {
   return {
     guildId: "guild-1",
+    guild: { id: "guild-1" },
     user: { id: "mod-1" },
     options: {
       getSubcommand: () => subcommand,
@@ -157,6 +158,7 @@ function automodInteraction(
 function imageInteraction(subcommand: string) {
   return {
     guildId: "guild-1",
+    guild: { id: "guild-1" },
     user: { id: "mod-1" },
     options: {
       getSubcommand: () => subcommand,

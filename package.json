@@ -15,7 +15,7 @@
     "scenes:dump": "bun scripts/dump-preview-scenes.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "fmt": "biome format --write .",
+    "fmt": "biome check --write .",
     "lint": "biome lint .",
     "check": "biome check .",
     "ws-install": "bun install && cd ./webapp && bun install",

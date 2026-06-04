@@ -23,23 +23,36 @@ const DEFAULT_GEMINI_MODEL = aiConfig.providers.google.low;
 
 const data = command("ai")
   .description("AI feature configuration")
-  .subcommand("set-provider", "Set the AI provider for this server (admin only)", (s) =>
-    s.string("provider", "AI provider", {
-      required: true,
-      choices: [
-        { name: "Gemini (Google)", value: "gemini" },
-        { name: "OpenAI (GPT)", value: "openai" },
-      ],
-    }),
-  )
-  .subcommand("set-model", "Set the AI model for this server (admin only)", (s) =>
-    s.string("model", "Model name", {
-      required: true,
-      choices: [...ALL_MODELS].slice(0, 25).map((m) => ({ name: m, value: m })),
-    }),
-  )
-  .subcommand("clear-memory", "Clear your personal AI conversation history")
-  .subcommand("panel", "Open the AI configuration panel");
+  .subcommand({
+    name: "set-provider",
+    description: "Set the AI provider for this server (admin only)",
+    options: (s) =>
+      s.string("provider", "AI provider", {
+        required: true,
+        choices: [
+          { name: "Gemini (Google)", value: "gemini" },
+          { name: "OpenAI (GPT)", value: "openai" },
+        ],
+      }),
+  })
+  .subcommand({
+    name: "set-model",
+    description: "Set the AI model for this server (admin only)",
+    options: (s) =>
+      s.string("model", "Model name", {
+        required: true,
+        choices: [...ALL_MODELS].slice(0, 25).map((m) => ({ name: m, value: m })),
+      }),
+  })
+  .subcommand({ name: "clear-memory", description: "Clear your personal AI conversation history" })
+  .subcommand({
+    name: "panel",
+    description: "Open the AI configuration panel",
+    run: async (c) => {
+      if (!(await assertPanelPermission(c.interaction))) return undefined;
+      await openAdminPanel(c.interaction, "ai");
+    },
+  });
 
 type AiCtx = RunContext<typeof data>;
 
@@ -136,8 +149,4 @@ export default data
   .help({ hints: ["/context"] })
   .handle("set-provider", handleSetProvider)
   .handle("set-model", handleSetModel)
-  .handle("clear-memory", handleClearMemory)
-  .run(async (c) => {
-    if (!(await assertPanelPermission(c.interaction))) return undefined;
-    await openAdminPanel(c.interaction, "ai");
-  });
+  .handle("clear-memory", handleClearMemory);

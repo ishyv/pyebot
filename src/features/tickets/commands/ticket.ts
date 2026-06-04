@@ -20,20 +20,33 @@ import { container, text, v2Message } from "@/ui/v2";
 
 const data = command("ticket")
   .description("Ticket system")
-  .subcommand("open", "Open a support ticket", (s) =>
-    s.string("type", "Ticket category", {
-      required: true,
-      choices: TICKET_CATEGORIES.map((c) => ({ name: `${c.emoji} ${c.label}`, value: c.id })),
-    }),
-  )
-  .subcommand("close", "Close the current ticket channel")
-  .subcommand("setup", "Setup the ticket system (Admin only)", (s) =>
-    s.channel("category", "The category channel for tickets", {
-      required: true,
-      channelTypes: [ChannelType.GuildCategory],
-    }),
-  )
-  .subcommand("panel", "Open the tickets configuration panel")
+  .subcommand({
+    name: "open",
+    description: "Open a support ticket",
+    options: (s) =>
+      s.string("type", "Ticket category", {
+        required: true,
+        choices: TICKET_CATEGORIES.map((c) => ({ name: `${c.emoji} ${c.label}`, value: c.id })),
+      }),
+  })
+  .subcommand({ name: "close", description: "Close the current ticket channel" })
+  .subcommand({
+    name: "setup",
+    description: "Setup the ticket system (Admin only)",
+    options: (s) =>
+      s.channel("category", "The category channel for tickets", {
+        required: true,
+        channelTypes: [ChannelType.GuildCategory],
+      }),
+  })
+  .subcommand({
+    name: "panel",
+    description: "Open the tickets configuration panel",
+    run: async (c) => {
+      if (!(await assertPanelPermission(c.interaction))) return undefined;
+      await openAdminPanel(c.interaction, "tickets");
+    },
+  })
   .guildOnly();
 
 type TicketCtx = RunContext<typeof data>;
@@ -181,8 +194,4 @@ export default data
   .help({ hints: [] })
   .handle("open", handleOpen)
   .handle("close", handleClose)
-  .handle("setup", handleSetup)
-  .run(async (c) => {
-    if (!(await assertPanelPermission(c.interaction))) return undefined;
-    await openAdminPanel(c.interaction, "tickets");
-  });
+  .handle("setup", handleSetup);

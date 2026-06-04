@@ -11,9 +11,11 @@
  * Usage:
  * ```typescript
  * // Inside a subcommand builder:
- * .subcommand("add", "Issue a warning", (s) =>
- *   s.build(withModTarget).string("note", "Extra context"),
- * )
+ * .subcommand({
+ *   name: "add",
+ *   description: "Issue a warning",
+ *   options: (s) => s.build(withModTarget).string("note", "Extra context"),
+ * })
  *
  * // At the top level:
  * command("kick")

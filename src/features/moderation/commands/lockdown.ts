@@ -8,59 +8,66 @@ export default command("lockdown")
   .defaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   .guildOnly()
   .defer("ephemeral")
-  .subcommand("on", "Lock all text channels (removes @everyone Send Messages)", (s) =>
-    s.string("reason", "Reason for lockdown"),
-  )
-  .subcommand("off", "Unlock all text channels (restores @everyone Send Messages)")
-  .subcommand("channel", "Lock or unlock a specific channel", (s) =>
-    s
-      .channel("channel", "Channel to lock/unlock", {
-        required: true,
-        channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
-      })
-      .string("action", "Lock or unlock", {
-        required: true,
-        choices: [
-          { name: "Lock", value: "lock" },
-          { name: "Unlock", value: "unlock" },
-        ],
-      })
-      .string("reason", "Reason"),
-  )
-  .help({ hints: ["/mod help"] })
-  .handle("on", async (c) => {
-    const reason = c.options.reason ?? "Server lockdown";
-    return setEveryoneSendMessages(c.guild, c.interaction.user.tag, false, reason);
+  .subcommand({
+    name: "on",
+    description: "Lock all text channels (removes @everyone Send Messages)",
+    options: (s) => s.string("reason", "Reason for lockdown"),
+    run: async (c) => {
+      const reason = c.options.reason ?? "Server lockdown";
+      return setEveryoneSendMessages(c.guild, c.interaction.user.tag, false, reason);
+    },
   })
-  .handle("off", (c) =>
-    setEveryoneSendMessages(c.guild, c.interaction.user.tag, null, "Lockdown lifted"),
-  )
-  .handle("channel", async (c) => {
-    const channel = c.options.channel as TextChannel | NewsChannel;
-    const { action } = c.options;
-    const reason = c.options.reason ?? (action === "lock" ? "Channel locked" : "Channel unlocked");
-    const deny = action === "lock" ? false : null;
+  .subcommand({
+    name: "off",
+    description: "Unlock all text channels (restores @everyone Send Messages)",
+    run: (c) => setEveryoneSendMessages(c.guild, c.interaction.user.tag, null, "Lockdown lifted"),
+  })
+  .subcommand({
+    name: "channel",
+    description: "Lock or unlock a specific channel",
+    options: (s) =>
+      s
+        .channel("channel", "Channel to lock/unlock", {
+          required: true,
+          channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+        })
+        .string("action", "Lock or unlock", {
+          required: true,
+          choices: [
+            { name: "Lock", value: "lock" },
+            { name: "Unlock", value: "unlock" },
+          ],
+        })
+        .string("reason", "Reason"),
+    run: async (c) => {
+      const channel = c.options.channel as TextChannel | NewsChannel;
+      const { action } = c.options;
+      const reason =
+        c.options.reason ?? (action === "lock" ? "Channel locked" : "Channel unlocked");
+      const deny = action === "lock" ? false : null;
 
-    try {
-      await channel.permissionOverwrites.edit(
-        c.guild.roles.everyone,
-        { SendMessages: deny },
-        { reason: `${reason} — by ${c.interaction.user.tag}` },
-      );
-    } catch {
-      return { content: "Failed to update channel permissions." };
-    }
+      try {
+        await channel.permissionOverwrites.edit(
+          c.guild.roles.everyone,
+          { SendMessages: deny },
+          { reason: `${reason} — by ${c.interaction.user.tag}` },
+        );
+      } catch {
+        return { content: "Failed to update channel permissions." };
+      }
 
-    const isLocking = action === "lock";
-    return v2Message(
-      container(
-        isLocking ? "danger" : "ok",
-        text(
-          `**${isLocking ? "🔒 Channel Locked" : "🔓 Channel Unlocked"}** — <#${channel.id}>\n**Reason:** ${reason}`,
+      const isLocking = action === "lock";
+      return v2Message(
+        container(
+          isLocking ? "danger" : "ok",
+          text(
+            `**${isLocking ? "🔒 Channel Locked" : "🔓 Channel Unlocked"}** — <#${channel.id}>\n**Reason:** ${reason}`,
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  })
+  .help({ hints: ["/mod help"] });
 
 async function setEveryoneSendMessages(
   guild: Guild,

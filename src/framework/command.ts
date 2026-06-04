@@ -10,14 +10,15 @@
  * - Option and subcommand declarations refine the handler context type.
  * - `.guildOnly()` narrows guild fields in `.run()` and disables DM usage.
  * - The framework owns defer/send/error mapping through `ctx.respond`.
- * - Inline `.handle()` dispatch is preferred for typed subcommand options;
- *   legacy `if (c.subcommand === "...")` routing is intentionally banned.
+ * - Object subcommand `run` is the inline path for typed subcommand options;
+ *   `.handle()` remains for separated handlers and fallback migrations.
  *
  * Gotchas:
  * - The type-level builder state is compile-time only. Runtime validation still
  *   comes from Discord's option resolver and the local payload/permission gates.
- * - `.run()` may still be used as a fallback for subcommands without `.handle()`
- *   because several migrated commands route to existing handler functions.
+ * - `.run()` may still be used as a fallback for subcommands without an inline
+ *   or separated handler because several migrated commands route to existing
+ *   handler functions.
  */
 import {
   type APIApplicationCommandOptionChoice,
@@ -245,21 +246,40 @@ type RunContextFor<S extends DslState> = CommandContextCore &
   GuildContextFields<S> &
   OptionContextFields<S>;
 
-/**
- * Context for a `.handle()` callback declared inside `CommandGroupDsl`.
- *
- * The guild fields are loosely typed (nullable) because the group builder does
- * not carry the parent command's guildOnly flag. Options are narrowed to exactly
- * the subcommand matched by `N`.
- */
-type GroupRunContext<GS extends GroupSubState, N extends string> = CommandContextCore & {
-  readonly guild: ChatInputCommandInteraction["guild"];
-  readonly guildId: string | null;
-  readonly member: ChatInputCommandInteraction["member"];
-  readonly subcommand: N;
-  readonly subcommandGroup: string;
-  readonly options: Readonly<Extract<GS, { name: N }>["opts"]>;
-};
+type InlineSubcommandRunContext<
+  S extends DslState,
+  N extends string,
+  O extends OptionRecord,
+> = CommandContextCore &
+  GuildContextFields<S> & {
+    readonly subcommand: N;
+    readonly subcommandGroup: null;
+    readonly options: Readonly<O>;
+  };
+
+type InlineGroupRunContext<
+  S extends DslState,
+  G extends string,
+  N extends string,
+  O extends OptionRecord,
+> = CommandContextCore &
+  GuildContextFields<S> & {
+    readonly subcommand: N;
+    readonly subcommandGroup: G;
+    readonly options: Readonly<O>;
+  };
+
+type GroupHandleRunContext<
+  S extends DslState,
+  G extends string,
+  GS extends GroupSubState,
+  N extends string,
+> = CommandContextCore &
+  GuildContextFields<S> & {
+    readonly subcommand: N;
+    readonly subcommandGroup: G;
+    readonly options: Readonly<Extract<GS, { name: N }>["opts"]>;
+  };
 
 /** Extracts the run context from a built command, e.g. `RunContext<typeof data>`. */
 export type RunContext<C> = C extends CommandDsl<infer S> ? RunContextFor<S> : never;
@@ -273,6 +293,33 @@ type CatchContextHandler<S extends DslState, E extends Error> = (
   context: RunContextFor<S>,
   // biome-ignore lint/suspicious/noConfusingVoidType: Error mappers may decline to handle by returning nothing.
 ) => MaybePromise<CommandResponse | void>;
+
+type OptionBuilderFactory<O extends OptionRecord> = (sub: CommandOptionDsl) => CommandOptionDsl<O>;
+
+interface SubcommandSpec<S extends DslState, N extends string, O extends OptionRecord> {
+  readonly name: N;
+  readonly description: string;
+  readonly options?: OptionBuilderFactory<O>;
+  readonly run?: (
+    c: InlineSubcommandRunContext<S, N, O>,
+    // biome-ignore lint/suspicious/noConfusingVoidType: Handlers may respond directly and return nothing.
+  ) => MaybePromise<CommandResponse | void>;
+}
+
+interface GroupSubcommandSpec<
+  S extends DslState,
+  G extends string,
+  N extends string,
+  O extends OptionRecord,
+> {
+  readonly name: N;
+  readonly description: string;
+  readonly options?: OptionBuilderFactory<O>;
+  readonly run?: (
+    c: InlineGroupRunContext<S, G, N, O>,
+    // biome-ignore lint/suspicious/noConfusingVoidType: Handlers may respond directly and return nothing.
+  ) => MaybePromise<CommandResponse | void>;
+}
 
 /**
  * Fluent command authoring surface for slash command shape and lifecycle.
@@ -327,7 +374,7 @@ export interface CommandDsl<S extends DslState = DslState> {
    * @example
    * command("warn")
    *   .defaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-   *   .subcommand("clear", "Clear all warnings", s => s.user("user", ...))
+   *   .subcommand({ name: "clear", description: "Clear all warnings", options: s => s.user("user", ...) })
    *   .require("clear", PermissionFlagsBits.BanMembers)  // elevated requirement
    *   .run(async (c) => { ... });
    */
@@ -418,33 +465,36 @@ export interface CommandDsl<S extends DslState = DslState> {
     options?: BaseOptionSettings,
   ): CommandDsl<WithOpt<S, N, EntityOptionValue["attachment"] | null>>;
 
-  subcommand<N extends string, O extends OptionRecord = Record<string, never>>(
+  subcommand<const N extends string, O extends OptionRecord = Record<string, never>>(
+    spec: SubcommandSpec<S, N, O>,
+  ): CommandDsl<WithSub<S, { group: null; name: N; opts: O }>>;
+  subcommand<const N extends string, O extends OptionRecord = Record<string, never>>(
     name: N,
     description: string,
     build?: (sub: CommandOptionDsl) => CommandOptionDsl<O>,
   ): CommandDsl<WithSub<S, { group: null; name: N; opts: O }>>;
-  group<N extends string, GS extends GroupSubState>(
+  group<const N extends string, GS extends GroupSubState>(
     name: N,
     description: string,
-    build: (group: CommandGroupDsl) => CommandGroupDsl<GS>,
+    build: (group: CommandGroupDsl<S, N>) => CommandGroupDsl<S, N, GS>,
   ): CommandDsl<WithSub<S, AttachGroup<N, GS>>>;
 
   autocomplete(handler: NonNullable<CommandModule["autocomplete"]>): CommandDsl<S>;
   autocomplete(interaction: AutocompleteInteraction, ctx: Ctx): Promise<void>;
   /**
-   * Register an inline handler for a specific top-level subcommand.
+   * Register a separated handler for a specific top-level subcommand.
    *
    * The handler receives a narrowed run context: `c.options` is typed to exactly
    * the options declared for `name`, and `c.subcommandGroup` is `null`.
    * `.handle()` is additive — the `.run()` fallback still fires for any
-   * subcommand that does NOT have an inline handler.
+   * subcommand that does NOT have a subcommand `run` or separated handler.
    *
    * @example
+   * const add = async (c: Extract<RunContext<typeof data>, { subcommand: "add" }>) => { ... };
+   *
    * command("warn")
-   *   .subcommand("add", "...", s => s.user("user", ...).string("reason", ...))
-   *   .handle("add", async (c) => {
-   *     const { user, reason } = c.options; // fully typed
-   *   })
+   *   .subcommand({ name: "add", description: "...", options: s => s.user("user", ...) })
+   *   .handle("add", add)
    */
   handle<N extends Extract<S["subs"], { group: null }>["name"]>(
     name: N,
@@ -584,7 +634,7 @@ export interface CommandOptionDsl<O extends OptionRecord = Record<string, never>
    *
    * @example
    * const withTarget = (s: CommandOptionDsl) => s.user("user", "Target", { required: true });
-   * .subcommand("ban", "Ban", (s) => s.build(withTarget).string("reason", ...))
+   * .subcommand({ name: "ban", description: "Ban", options: (s) => s.build(withTarget).string("reason", ...) })
    */
   build<NO extends OptionRecord>(
     factory: (s: CommandOptionDsl<O>) => CommandOptionDsl<NO>,
@@ -592,33 +642,37 @@ export interface CommandOptionDsl<O extends OptionRecord = Record<string, never>
 }
 
 /** Subcommand group builder used by `command(...).group(...)`; accumulates subcommands. */
-interface CommandGroupDsl<GS extends GroupSubState = never> {
-  subcommand<N extends string, O extends OptionRecord = Record<string, never>>(
+interface CommandGroupDsl<
+  S extends DslState = DslState,
+  G extends string = string,
+  GS extends GroupSubState = never,
+> {
+  subcommand<const N extends string, O extends OptionRecord = Record<string, never>>(
+    spec: GroupSubcommandSpec<S, G, N, O>,
+  ): CommandGroupDsl<S, G, GS | { name: N; opts: O }>;
+  subcommand<const N extends string, O extends OptionRecord = Record<string, never>>(
     name: N,
     description: string,
     build?: (sub: CommandOptionDsl) => CommandOptionDsl<O>,
-  ): CommandGroupDsl<GS | { name: N; opts: O }>;
+  ): CommandGroupDsl<S, G, GS | { name: N; opts: O }>;
   /**
    * Register an inline handler for a specific subcommand within this group.
    *
    * `c.options` is typed to exactly the options declared for `name`.
-   * Guild fields are loosely typed (nullable) because the group builder does
-   * not carry the parent command's guildOnly constraint.
+   * Guild fields follow the parent command: `.guildOnly()` narrows them here.
    *
    * @example
    * .group("escalation", "...", g =>
    *   g
-   *     .subcommand("add", "...", s => s.integer("warns", ...).string("action", ...))
-   *     .handle("add", async (c) => {
-   *       const { warns, action } = c.options; // fully typed
-   *     })
+   *     .subcommand({ name: "add", description: "...", options: s => s.integer("warns", ...).string("action", ...) })
+   *     .handle("add", handleAdd)
    * )
    */
   handle<N extends GS["name"]>(
     name: N,
     // biome-ignore lint/suspicious/noConfusingVoidType: Handlers may respond directly and return nothing.
-    handler: (c: GroupRunContext<GS, N>) => MaybePromise<CommandResponse | void>,
-  ): CommandGroupDsl<GS>;
+    handler: (c: GroupHandleRunContext<S, G, GS, N>) => MaybePromise<CommandResponse | void>,
+  ): CommandGroupDsl<S, G, GS>;
 }
 
 /**
@@ -685,18 +739,54 @@ class OptionListBuilder {
   }
 }
 
+interface RuntimeSubcommandSpec {
+  readonly name: string;
+  readonly description: string;
+  readonly options?: (sub: OptionListBuilder) => OptionListBuilder;
+  readonly run?: RunHandler;
+}
+
+interface NormalizedSubcommandSpec {
+  readonly name: string;
+  readonly description: string;
+  readonly build: (sub: OptionListBuilder) => OptionListBuilder;
+  readonly run?: RunHandler;
+}
+
+function normalizeSubcommandSpec(
+  input: string | RuntimeSubcommandSpec,
+  description?: string,
+  build?: (sub: OptionListBuilder) => OptionListBuilder,
+): NormalizedSubcommandSpec {
+  if (typeof input === "string") {
+    if (description === undefined) {
+      throw new Error(`Subcommand "${input}" is missing a description.`);
+    }
+    return { name: input, description, build: build ?? ((sub) => sub) };
+  }
+
+  return {
+    name: input.name,
+    description: input.description,
+    build: input.options ?? ((sub) => sub),
+    run: input.run,
+  };
+}
+
 class GroupBuilder {
   readonly subcommands: SubcommandDefinition[] = [];
   readonly subHandlers: Map<string, RunHandler> = new Map();
 
   subcommand(
-    name: string,
-    description: string,
-    build: (sub: OptionListBuilder) => OptionListBuilder = (sub) => sub,
+    input: string | RuntimeSubcommandSpec,
+    description?: string,
+    build?: (sub: OptionListBuilder) => OptionListBuilder,
   ): this {
+    const spec = normalizeSubcommandSpec(input, description, build);
     const sub = new OptionListBuilder();
-    build(sub);
-    this.subcommands.push({ name, description, options: sub.options });
+    spec.build(sub);
+    this.subcommands.push({ name: spec.name, description: spec.description, options: sub.options });
+    if (spec.run) this.subHandlers.set(spec.name, spec.run);
     return this;
   }
 
@@ -844,15 +934,17 @@ class CommandBuilder {
   }
 
   subcommand(
-    name: string,
-    description: string,
-    build: (sub: OptionListBuilder) => OptionListBuilder = (sub) => sub,
+    input: string | RuntimeSubcommandSpec,
+    description?: string,
+    build?: (sub: OptionListBuilder) => OptionListBuilder,
   ): this {
+    const spec = normalizeSubcommandSpec(input, description, build);
     const sub = new OptionListBuilder();
-    build(sub);
-    const definition = { name, description, options: sub.options };
+    spec.build(sub);
+    const definition = { name: spec.name, description: spec.description, options: sub.options };
     this.subcommands.push(definition);
     this.data.addSubcommand((builder) => applySubcommand(builder, definition));
+    if (spec.run) this.registerSubHandler(spec.name, spec.run);
     return this;
   }
 
@@ -863,7 +955,7 @@ class CommandBuilder {
     this.groups.push(definition);
     // Merge inline group subcommand handlers with a "group:sub" key prefix.
     for (const [subName, handler] of group.subHandlers) {
-      this.subHandlers.set(`${name}:${subName}`, handler);
+      this.registerSubHandler(`${name}:${subName}`, handler);
     }
     this.data.addSubcommandGroup((builder) => {
       builder.setName(name).setDescription(description);
@@ -879,10 +971,7 @@ class CommandBuilder {
   }
 
   handle(name: string, handler: RunHandler): this {
-    // Finalize autocomplete state so the module is usable without a trailing
-    // .run() when all subcommands have inline .handle() registrations.
-    if (!this.autocompleteDeclared) this.autocomplete = undefined;
-    this.subHandlers.set(name, handler);
+    this.registerSubHandler(name, handler);
     return this;
   }
 
@@ -972,6 +1061,13 @@ class CommandBuilder {
     this.options.push(option);
     applyOption(this.data, option);
     return this;
+  }
+
+  private registerSubHandler(name: string, handler: RunHandler): void {
+    // Finalize autocomplete state so the module is usable without a trailing
+    // .run() when all subcommands have inline handlers.
+    if (!this.autocompleteDeclared) this.autocomplete = undefined;
+    this.subHandlers.set(name, handler);
   }
 
   private context(interaction: ChatInputCommandInteraction, ctx: Ctx): CommandContextBase {

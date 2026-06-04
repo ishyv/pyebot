@@ -13,17 +13,23 @@ import { coins } from "@/utils/fmt";
 
 const data = command("bank")
   .description("Manage your bank account")
-  .subcommand("balance", "View your hand and bank balance")
-  .subcommand("deposit", "Deposit coins into your bank (safe from /rob)", (s) =>
-    s
-      .integer("amount", "Amount to deposit", { required: true, min: 1 })
-      .string("currency", "Currency (default: coins)"),
-  )
-  .subcommand("withdraw", "Withdraw coins from your bank", (s) =>
-    s
-      .integer("amount", "Amount to withdraw", { required: true, min: 1 })
-      .string("currency", "Currency (default: coins)"),
-  )
+  .subcommand({ name: "balance", description: "View your hand and bank balance" })
+  .subcommand({
+    name: "deposit",
+    description: "Deposit coins into your bank (safe from /rob)",
+    options: (s) =>
+      s
+        .integer("amount", "Amount to deposit", { required: true, min: 1 })
+        .string("currency", "Currency (default: coins)"),
+  })
+  .subcommand({
+    name: "withdraw",
+    description: "Withdraw coins from your bank",
+    options: (s) =>
+      s
+        .integer("amount", "Amount to withdraw", { required: true, min: 1 })
+        .string("currency", "Currency (default: coins)"),
+  })
   .guildOnly()
   .defer("ephemeral");
 

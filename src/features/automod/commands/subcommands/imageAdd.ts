@@ -1,5 +1,4 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import {
   addBannedImage,
   displayBannedImageId,
@@ -8,11 +7,12 @@ import {
 } from "@/features/automod/bannedImages";
 import { hashImageBuffer, type ImageHashes } from "@/features/automod/imageHash";
 import { configUpdateMessage } from "@/ui/v2";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod image-add` banned-image fingerprint creation. */
 export async function handleImageAdd(
   interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 

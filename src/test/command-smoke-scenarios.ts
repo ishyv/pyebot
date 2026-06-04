@@ -26,7 +26,7 @@ export const commandSmokeScenarios: Readonly<Record<string, CommandScenario>> = 
 
   ai: rawNoGuild("ai", "panel"),
   context: rawNoGuild("context"),
-  automod: { ...rawNoGuild("automod", "panel"), isAdmin: false },
+  automod: { commandName: "automod", subcommand: "panel", expectResponse: "raw", isAdmin: false },
   autorole: ctxNoGuild("autorole", "list"),
 
   balance: ctxNoGuild("balance"),

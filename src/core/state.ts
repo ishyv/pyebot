@@ -1,20 +1,29 @@
 // ─── CooldownManager ─────────────────────────────────────────────────────────
+type Clock = () => number;
+
+const systemNow: Clock = () => Date.now();
+
 export class CooldownManager {
   private readonly map = new Map<string, number>();
+  private readonly now: Clock;
+
+  constructor(now: Clock = systemNow) {
+    this.now = now;
+  }
 
   private key(userId: string, command: string): string {
     return `${userId}:${command}`;
   }
 
   set(userId: string, command: string, durationMs: number): void {
-    this.map.set(this.key(userId, command), Date.now() + durationMs);
+    this.map.set(this.key(userId, command), this.now() + durationMs);
   }
 
   isOnCooldown(userId: string, command: string): boolean {
     const k = this.key(userId, command);
     const expiresAt = this.map.get(k);
     if (expiresAt === undefined) return false;
-    if (Date.now() >= expiresAt) {
+    if (this.now() >= expiresAt) {
       this.map.delete(k);
       return false;
     }
@@ -24,7 +33,7 @@ export class CooldownManager {
   getRemainingMs(userId: string, command: string): number {
     const expiresAt = this.map.get(this.key(userId, command));
     if (expiresAt === undefined) return 0;
-    return Math.max(0, expiresAt - Date.now());
+    return Math.max(0, expiresAt - this.now());
   }
 
   clear(userId: string, command: string): void {
@@ -43,6 +52,8 @@ export interface SessionManagerOptions {
   readonly ttlMs?: number | null;
   /** Maximum retained entries. `null` disables size-based eviction. */
   readonly maxEntries?: number | null;
+  /** Clock used for expiry checks. Defaults to wall time. */
+  readonly now?: Clock;
 }
 
 interface SessionEntry<T> {
@@ -54,10 +65,12 @@ export class SessionManager<T> {
   private readonly map = new Map<string, SessionEntry<T>>();
   private readonly ttlMs: number | null;
   private readonly maxEntries: number | null;
+  private readonly now: Clock;
 
   constructor(options: SessionManagerOptions = {}) {
     this.ttlMs = options.ttlMs === undefined ? 24 * 60 * 60 * 1000 : options.ttlMs;
     this.maxEntries = options.maxEntries === undefined ? 10_000 : options.maxEntries;
+    this.now = options.now ?? systemNow;
   }
 
   get(key: string): T | undefined {
@@ -75,7 +88,7 @@ export class SessionManager<T> {
   set(key: string, value: T): void {
     this.pruneExpired();
     if (this.map.has(key)) this.map.delete(key);
-    this.map.set(key, { value, createdAt: Date.now() });
+    this.map.set(key, { value, createdAt: this.now() });
     this.enforceMaxEntries();
   }
 
@@ -94,7 +107,7 @@ export class SessionManager<T> {
   }
 
   private isExpired(entry: SessionEntry<T>): boolean {
-    return this.ttlMs !== null && Date.now() - entry.createdAt >= this.ttlMs;
+    return this.ttlMs !== null && this.now() - entry.createdAt >= this.ttlMs;
   }
 
   private pruneExpired(): void {
@@ -119,18 +132,20 @@ export class SessionManager<T> {
 export class LockSet {
   private readonly locks = new Map<string, number>();
   private readonly staleMs: number;
+  private readonly now: Clock;
 
-  constructor(staleMs = 5 * 60 * 1000) {
+  constructor(staleMs = 5 * 60 * 1000, now: Clock = systemNow) {
     this.staleMs = staleMs;
+    this.now = now;
   }
 
   tryAcquire(key: string): boolean {
     const acquiredAt = this.locks.get(key);
     // Stale lock: treat as if it was never acquired and overwrite it.
-    if (acquiredAt !== undefined && Date.now() - acquiredAt < this.staleMs) {
+    if (acquiredAt !== undefined && this.now() - acquiredAt < this.staleMs) {
       return false;
     }
-    this.locks.set(key, Date.now());
+    this.locks.set(key, this.now());
     return true;
   }
 
@@ -141,7 +156,7 @@ export class LockSet {
   isHeld(key: string): boolean {
     const acquiredAt = this.locks.get(key);
     if (acquiredAt === undefined) return false;
-    if (Date.now() - acquiredAt >= this.staleMs) {
+    if (this.now() - acquiredAt >= this.staleMs) {
       this.locks.delete(key);
       return false;
     }

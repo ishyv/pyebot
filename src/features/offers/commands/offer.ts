@@ -1,5 +1,5 @@
 /**
- * /offer create   — opens a five-field modal; submission handled by @Handle(OFFER_CREATE_MODAL_ID)
+ * /offer create   — opens a five-field modal; submission handled by the offer routes
  * /offer withdraw — removes the active offer and marks the review card WITHDRAWN
  * /offer status   — shows the current pending/changes-requested offer
  * /offer panel    — opens the admin config panel (mod-only)
@@ -17,17 +17,24 @@ import { container, separator, text, v2Message } from "@/ui/v2";
 
 const data = command("offer")
   .description("Manage job/service offers")
-  .subcommand("create", "Submit a new offer for review")
-  .subcommand("withdraw", "Withdraw your active offer")
-  .subcommand("status", "Check the status of your current offer")
-  .subcommand("panel", "Open the offers configuration panel");
+  .subcommand({ name: "create", description: "Submit a new offer for review" })
+  .subcommand({ name: "withdraw", description: "Withdraw your active offer" })
+  .subcommand({ name: "status", description: "Check the status of your current offer" })
+  .subcommand({
+    name: "panel",
+    description: "Open the offers configuration panel",
+    run: async (c) => {
+      if (!(await assertPanelPermission(c.interaction))) return undefined;
+      await openAdminPanel(c.interaction, "offers");
+    },
+  });
 
 type OfferCtx = RunContext<typeof data>;
 
 async function handleCreate(c: Extract<OfferCtx, { subcommand: "create" }>) {
   if (!c.guild) return { content: "This command can only be used in a server." };
   // showModal IS the initial response — no defer before it.
-  // The submission is handled by @Handle(OFFER_CREATE_MODAL_ID) in handlers.ts.
+  // The submission is handled by the modal route in handlers.ts.
   await c.interaction.showModal(buildCreateModal());
   return undefined;
 }
@@ -110,8 +117,4 @@ export default data
   .help({ hints: [] })
   .handle("create", handleCreate)
   .handle("withdraw", handleWithdraw)
-  .handle("status", handleStatus)
-  .run(async (c) => {
-    if (!(await assertPanelPermission(c.interaction))) return undefined;
-    await openAdminPanel(c.interaction, "offers");
-  });
+  .handle("status", handleStatus);

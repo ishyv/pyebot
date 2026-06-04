@@ -6,7 +6,7 @@ export default command("tops")
   .description("Open activity report configuration")
   .defaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .dmPermission(false)
-  .subcommand("panel", "Open the tops panel")
+  .subcommand({ name: "panel", description: "Open the tops panel" })
   .hidden()
   .run(async ({ interaction }) => {
     if (!(await assertPanelPermission(interaction))) return;

@@ -51,17 +51,24 @@ describe("command DSL", () => {
       .description("Sample command")
       .string("topic", "Topic to inspect", { required: true, autocomplete: true })
       .integer("count", "How many", { min: 1, max: 5 })
-      .subcommand("run", "Run sample", (sub) =>
-        sub.string("mode", "Mode", {
-          required: true,
-          choices: [
-            { name: "Fast", value: "fast" },
-            { name: "Careful", value: "careful" },
-          ],
-        }),
-      )
+      .subcommand({
+        name: "run",
+        description: "Run sample",
+        options: (sub) =>
+          sub.string("mode", "Mode", {
+            required: true,
+            choices: [
+              { name: "Fast", value: "fast" },
+              { name: "Careful", value: "careful" },
+            ],
+          }),
+      })
       .group("admin", "Admin actions", (group) =>
-        group.subcommand("reset", "Reset sample", (sub) => sub.boolean("confirm", "Confirm")),
+        group.subcommand({
+          name: "reset",
+          description: "Reset sample",
+          options: (sub) => sub.boolean("confirm", "Confirm"),
+        }),
       )
       .defaultMemberPermissions(PermissionFlagsBits.ManageGuild)
       .dmPermission(false)
@@ -207,13 +214,71 @@ describe("command DSL", () => {
       .description("Warn")
       .guildOnly()
       .defer("ephemeral")
-      .subcommand("add", "Add a warning", (s) => s.user("user", "User", { required: true }))
-      .subcommand("list", "List warnings", (s) => s.user("user", "User", { required: true }))
-      .subcommand("remove", "Remove a warning")
+      .subcommand({
+        name: "add",
+        description: "Add a warning",
+        options: (s) => s.user("user", "User", { required: true }),
+      })
+      .subcommand({
+        name: "list",
+        description: "List warnings",
+        options: (s) => s.user("user", "User", { required: true }),
+      })
+      .subcommand({ name: "remove", description: "Remove a warning" })
       .help({ hints: [] })
       .handle("add", async (c) => {
         dispatched.push(`add:${c.options.user.id}`);
       })
+      .run(async (c) => {
+        dispatched.push(`fallback:${c.subcommand}`);
+      });
+
+    const fakeUser = { id: "target-1" } as never;
+    const subInteraction = (sub: string) =>
+      fakeInteraction({
+        options: {
+          getString: () => null,
+          getInteger: () => null,
+          getBoolean: () => null,
+          getUser: (name: string) => (name === "user" ? fakeUser : null),
+          getChannel: () => null,
+          getRole: () => null,
+          getMentionable: () => null,
+          getAttachment: () => null,
+          getSubcommand: () => sub,
+          getSubcommandGroup: () => null,
+        },
+      });
+
+    const { ctx } = fakeCtx();
+    await mod.execute(subInteraction("add"), ctx);
+    await mod.execute(subInteraction("list"), ctx);
+    await mod.execute(subInteraction("remove"), ctx);
+
+    expect(dispatched).toEqual(["add:target-1", "fallback:list", "fallback:remove"]);
+  });
+
+  it("object subcommands dispatch inline run handlers and preserve fallback .run()", async () => {
+    const dispatched: string[] = [];
+    const mod = command("warn")
+      .description("Warn")
+      .guildOnly()
+      .defer("ephemeral")
+      .subcommand({
+        name: "add",
+        description: "Add a warning",
+        options: (s) => s.user("user", "User", { required: true }),
+        run: async (c) => {
+          dispatched.push(`add:${c.options.user.id}`);
+        },
+      })
+      .subcommand({
+        name: "list",
+        description: "List warnings",
+        options: (s) => s.user("user", "User", { required: true }),
+      })
+      .subcommand({ name: "remove", description: "Remove a warning" })
+      .help({ hints: [] })
       .run(async (c) => {
         dispatched.push(`fallback:${c.subcommand}`);
       });
@@ -251,10 +316,12 @@ describe("command DSL", () => {
       .defer("ephemeral")
       .group("escalation", "Escalation settings", (g) =>
         g
-          .subcommand("add", "Add threshold", (s) =>
-            s.integer("warns", "Warn count", { required: true }),
-          )
-          .subcommand("list", "List thresholds")
+          .subcommand({
+            name: "add",
+            description: "Add threshold",
+            options: (s) => s.integer("warns", "Warn count", { required: true }),
+          })
+          .subcommand({ name: "list", description: "List thresholds" })
           .handle("add", async (c) => {
             dispatched.push(`group-add:${c.options.warns}`);
           })
@@ -288,6 +355,58 @@ describe("command DSL", () => {
     await mod.execute(groupInteraction("list"), ctx);
 
     expect(dispatched).toEqual(["group-add:3", "group-list:list"]);
+  });
+
+  it("object group subcommands dispatch inline run handlers", async () => {
+    const dispatched: string[] = [];
+    const mod = command("modset")
+      .description("Modset")
+      .guildOnly()
+      .defer("ephemeral")
+      .group("escalation", "Escalation settings", (g) =>
+        g
+          .subcommand({
+            name: "add",
+            description: "Add threshold",
+            options: (s) => s.integer("warns", "Warn count", { required: true }),
+            run: async (c) => {
+              dispatched.push(`group-add:${c.guildId}:${c.options.warns}`);
+            },
+          })
+          .subcommand({
+            name: "list",
+            description: "List thresholds",
+            run: async (c) => {
+              dispatched.push(`group-list:${c.guildId}:${c.subcommand}`);
+            },
+          }),
+      )
+      .help({ hints: [] })
+      .run(async (c) => {
+        dispatched.push(`fallback:${c.subcommandGroup}:${c.subcommand}`);
+      });
+
+    const groupInteraction = (sub: string, warns: number | null = null) =>
+      fakeInteraction({
+        options: {
+          getString: () => null,
+          getInteger: (name: string) => (name === "warns" ? warns : null),
+          getBoolean: () => null,
+          getUser: () => null,
+          getChannel: () => null,
+          getRole: () => null,
+          getMentionable: () => null,
+          getAttachment: () => null,
+          getSubcommand: () => sub,
+          getSubcommandGroup: () => "escalation",
+        },
+      });
+
+    const { ctx } = fakeCtx();
+    await mod.execute(groupInteraction("add", 3), ctx);
+    await mod.execute(groupInteraction("list"), ctx);
+
+    expect(dispatched).toEqual(["group-add:guild-1:3", "group-list:guild-1:list"]);
   });
 
   it(".cooldown() blocks second invocation and records only on success", async () => {
@@ -334,8 +453,12 @@ describe("command DSL", () => {
       .description("Warn")
       .guildOnly()
       .defer("ephemeral")
-      .subcommand("add", "Add", (s) => s.user("user", "User", { required: true }))
-      .subcommand("clear", "Clear all")
+      .subcommand({
+        name: "add",
+        description: "Add",
+        options: (s) => s.user("user", "User", { required: true }),
+      })
+      .subcommand({ name: "clear", description: "Clear all" })
       .require("clear", PermissionFlagsBits.BanMembers)
       .help({ hints: [] })
       .run(async (c) => {

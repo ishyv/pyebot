@@ -1,11 +1,11 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import type { CommandContext } from "@/core/feature";
 import { displayBannedImageId, listActiveBannedImages } from "@/features/automod/bannedImages";
+import type { AutomodSubcommandContext } from "./types";
 
 /** Handles `/automod image-list` with the uniform subcommand handler signature. */
 export async function handleImageList(
   _interaction: ChatInputCommandInteraction,
-  ctx: CommandContext,
+  ctx: AutomodSubcommandContext,
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 

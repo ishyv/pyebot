@@ -55,7 +55,10 @@ export function renderModHelp() {
 export default command("mod")
   .description("Moderation help and workflow guidance")
   .guildOnly()
-  .subcommand("help", "Show moderation setup, daily-use, automod, and safety guidance")
+  .subcommand({
+    name: "help",
+    description: "Show moderation setup, daily-use, automod, and safety guidance",
+  })
   .help({ hints: ["/modset status", "/modconfig modlog"] })
   .run(() => {
     const { components } = renderModHelp();

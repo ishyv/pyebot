@@ -73,25 +73,30 @@ Pass `{ required: true }` to make a value non-optional in the typed `options` ob
 
 ### Subcommands
 
-Declare subcommands with `.subcommand(name, description, build)` and handle each with
-`.handle(name, ...)`, which gives `c.options` typed to that subcommand only. Group with
-`.group(...)`. Route by name — never branch on `if (c.subcommand === "x")` (see AGENTS.md).
+Declare subcommands with `.subcommand({ name, description, options, run })`.
+The `run` callback gets `c.options` typed to that subcommand only. Group with
+`.group(...)`. Route by declaration — never branch on `if (c.subcommand === "x")`
+(see AGENTS.md). Use `.handle(name, fn)` only when the handler function is
+declared separately.
 
 ```ts
 export default command("note")
   .description("Manage user notes")
-  .subcommand("add", "Add a note", (s) =>
-    s.user("user", "Who", { required: true }).string("text", "Note", { required: true }),
-  )
-  .handle("add", async (c) => {
-    const { user, text } = c.options; // typed to the "add" subcommand
-    return v2Message(container("ok", section(`Noted ${user.username}: ${text}`)));
+  .subcommand({
+    name: "add",
+    description: "Add a note",
+    options: (s) =>
+      s.user("user", "Who", { required: true }).string("text", "Note", { required: true }),
+    run: async (c) => {
+      const { user, text } = c.options; // typed to the "add" subcommand
+      return v2Message(container("ok", section(`Noted ${user.username}: ${text}`)));
+    },
   });
 ```
 
 ## Responding
 
-Prefer **returning** a `v2Message(...)` payload from `.run()` / `.handle()` — the framework
+Prefer **returning** a `v2Message(...)` payload from command/subcommand handlers — the framework
 turns the return value into the reply, choosing reply-vs-edit-deferred from interaction state,
 and pre-validating the payload (content length, embed/component limits, Components V2 ceiling).
 

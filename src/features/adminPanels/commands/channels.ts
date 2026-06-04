@@ -6,7 +6,7 @@ export default command("channels")
   .description("Manage bot-related channels")
   .defaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   .dmPermission(false)
-  .subcommand("panel", "Open the channels panel")
+  .subcommand({ name: "panel", description: "Open the channels panel" })
   .hidden()
   .run(async ({ interaction }) => {
     if (!(await assertPanelPermission(interaction))) return;
