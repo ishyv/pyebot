@@ -1,10 +1,9 @@
-import type { Message } from "discord.js";
 import { getGuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
 import { resolveConfiguredChannel } from "@/core/featureConfig";
 import { createLogger } from "@/core/logger";
 import { mongoCountingStateRepository } from "@/db/repositories/counting";
 import { getGuild } from "@/db/repositories/guilds";
-import { type Ctx, Listen } from "@/framework";
+import { defineHandlers, listen } from "@/framework";
 import { countingFeatureConfig } from "./config";
 import countingFeature from "./index";
 import { processCountingMessage } from "./service";
@@ -12,13 +11,12 @@ import { processCountingMessage } from "./service";
 const log = createLogger("counting:message");
 
 /**
- * Runtime adapter for Discord message events owned by the current feature loader.
- * Counting still gates itself because raw `@Listen` events bypass slash-command
- * feature middleware.
+ * Counting reacts to every message in the configured channel. Raw `listen(...)`
+ * events bypass the slash-command feature gate, so this handler self-gates on
+ * the feature toggle before doing any work.
  */
-export default class CountingHandlers {
-  @Listen("messageCreate")
-  async onMessage(message: Message, ctx: Ctx): Promise<void> {
+export default defineHandlers([
+  listen("messageCreate", async (message, ctx) => {
     try {
       if (message.author.bot || !message.guildId) return;
 
@@ -56,5 +54,5 @@ export default class CountingHandlers {
     } catch (error) {
       log.error("Error in counting messageCreate handler", error);
     }
-  }
-}
+  }),
+]);
