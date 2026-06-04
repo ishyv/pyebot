@@ -22,7 +22,6 @@
 import {
   ActionRowBuilder,
   ButtonBuilder,
-  type ButtonInteraction,
   ButtonStyle,
   type ChatInputCommandInteraction,
   MessageFlags,
@@ -32,14 +31,24 @@ import {
 import { GuildFeatures } from "@/components/guild-features";
 import { container, text, v2Message } from "@/ui/v2";
 import { isAdmin, isFeatureEnabled } from "./middleware";
+import { str } from "./routing/codecs";
+import { type Registration, routeHandlers } from "./routing/registry";
+import { defineRoutes } from "./routing/routes";
 import type { CommandModule, Ctx, FeatureDescriptor } from "./types";
 
 const PANEL_NAME = "features";
-const TOGGLE_PREFIX = "features:toggle:";
+
+/**
+ * Framework-owned route for the `/features` panel toggle buttons. Prefix is
+ * `features:toggle:` — unchanged from the hand-rolled constant it replaces.
+ */
+export const featureToggleRoutes = defineRoutes("features", {
+  toggle: { feature: str },
+});
 
 /** Encode "toggle this feature" into a button customId. */
 function toggleId(featureId: string): string {
-  return `${TOGGLE_PREFIX}${featureId}`;
+  return featureToggleRoutes.toggle.id({ feature: featureId });
 }
 
 /** Build the SlashCommandBuilder for `/features` with sub-commands derived from loaded features. */
@@ -173,38 +182,43 @@ export function buildFeaturesCommand(features: ReadonlyArray<FeatureDescriptor>)
 }
 
 /**
- * Handler for `features:toggle:<id>` buttons. Registered in the
- * ComponentRouter by bootstrap (not via @Handle, since this is framework
- * code, not a feature).
+ * Component registrations for the `features:toggle:<id>` buttons. Bootstrap adds
+ * these to the ComponentRouter directly — this is framework code, not a feature
+ * with a handlers.ts — but it goes through the same route core as features do.
  */
-export function buildToggleHandler(features: ReadonlyArray<FeatureDescriptor>) {
+export function buildToggleRegistrations(
+  features: ReadonlyArray<FeatureDescriptor>,
+): Registration[] {
   const byId = new Map(features.map((f) => [f.id, f]));
-  return async (interaction: ButtonInteraction, ctx: Ctx): Promise<void> => {
-    if (!interaction.guildId) {
-      await interaction.reply({ content: "Use in a server.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({
-        content: "You need Manage Server permission.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const id = interaction.customId.slice(TOGGLE_PREFIX.length);
-    const feat = byId.get(id);
-    if (!feat) {
-      await interaction.reply({ content: `Unknown feature: ${id}`, flags: MessageFlags.Ephemeral });
-      return;
-    }
-    const current = await isFeatureEnabled(ctx, interaction.guildId, feat);
-    await ctx.patch(interaction.guildId, GuildFeatures, (cur) => ({
-      overrides: { ...cur.overrides, [id]: !current },
-    }));
-    const panelPayload = await renderPanel(ctx, interaction.guildId, features);
-    await interaction.update(panelPayload as Parameters<typeof interaction.update>[0]);
-  };
+  return routeHandlers(featureToggleRoutes, {
+    toggle: async (interaction, { feature: id }, ctx) => {
+      if (!interaction.guildId) {
+        await interaction.reply({ content: "Use in a server.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+        await interaction.reply({
+          content: "You need Manage Server permission.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const feat = byId.get(id);
+      if (!feat) {
+        await interaction.reply({
+          content: `Unknown feature: ${id}`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const current = await isFeatureEnabled(ctx, interaction.guildId, feat);
+      await ctx.patch(interaction.guildId, GuildFeatures, (cur) => ({
+        overrides: { ...cur.overrides, [id]: !current },
+      }));
+      const panelPayload = await renderPanel(ctx, interaction.guildId, features);
+      await interaction.update(panelPayload as Parameters<typeof interaction.update>[0]);
+    },
+  });
 }
 
-export const TOGGLE_CUSTOM_ID_PREFIX = TOGGLE_PREFIX;
 export const FEATURES_COMMAND_NAME = PANEL_NAME;

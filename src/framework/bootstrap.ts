@@ -38,7 +38,7 @@ import { createLogger } from "@/core/logger";
 import { FEATURE_CONFIGS } from "@/features/config";
 import { loadFeatures } from "./loader";
 import { isAdmin, isFeatureEnabled, safeReply } from "./middleware";
-import { buildFeaturesCommand, buildToggleHandler, TOGGLE_CUSTOM_ID_PREFIX } from "./panel";
+import { buildFeaturesCommand, buildToggleRegistrations } from "./panel";
 import { ComponentRouter } from "./router";
 import type { CommandModule, FeatureDescriptor, LoadedFeature } from "./types";
 import { World } from "./world";
@@ -128,10 +128,11 @@ export async function bootstrapFramework(
     }
   }
 
-  // Framework's own component route for the /features panel toggle buttons.
-  router.add(TOGGLE_CUSTOM_ID_PREFIX, "framework", async (interaction, ctx) => {
-    await buildToggleHandler(descriptors)(interaction as ButtonInteraction, ctx);
-  });
+  // Framework's own component route for the /features panel toggle buttons,
+  // built through the same route core as feature handlers.
+  for (const reg of buildToggleRegistrations(descriptors)) {
+    if (reg.kind === "component") router.add(reg.prefix, "framework", reg.run);
+  }
 
   // ─── Build the per-interaction dispatcher ────────────────────────────
   async function dispatch(interaction: Interaction): Promise<void> {
