@@ -16,9 +16,6 @@ import { getGuild } from "@/db/repositories/guilds";
 
 const log = createLogger("moderation:verify-button");
 
-export const VERIFY_PREFIX = "mod:verify:";
-export const isVerifyButton = (id: string): boolean => id.startsWith(VERIFY_PREFIX);
-
 async function disableButton(interaction: ButtonInteraction): Promise<void> {
   try {
     const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
@@ -34,15 +31,16 @@ async function disableButton(interaction: ButtonInteraction): Promise<void> {
   }
 }
 
-export async function handleVerifyButton(interaction: ButtonInteraction): Promise<void> {
+export async function handleVerifyButton(
+  interaction: ButtonInteraction,
+  targetUserId: string,
+): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   if (!interaction.guild) {
     await interaction.editReply({ content: "Server only." });
     return;
   }
-
-  const targetUserId = interaction.customId.slice(VERIFY_PREFIX.length);
 
   // Only the intended user can click the button
   if (interaction.user.id !== targetUserId) {

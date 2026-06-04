@@ -28,41 +28,22 @@ import {
 import { createAppeal, getAppeal } from "@/db/repositories/appeals";
 import { getGuild } from "@/db/repositories/guilds";
 import { syncQueueMessage } from "@/features/moderation/appeals";
+import { modRoutes } from "@/features/moderation/routes";
 import { container, text, v2Message } from "@/ui/v2";
 
-export const APPEAL_BUTTON_PREFIX = "mod:appeal:";
-export const APPEAL_SUBMIT_PREFIX = "mod:appeal-submit:";
-
-/** Parses `mod:appeal:{guildId}:{caseId}` or `mod:appeal-submit:{guildId}:{caseId}`. */
-function parseAppealId(
-  customId: string,
-  prefix: string,
-): { guildId: string; caseId: number } | null {
-  const rest = customId.slice(prefix.length);
-  const idx = rest.lastIndexOf(":");
-  if (idx === -1) return null;
-  const guildId = rest.slice(0, idx);
-  const caseId = Number(rest.slice(idx + 1));
-  if (!guildId || Number.isNaN(caseId)) return null;
-  return { guildId, caseId };
+interface AppealArgs {
+  readonly guildId: string;
+  readonly caseId: number;
 }
 
 /**
  * Handles the "Appeal Ban" button click in the user's DM. Shows the appeal
  * reason modal if appeals are enabled and no prior appeal exists for this case.
  */
-export async function handleAppealButton(interaction: ButtonInteraction): Promise<void> {
-  const parsed = parseAppealId(interaction.customId, APPEAL_BUTTON_PREFIX);
-  if (!parsed) {
-    await interaction.reply({
-      content: "Invalid appeal link.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const { guildId, caseId } = parsed;
-
+export async function handleAppealButton(
+  interaction: ButtonInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   const guildResult = await getGuild(guildId);
   const guildData = guildResult.isOk() ? guildResult.unwrap() : null;
 
@@ -84,7 +65,7 @@ export async function handleAppealButton(interaction: ButtonInteraction): Promis
   }
 
   const modal = new ModalBuilder()
-    .setCustomId(`${APPEAL_SUBMIT_PREFIX}${guildId}:${caseId}`)
+    .setCustomId(modRoutes["appeal-submit"].id({ guildId, caseId }))
     .setTitle(`Appeal Ban — Case #${caseId}`)
     .addComponents(
       new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
@@ -105,11 +86,10 @@ export async function handleAppealButton(interaction: ButtonInteraction): Promis
  * Handles modal submit for the appeal reason. Creates the appeal record,
  * opens a private thread, and syncs the guild queue message.
  */
-export async function handleAppealSubmit(interaction: ModalSubmitInteraction): Promise<void> {
-  const parsed = parseAppealId(interaction.customId, APPEAL_SUBMIT_PREFIX);
-  if (!parsed) return;
-
-  const { guildId, caseId } = parsed;
+export async function handleAppealSubmit(
+  interaction: ModalSubmitInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   const reason = interaction.fields.getTextInputValue("reason");
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });

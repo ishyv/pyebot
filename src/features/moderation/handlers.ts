@@ -1,35 +1,19 @@
 /**
- * Moderation feature component handlers.
+ * Moderation feature component handlers — a flat registration list. Each route's
+ * `args` (guildId/caseId, or userId for verify) is decoded and typed from the
+ * schema (see ./routes.ts); a stale or garbled customId is skipped before the
+ * handler runs.
  *
- * Routes button and modal interactions:
- *   - "mod:verify:"        → verification gate button (assigns verified role)
- *   - "mod:appeal:"        → appeal button in ban DM (shows modal)
- *   - "mod:appeal-submit:" → appeal modal submit (creates record + thread)
- *   - "appeal:review:"     → review button on queue message (ephemeral panel)
- *   - "appeal:approve:"    → approve button on review panel (shows modal)
- *   - "appeal:deny:"       → deny button on review panel (shows modal)
- *   - "appeal:info:"       → request-info button on review panel (shows modal)
- *   - "appeal:approve-modal:" → approve modal submit (writes PARDON, DMs user)
- *   - "appeal:deny-modal:"    → deny modal submit (DMs user)
- *   - "appeal:info-modal:"    → info-request modal submit (DMs user, posts in thread)
+ *   mod:verify:         → verification gate button (assigns verified role)
+ *   mod:appeal:         → appeal button in ban DM (shows modal)
+ *   mod:appeal-submit:  → appeal modal submit (creates record + thread)
+ *   appeal:review:      → review button on queue message (ephemeral panel)
+ *   appeal:approve/deny/info:        → review-panel buttons (show modals)
+ *   appeal:approve/deny/info-modal:  → modal submits (decide + DM user)
  */
-import type { ButtonInteraction, ModalSubmitInteraction } from "discord.js";
-import { Handle } from "@/framework";
-import type { Ctx } from "@/framework/types";
+import { defineHandlers, routeHandlers } from "@/framework";
+import { handleAppealButton, handleAppealSubmit } from "./handlers/appealButton";
 import {
-  APPEAL_BUTTON_PREFIX,
-  APPEAL_SUBMIT_PREFIX,
-  handleAppealButton,
-  handleAppealSubmit,
-} from "./handlers/appealButton";
-import {
-  APPEAL_APPROVE_MODAL_PREFIX,
-  APPEAL_APPROVE_PREFIX,
-  APPEAL_DENY_MODAL_PREFIX,
-  APPEAL_DENY_PREFIX,
-  APPEAL_INFO_MODAL_PREFIX,
-  APPEAL_INFO_PREFIX,
-  APPEAL_REVIEW_PREFIX,
   handleAppealApproveButton,
   handleAppealApproveSubmit,
   handleAppealDenyButton,
@@ -38,56 +22,22 @@ import {
   handleAppealInfoSubmit,
   handleAppealReview,
 } from "./handlers/appealReview";
-import { handleVerifyButton, VERIFY_PREFIX } from "./handlers/verifyButton";
+import { handleVerifyButton } from "./handlers/verifyButton";
+import { appealRoutes, modRoutes } from "./routes";
 
-export default class ModerationHandlers {
-  @Handle(VERIFY_PREFIX)
-  async onVerifyButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleVerifyButton(interaction);
-  }
-
-  @Handle(APPEAL_BUTTON_PREFIX)
-  async onAppealButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealButton(interaction);
-  }
-
-  @Handle(APPEAL_SUBMIT_PREFIX)
-  async onAppealSubmit(interaction: ModalSubmitInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealSubmit(interaction);
-  }
-
-  @Handle(APPEAL_REVIEW_PREFIX)
-  async onAppealReview(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealReview(interaction);
-  }
-
-  @Handle(APPEAL_APPROVE_PREFIX)
-  async onAppealApproveButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealApproveButton(interaction);
-  }
-
-  @Handle(APPEAL_DENY_PREFIX)
-  async onAppealDenyButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealDenyButton(interaction);
-  }
-
-  @Handle(APPEAL_INFO_PREFIX)
-  async onAppealInfoButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealInfoButton(interaction);
-  }
-
-  @Handle(APPEAL_APPROVE_MODAL_PREFIX)
-  async onAppealApproveSubmit(interaction: ModalSubmitInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealApproveSubmit(interaction);
-  }
-
-  @Handle(APPEAL_DENY_MODAL_PREFIX)
-  async onAppealDenySubmit(interaction: ModalSubmitInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealDenySubmit(interaction);
-  }
-
-  @Handle(APPEAL_INFO_MODAL_PREFIX)
-  async onAppealInfoSubmit(interaction: ModalSubmitInteraction, _ctx: Ctx): Promise<void> {
-    await handleAppealInfoSubmit(interaction);
-  }
-}
+export default defineHandlers([
+  ...routeHandlers(modRoutes, {
+    verify: (interaction, args) => handleVerifyButton(interaction, args.userId),
+    appeal: (interaction, args) => handleAppealButton(interaction, args),
+    "appeal-submit": (interaction, args) => handleAppealSubmit(interaction, args),
+  }),
+  ...routeHandlers(appealRoutes, {
+    review: (interaction, args) => handleAppealReview(interaction, args),
+    approve: (interaction, args) => handleAppealApproveButton(interaction, args),
+    deny: (interaction, args) => handleAppealDenyButton(interaction, args),
+    info: (interaction, args) => handleAppealInfoButton(interaction, args),
+    "approve-modal": (interaction, args) => handleAppealApproveSubmit(interaction, args),
+    "deny-modal": (interaction, args) => handleAppealDenySubmit(interaction, args),
+    "info-modal": (interaction, args) => handleAppealInfoSubmit(interaction, args),
+  }),
+]);

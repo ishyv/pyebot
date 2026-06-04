@@ -9,16 +9,11 @@
  * Configuration: guild.moderation.verification
  */
 
-import {
-  ButtonBuilder,
-  ButtonStyle,
-  type Client,
-  type GuildMember,
-  type TextChannel,
-} from "discord.js";
+import { ButtonStyle, type Client, type GuildMember, type TextChannel } from "discord.js";
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import { container, row, text, v2Message } from "@/ui/v2";
+import { modRoutes } from "./routes";
 
 const log = createLogger("moderation:verification");
 
@@ -75,10 +70,10 @@ async function postVerifyPrompt(member: GuildMember, channelId: string): Promise
     if (!channel?.isTextBased() || !("send" in channel)) return;
 
     const verifyRow = row(
-      new ButtonBuilder()
-        .setCustomId(`mod:verify:${member.id}`)
-        .setLabel("✓ Verify")
-        .setStyle(ButtonStyle.Success),
+      modRoutes.verify.button(
+        { userId: member.id },
+        { label: "✓ Verify", style: ButtonStyle.Success },
+      ),
     );
 
     const verifyPayload = v2Message(

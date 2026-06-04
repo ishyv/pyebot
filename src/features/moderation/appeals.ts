@@ -11,13 +11,14 @@
  * appeal list rather than applying incremental diffs, so the message is always
  * consistent with DB state regardless of order-of-operations.
  */
-import { ButtonBuilder, ButtonStyle, type Client, type Guild, type TextChannel } from "discord.js";
+import { ButtonStyle, type Client, type Guild, type TextChannel } from "discord.js";
 import { markImportant, unmarkImportant } from "@/core/importantMessages";
 import { getPendingAppeals } from "@/db/repositories/appeals";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import type { Appeal } from "@/db/schemas/appeal";
 import { container, section, text, v2Message } from "@/ui/v2";
 import type { V2Payload } from "@/ui/views";
+import { appealRoutes } from "./routes";
 
 /** Maximum number of appeal Sections shown in one queue message. */
 const MAX_QUEUE_DISPLAY = 10;
@@ -42,10 +43,10 @@ export function buildQueuePayload(appeals: Appeal[]): V2Payload {
     const ts = Math.floor(new Date(appeal.submittedAt).getTime() / 1000);
     const reason = appeal.reason.length > 150 ? `${appeal.reason.slice(0, 150)}…` : appeal.reason;
 
-    const reviewButton = new ButtonBuilder()
-      .setCustomId(`appeal:review:${appeal.guildId}:${appeal.caseId}`)
-      .setLabel("Review")
-      .setStyle(ButtonStyle.Primary);
+    const reviewButton = appealRoutes.review.button(
+      { guildId: appeal.guildId, caseId: appeal.caseId },
+      { label: "Review", style: ButtonStyle.Primary },
+    );
 
     const body = `**@${appeal.userTag}** · Case #${appeal.caseId} · <t:${ts}:R>\n> ${reason}`;
     return section(body, reviewButton);

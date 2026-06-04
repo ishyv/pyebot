@@ -5,7 +5,9 @@ import { buildQueuePayload } from "./appeals";
 
 function makeAppeal(overrides: Partial<Omit<Appeal, "_id">> = {}): Appeal {
   const base = {
-    guildId: "g1",
+    // guildId must be a real snowflake — the review button encodes it through
+    // the snowflake codec, which rejects non-numeric ids.
+    guildId: "111",
     caseId: 1,
     userId: "u1",
     userTag: "TestUser",
@@ -33,7 +35,7 @@ describe("buildQueuePayload", () => {
     const json = JSON.stringify(payload);
     expect(json).toContain("Case #1");
     expect(json).toContain("TestUser");
-    expect(json).toContain("appeal:review:g1:1");
+    expect(json).toContain("appeal:review:111:1");
   });
 
   test("reason over 150 chars is truncated", () => {

@@ -23,6 +23,7 @@ import type { SanctionHistoryEntry } from "@/db/schemas/user";
 import { missingPermission } from "@/middleware/permissions";
 import { msToHuman } from "@/utils/time";
 import { sendModLog } from "./modlog";
+import { modRoutes } from "./routes";
 import type { SanctionType } from "./sanctions";
 
 // ---------------------------------------------------------------------------
@@ -299,10 +300,10 @@ async function sendBanDm(
     if (appealsChannelId) {
       const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import("discord.js");
       const row = new ActionRowBuilder<InstanceType<typeof ButtonBuilder>>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`mod:appeal:${guild.id}:${caseId}`)
-          .setLabel("Appeal Ban")
-          .setStyle(ButtonStyle.Secondary),
+        modRoutes.appeal.button(
+          { guildId: guild.id, caseId },
+          { label: "Appeal Ban", style: ButtonStyle.Secondary },
+        ),
       );
       await target.send({ content: msg, components: [row] });
     } else {

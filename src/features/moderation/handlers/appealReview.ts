@@ -16,7 +16,6 @@
  */
 import {
   ActionRowBuilder,
-  ButtonBuilder,
   type ButtonInteraction,
   ButtonStyle,
   MessageFlags,
@@ -31,30 +30,14 @@ import {
 import { bus } from "@/core/bus";
 import { getAppeal, updateAppeal } from "@/db/repositories/appeals";
 import { syncQueueMessage } from "@/features/moderation/appeals";
+import { appealRoutes } from "@/features/moderation/routes";
 import { getCases, pardon } from "@/features/moderation/service";
 import { renderSanctionHistory } from "@/features/moderation/views";
 import { container, row, separator, text, v2Message } from "@/ui/v2";
 
-// ---------------------------------------------------------------------------
-// Shared prefix constants
-// ---------------------------------------------------------------------------
-
-export const APPEAL_REVIEW_PREFIX = "appeal:review:";
-export const APPEAL_APPROVE_PREFIX = "appeal:approve:";
-export const APPEAL_DENY_PREFIX = "appeal:deny:";
-export const APPEAL_INFO_PREFIX = "appeal:info:";
-export const APPEAL_APPROVE_MODAL_PREFIX = "appeal:approve-modal:";
-export const APPEAL_DENY_MODAL_PREFIX = "appeal:deny-modal:";
-export const APPEAL_INFO_MODAL_PREFIX = "appeal:info-modal:";
-
-function parseIds(customId: string, prefix: string): { guildId: string; caseId: number } | null {
-  const rest = customId.slice(prefix.length);
-  const idx = rest.lastIndexOf(":");
-  if (idx === -1) return null;
-  const guildId = rest.slice(0, idx);
-  const caseId = Number(rest.slice(idx + 1));
-  if (!guildId || Number.isNaN(caseId)) return null;
-  return { guildId, caseId };
+interface AppealArgs {
+  readonly guildId: string;
+  readonly caseId: number;
 }
 
 function hasModPerms(interaction: ButtonInteraction | ModalSubmitInteraction): boolean {
@@ -73,7 +56,10 @@ function hasModPerms(interaction: ButtonInteraction | ModalSubmitInteraction): b
  * Opens an ephemeral moderator review panel showing the appeal details,
  * the user's sanction history, and Approve / Deny / Request-info buttons.
  */
-export async function handleAppealReview(interaction: ButtonInteraction): Promise<void> {
+export async function handleAppealReview(
+  interaction: ButtonInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   if (!hasModPerms(interaction)) {
     await interaction.reply({
       content: "You need Moderate Members or Manage Server to review appeals.",
@@ -82,10 +68,6 @@ export async function handleAppealReview(interaction: ButtonInteraction): Promis
     return;
   }
 
-  const parsed = parseIds(interaction.customId, APPEAL_REVIEW_PREFIX);
-  if (!parsed) return;
-
-  const { guildId, caseId } = parsed;
   const appeal = await getAppeal(guildId, caseId);
 
   if (!appeal || appeal.status !== "pending") {
@@ -99,20 +81,20 @@ export async function handleAppealReview(interaction: ButtonInteraction): Promis
   const casesResult = await getCases(appeal.userId, guildId);
   const history = casesResult.isOk() ? casesResult.unwrap().slice(0, 10) : [];
 
-  const approveBtn = new ButtonBuilder()
-    .setCustomId(`${APPEAL_APPROVE_PREFIX}${guildId}:${caseId}`)
-    .setLabel("Approve")
-    .setStyle(ButtonStyle.Success);
+  const approveBtn = appealRoutes.approve.button(
+    { guildId, caseId },
+    { label: "Approve", style: ButtonStyle.Success },
+  );
 
-  const denyBtn = new ButtonBuilder()
-    .setCustomId(`${APPEAL_DENY_PREFIX}${guildId}:${caseId}`)
-    .setLabel("Deny")
-    .setStyle(ButtonStyle.Danger);
+  const denyBtn = appealRoutes.deny.button(
+    { guildId, caseId },
+    { label: "Deny", style: ButtonStyle.Danger },
+  );
 
-  const infoBtn = new ButtonBuilder()
-    .setCustomId(`${APPEAL_INFO_PREFIX}${guildId}:${caseId}`)
-    .setLabel("Request more info")
-    .setStyle(ButtonStyle.Secondary);
+  const infoBtn = appealRoutes.info.button(
+    { guildId, caseId },
+    { label: "Request more info", style: ButtonStyle.Secondary },
+  );
 
   const ts = Math.floor(new Date(appeal.submittedAt).getTime() / 1000);
   const detailContainer = container(
@@ -149,18 +131,17 @@ export async function handleAppealReview(interaction: ButtonInteraction): Promis
 // Approve button → modal
 // ---------------------------------------------------------------------------
 
-export async function handleAppealApproveButton(interaction: ButtonInteraction): Promise<void> {
+export async function handleAppealApproveButton(
+  interaction: ButtonInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   if (!hasModPerms(interaction)) {
     await interaction.reply({ content: "Permission denied.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const parsed = parseIds(interaction.customId, APPEAL_APPROVE_PREFIX);
-  if (!parsed) return;
-  const { guildId, caseId } = parsed;
-
   const modal = new ModalBuilder()
-    .setCustomId(`${APPEAL_APPROVE_MODAL_PREFIX}${guildId}:${caseId}`)
+    .setCustomId(appealRoutes["approve-modal"].id({ guildId, caseId }))
     .setTitle(`Approve Appeal — Case #${caseId}`)
     .addComponents(
       new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
@@ -183,11 +164,8 @@ export async function handleAppealApproveButton(interaction: ButtonInteraction):
 
 export async function handleAppealApproveSubmit(
   interaction: ModalSubmitInteraction,
+  { guildId, caseId }: AppealArgs,
 ): Promise<void> {
-  const parsed = parseIds(interaction.customId, APPEAL_APPROVE_MODAL_PREFIX);
-  if (!parsed) return;
-
-  const { guildId, caseId } = parsed;
   const reason = interaction.fields.getTextInputValue("reason");
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -264,18 +242,17 @@ export async function handleAppealApproveSubmit(
 // Deny button → modal
 // ---------------------------------------------------------------------------
 
-export async function handleAppealDenyButton(interaction: ButtonInteraction): Promise<void> {
+export async function handleAppealDenyButton(
+  interaction: ButtonInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   if (!hasModPerms(interaction)) {
     await interaction.reply({ content: "Permission denied.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const parsed = parseIds(interaction.customId, APPEAL_DENY_PREFIX);
-  if (!parsed) return;
-  const { guildId, caseId } = parsed;
-
   const modal = new ModalBuilder()
-    .setCustomId(`${APPEAL_DENY_MODAL_PREFIX}${guildId}:${caseId}`)
+    .setCustomId(appealRoutes["deny-modal"].id({ guildId, caseId }))
     .setTitle(`Deny Appeal — Case #${caseId}`)
     .addComponents(
       new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
@@ -296,11 +273,10 @@ export async function handleAppealDenyButton(interaction: ButtonInteraction): Pr
 // Deny modal submit
 // ---------------------------------------------------------------------------
 
-export async function handleAppealDenySubmit(interaction: ModalSubmitInteraction): Promise<void> {
-  const parsed = parseIds(interaction.customId, APPEAL_DENY_MODAL_PREFIX);
-  if (!parsed) return;
-
-  const { guildId, caseId } = parsed;
+export async function handleAppealDenySubmit(
+  interaction: ModalSubmitInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   const reason = interaction.fields.getTextInputValue("reason");
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -371,18 +347,17 @@ export async function handleAppealDenySubmit(interaction: ModalSubmitInteraction
 // Request more info button → modal
 // ---------------------------------------------------------------------------
 
-export async function handleAppealInfoButton(interaction: ButtonInteraction): Promise<void> {
+export async function handleAppealInfoButton(
+  interaction: ButtonInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   if (!hasModPerms(interaction)) {
     await interaction.reply({ content: "Permission denied.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const parsed = parseIds(interaction.customId, APPEAL_INFO_PREFIX);
-  if (!parsed) return;
-  const { guildId, caseId } = parsed;
-
   const modal = new ModalBuilder()
-    .setCustomId(`${APPEAL_INFO_MODAL_PREFIX}${guildId}:${caseId}`)
+    .setCustomId(appealRoutes["info-modal"].id({ guildId, caseId }))
     .setTitle(`Request Info — Case #${caseId}`)
     .addComponents(
       new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
@@ -403,11 +378,10 @@ export async function handleAppealInfoButton(interaction: ButtonInteraction): Pr
 // Request more info modal submit
 // ---------------------------------------------------------------------------
 
-export async function handleAppealInfoSubmit(interaction: ModalSubmitInteraction): Promise<void> {
-  const parsed = parseIds(interaction.customId, APPEAL_INFO_MODAL_PREFIX);
-  if (!parsed) return;
-
-  const { guildId, caseId } = parsed;
+export async function handleAppealInfoSubmit(
+  interaction: ModalSubmitInteraction,
+  { guildId, caseId }: AppealArgs,
+): Promise<void> {
   const question = interaction.fields.getTextInputValue("question");
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
