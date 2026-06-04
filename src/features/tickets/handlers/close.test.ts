@@ -1,41 +1,33 @@
 /**
- * Tests for ticket close handler predicates + customId contract.
+ * Tests for the ticket close routing contract.
  *
  * `handleTicketClose` itself drives Discord I/O + DB; the service flow it
  * delegates to (`closeTicket`) already has coverage in service.test.ts. This
- * file focuses on the routing contract: that the component router picks the
- * right button, and that the prefix string isn't accidentally renamed.
+ * file pins the route's customId contract: the prefix string isn't accidentally
+ * renamed, encode round-trips, and the decode rejects look-alikes.
  */
 
 import { describe, expect, test } from "bun:test";
-import { TICKET_CLOSE_BUTTON_PREFIX } from "../customIds";
-import { isTicketCloseButton } from "./close";
+import { decodeArgs } from "@/framework/routing/decode";
+import { routes } from "../routes";
 
-describe("TICKET_CLOSE_BUTTON_PREFIX", () => {
-  test("is 'tickets:close:' (pinned — handlers slice on this exact string)", () => {
-    expect(TICKET_CLOSE_BUTTON_PREFIX).toBe("tickets:close:");
-  });
-});
-
-describe("isTicketCloseButton", () => {
-  test("matches the prefix with a channel id appended", () => {
-    expect(isTicketCloseButton(`${TICKET_CLOSE_BUTTON_PREFIX}1234567890`)).toBe(true);
+describe("tickets close route", () => {
+  test("prefix is 'tickets:close:' (pinned — live buttons route on this)", () => {
+    expect(routes.close.prefix).toBe("tickets:close:");
   });
 
-  test("matches the bare prefix (predicate uses startsWith)", () => {
-    expect(isTicketCloseButton(TICKET_CLOSE_BUTTON_PREFIX)).toBe(true);
+  test("encodes channel id into the customId", () => {
+    expect(routes.close.id({ channel: "1234567890" })).toBe("tickets:close:1234567890");
   });
 
-  test("rejects unrelated custom ids", () => {
-    expect(isTicketCloseButton("offer:approve:abc")).toBe(false);
-    expect(isTicketCloseButton("tickets:open:1234")).toBe(false);
-    expect(isTicketCloseButton("")).toBe(false);
-    expect(isTicketCloseButton("tickets")).toBe(false);
+  test("decodes the channel id back out", () => {
+    const id = routes.close.id({ channel: "1234567890" });
+    const remainder = id.slice(routes.close.prefix.length);
+    expect(decodeArgs(routes.close.schema, remainder)).toEqual({ channel: "1234567890" });
   });
 
-  test("rejects look-alike prefixes", () => {
-    expect(isTicketCloseButton("ticket:close:abc")).toBe(false); // singular
-    expect(isTicketCloseButton("tickets_close:abc")).toBe(false);
-    expect(isTicketCloseButton("tickets:closed:abc")).toBe(false);
+  test("rejects a non-snowflake channel segment (skipped at decode)", () => {
+    expect(decodeArgs(routes.close.schema, "not-a-snowflake")).toBeNull();
+    expect(decodeArgs(routes.close.schema, "")).toBeNull();
   });
 });

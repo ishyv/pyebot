@@ -6,7 +6,7 @@
 import { ChannelType, PermissionFlagsBits } from "discord.js";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
 import { assertPanelPermission, openAdminPanel } from "@/features/adminPanels/panels";
-import { TICKET_CLOSE_BUTTON_PREFIX } from "@/features/tickets/customIds";
+import { routes } from "@/features/tickets/routes";
 import {
   closeTicket,
   makeTicketChannelName,
@@ -88,7 +88,7 @@ async function handleOpen(c: Extract<TicketCtx, { subcommand: "open" }>) {
           categoryEmoji: category.emoji,
           categoryLabel: category.label,
           userId: c.userId,
-          closeCustomId: `${TICKET_CLOSE_BUTTON_PREFIX}${channelId}`,
+          closeCustomId: routes.close.id({ channel: channelId }),
         }),
       );
     }

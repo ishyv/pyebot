@@ -1,12 +1,12 @@
-import type { ButtonInteraction } from "discord.js";
-import { Handle } from "@/framework";
-import type { Ctx } from "@/framework/types";
-import { TICKET_CLOSE_BUTTON_PREFIX } from "./customIds";
+import { defineHandlers, routeHandlers } from "@/framework";
 import { handleTicketClose } from "./handlers/close";
+import { routes } from "./routes";
 
-export default class TicketHandlers {
-  @Handle(TICKET_CLOSE_BUTTON_PREFIX)
-  async onTicketClose(interaction: ButtonInteraction, ctx: Ctx): Promise<void> {
-    await handleTicketClose(interaction, ctx);
-  }
-}
+export default defineHandlers([
+  ...routeHandlers(routes, {
+    // args.channel is the decoded ticket channel id (a snowflake).
+    close: async (interaction, args, ctx) => {
+      await handleTicketClose(interaction, ctx, args.channel);
+    },
+  }),
+]);
