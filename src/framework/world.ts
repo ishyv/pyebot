@@ -50,6 +50,7 @@ import { getDb } from "@/core/db";
 import { createInteractionResponder, type InteractionResponder } from "@/core/interactionResponder";
 import { createLogger, type Logger } from "@/core/logger";
 import { cooldowns, locks, sessions } from "@/core/state";
+import { EntityStore } from "./entity-store";
 import { EventBus } from "./event-bus";
 import type { Component, ComponentRecord, Ctx, Entity } from "./types";
 
@@ -94,12 +95,15 @@ export class World {
   private readonly db: Db;
   readonly bus: EventBus;
   readonly client: Client;
+  /** Entity-document storage for the entity-component model (see entity-store.ts). */
+  readonly entities: EntityStore;
   private readonly logger: Logger;
 
   private constructor(db: Db, client: Client) {
     this.db = db;
     this.bus = new EventBus();
     this.client = client;
+    this.entities = new EntityStore(db);
     this.logger = createLogger("world");
   }
 
