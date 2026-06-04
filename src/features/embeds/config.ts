@@ -1,6 +1,5 @@
 import type { ScheduleIntervalHours } from "@/db/schemas/embed-config";
 
-export const EMBED_WIZARD_PREFIX = "emb:";
 export const EMBED_WIZARD_TTL_MS = 10 * 60_000;
 export const EMBED_STICKY_DEBOUNCE_MS = 3_000;
 export const SCHEDULE_SWEEP_INTERVAL_MS = 60_000;

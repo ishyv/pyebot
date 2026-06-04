@@ -12,6 +12,7 @@ import {
   replyEphemeralPanel,
   replyEphemeralText,
 } from "../responses";
+import { embedRoutes } from "../routes";
 import { buildEmbed, sendEmbed } from "../service";
 import { embedWizardSessions, renderWizardPanel } from "../wizard";
 
@@ -24,22 +25,32 @@ const log = createLogger("embeds:command");
 const data = command("embed")
   .description("Manage custom embeds")
   .defaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-  .subcommand("create", "Create a new embed", (s) =>
-    s.string("name", "Unique embed name", { required: true }),
-  )
-  .subcommand("edit", "Edit an existing embed", (s) =>
-    s.string("name", "Embed name", { required: true }),
-  )
-  .subcommand("delete", "Delete an embed", (s) =>
-    s.string("name", "Embed name", { required: true }),
-  )
-  .subcommand("list", "List all embeds in this server")
-  .subcommand("send", "Send an embed immediately", (s) =>
-    s.string("name", "Embed name", { required: true }),
-  )
-  .subcommand("preview", "Preview an embed (ephemeral)", (s) =>
-    s.string("name", "Embed name", { required: true }),
-  )
+  .subcommand({
+    name: "create",
+    description: "Create a new embed",
+    options: (s) => s.string("name", "Unique embed name", { required: true }),
+  })
+  .subcommand({
+    name: "edit",
+    description: "Edit an existing embed",
+    options: (s) => s.string("name", "Embed name", { required: true }),
+  })
+  .subcommand({
+    name: "delete",
+    description: "Delete an embed",
+    options: (s) => s.string("name", "Embed name", { required: true }),
+  })
+  .subcommand({ name: "list", description: "List all embeds in this server" })
+  .subcommand({
+    name: "send",
+    description: "Send an embed immediately",
+    options: (s) => s.string("name", "Embed name", { required: true }),
+  })
+  .subcommand({
+    name: "preview",
+    description: "Preview an embed (ephemeral)",
+    options: (s) => s.string("name", "Embed name", { required: true }),
+  })
   .guildOnly();
 
 type EmbedCtx = RunContext<typeof data>;
@@ -128,8 +139,6 @@ async function handleDelete(c: Extract<EmbedCtx, { subcommand: "delete" }>): Pro
     await replyEphemeralText(c.interaction, `No embed named \`${name}\` found.`);
     return;
   }
-  const confirmId = `emb:direct:delete:${name}`;
-  const cancelId = "emb:direct:cancel";
   const panel = container(
     "danger",
     text(
@@ -137,10 +146,13 @@ async function handleDelete(c: Extract<EmbedCtx, { subcommand: "delete" }>): Pro
     ),
     row(
       new ButtonBuilder()
-        .setCustomId(confirmId)
+        .setCustomId(embedRoutes.delete.id({ name }))
         .setLabel("Yes, delete")
         .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(cancelId).setLabel("Cancel").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(embedRoutes.close.id({}))
+        .setLabel("Cancel")
+        .setStyle(ButtonStyle.Secondary),
     ),
   );
   await replyEphemeralPanel(c.interaction, panel);
@@ -171,7 +183,7 @@ async function handleList(c: Extract<EmbedCtx, { subcommand: "list" }>): Promise
       section(
         `**${cfg.name}**\nChannel: ${channel} | Schedule: ${schedule} | Sticky: ${sticky}`,
         new ButtonBuilder()
-          .setCustomId(`emb:list:edit:${cfg.name}`)
+          .setCustomId(embedRoutes.edit.id({ name: cfg.name }))
           .setLabel("Edit")
           .setStyle(ButtonStyle.Secondary),
       ),

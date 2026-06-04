@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { ButtonInteraction, MessageFlags, ModalSubmitInteraction } from "discord.js";
 import { OkResult } from "@/core/result";
 import type { EmbedConfig } from "@/db/schemas/embed-config";
-import { type EmbedInteractionDeps, handleEmbedInteraction } from "./interactions";
+import { type EmbedInteractionDeps, runSessionAction } from "./interactions";
 import { createBlankEmbedDraft } from "./model";
-import { EmbedWizardRegistry, wizardId } from "./wizard";
+import { EmbedWizardRegistry } from "./wizard";
 
 function deps(registry: EmbedWizardRegistry, saved: EmbedConfig[] = []): EmbedInteractionDeps {
   return {
@@ -22,10 +22,12 @@ function deps(registry: EmbedWizardRegistry, saved: EmbedConfig[] = []): EmbedIn
   };
 }
 
-function buttonInteraction(sessionId: string, action: string, userId = "owner-1") {
+// The route layer parses the customId; runSessionAction takes the session id and
+// action directly, so these fixtures only need a placeholder customId.
+function buttonInteraction(userId = "owner-1") {
   const log: Array<{ method: string; payload?: unknown }> = [];
   const interaction = {
-    customId: wizardId(sessionId, action),
+    customId: "emb:save:session",
     user: { id: userId },
     guildId: "guild-1",
     guild: { id: "guild-1", name: "Guild", memberCount: 5 },
@@ -44,10 +46,10 @@ function buttonInteraction(sessionId: string, action: string, userId = "owner-1"
   return { interaction: interaction as unknown as ButtonInteraction, log };
 }
 
-function modalInteraction(sessionId: string, values: Record<string, string>) {
+function modalInteraction(values: Record<string, string>) {
   const log: Array<{ method: string; payload?: unknown }> = [];
   const interaction = {
-    customId: wizardId(sessionId, "basic-submit"),
+    customId: "emb:submit-basic:session",
     user: { id: "owner-1" },
     guildId: "guild-1",
     replied: false,
@@ -62,17 +64,17 @@ function modalInteraction(sessionId: string, values: Record<string, string>) {
   return { interaction: interaction as unknown as ModalSubmitInteraction, log };
 }
 
-describe("handleEmbedInteraction", () => {
+describe("runSessionAction", () => {
   it("applies basic modal values and updates the original V2 panel via editReply", async () => {
     const registry = new EmbedWizardRegistry();
     const session = registry.create("owner-1", "guild-1", "status", createBlankEmbedDraft(), false);
-    const { interaction, log } = modalInteraction(session.id, {
+    const { interaction, log } = modalInteraction({
       title: "Status",
       description: "Live status",
       color: "#5865F2",
     });
 
-    await handleEmbedInteraction(interaction, { invalidateSticky() {}, deps: deps(registry) });
+    await runSessionAction(interaction, session.id, { kind: "submit-basic" }, deps(registry));
 
     expect(session.draft.embedTitle).toBe("Status");
     expect(session.draft.embedDescription).toBe("Live status");
@@ -84,9 +86,9 @@ describe("handleEmbedInteraction", () => {
   it("save without a target channel returns an ephemeral error without updating the panel", async () => {
     const registry = new EmbedWizardRegistry();
     const session = registry.create("owner-1", "guild-1", "status", createBlankEmbedDraft(), false);
-    const { interaction, log } = buttonInteraction(session.id, "save");
+    const { interaction, log } = buttonInteraction();
 
-    await handleEmbedInteraction(interaction, { invalidateSticky() {}, deps: deps(registry) });
+    await runSessionAction(interaction, session.id, { kind: "save" }, deps(registry));
 
     expect(log).toHaveLength(1);
     expect(log[0].method).toBe("reply");
@@ -102,12 +104,9 @@ describe("handleEmbedInteraction", () => {
     const draft = createBlankEmbedDraft();
     draft.channelId = "channel-1";
     const session = registry.create("owner-1", "guild-1", "status", draft, false);
-    const { interaction, log } = buttonInteraction(session.id, "save");
+    const { interaction, log } = buttonInteraction();
 
-    await handleEmbedInteraction(interaction, {
-      invalidateSticky() {},
-      deps: deps(registry, saved),
-    });
+    await runSessionAction(interaction, session.id, { kind: "save" }, deps(registry, saved));
 
     expect(saved).toHaveLength(1);
     expect(saved[0]._id).toBe("guild-1:status");
@@ -120,9 +119,9 @@ describe("handleEmbedInteraction", () => {
   it("rejects interactions from another user", async () => {
     const registry = new EmbedWizardRegistry();
     const session = registry.create("owner-1", "guild-1", "status", createBlankEmbedDraft(), false);
-    const { interaction, log } = buttonInteraction(session.id, "save", "other-user");
+    const { interaction, log } = buttonInteraction("other-user");
 
-    await handleEmbedInteraction(interaction, { invalidateSticky() {}, deps: deps(registry) });
+    await runSessionAction(interaction, session.id, { kind: "save" }, deps(registry));
 
     expect(log[0].method).toBe("reply");
     expect((log[0].payload as { content: string }).content).toBe(
@@ -132,9 +131,9 @@ describe("handleEmbedInteraction", () => {
 
   it("returns an ephemeral error for expired or missing sessions", async () => {
     const registry = new EmbedWizardRegistry();
-    const { interaction, log } = buttonInteraction("missing", "save");
+    const { interaction, log } = buttonInteraction();
 
-    await handleEmbedInteraction(interaction, { invalidateSticky() {}, deps: deps(registry) });
+    await runSessionAction(interaction, "missing", { kind: "save" }, deps(registry));
 
     expect(log[0].method).toBe("reply");
     expect((log[0].payload as { content: string }).content).toBe(

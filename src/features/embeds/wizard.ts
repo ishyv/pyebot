@@ -23,6 +23,7 @@ import {
 import { breadcrumb, container, row, separator, text } from "@/ui/v2";
 import { EMBED_MAX_FIELDS, EMBED_WIZARD_TTL_MS, SCHEDULE_OPTIONS } from "./config";
 import type { EmbedConfigDraft } from "./model";
+import { embedRoutes } from "./routes";
 
 export type { EmbedConfigDraft } from "./model";
 
@@ -60,12 +61,6 @@ export type EmbedWizardAction =
   | { kind: "submit-script" }
   | { kind: "select-channel" }
   | { kind: "select-schedule" };
-
-/** Parsed embed component custom ID for direct, list, and session-owned interactions. */
-export type EmbedCustomId =
-  | { scope: "direct"; action: { kind: "delete"; name: string } | { kind: "cancel" } }
-  | { scope: "list"; action: { kind: "edit"; name: string } }
-  | { scope: "session"; sessionId: string; action: EmbedWizardAction };
 
 /** Payload shape used by V2 wizard panels. */
 export interface WizardPanelPayload {
@@ -128,94 +123,6 @@ export class EmbedWizardRegistry {
 
 export const embedWizardSessions = new EmbedWizardRegistry();
 
-/** Encodes a session-scoped custom ID. */
-export function wizardId(sessionId: string, action: string): string {
-  return `emb:${sessionId}:${action}`;
-}
-
-/** Decodes the raw `emb:{scope}:{action}` shape while preserving colons inside action. */
-export function parseWizardId(customId: string): { sessionId: string; action: string } | null {
-  if (!customId.startsWith("emb:")) return null;
-  const rest = customId.slice(4);
-  const colonIndex = rest.indexOf(":");
-  if (colonIndex === -1) return null;
-  const sessionId = rest.slice(0, colonIndex);
-  const action = rest.slice(colonIndex + 1);
-  if (!sessionId || !action) return null;
-  return { sessionId, action };
-}
-
-/** Parses every embed custom ID into a small discriminated union for routing. */
-export function parseEmbedCustomId(customId: string): EmbedCustomId | null {
-  const parsed = parseWizardId(customId);
-  if (!parsed) return null;
-
-  if (parsed.sessionId === "direct") {
-    if (parsed.action === "cancel") return { scope: "direct", action: { kind: "cancel" } };
-    if (parsed.action.startsWith("delete:")) {
-      const name = parsed.action.slice("delete:".length);
-      return name ? { scope: "direct", action: { kind: "delete", name } } : null;
-    }
-    return null;
-  }
-
-  if (parsed.sessionId === "list") {
-    if (!parsed.action.startsWith("edit:")) return null;
-    const name = parsed.action.slice("edit:".length);
-    return name ? { scope: "list", action: { kind: "edit", name } } : null;
-  }
-
-  const action = parseSessionAction(parsed.action);
-  return action ? { scope: "session", sessionId: parsed.sessionId, action } : null;
-}
-
-function parseSessionAction(action: string): EmbedWizardAction | null {
-  switch (action) {
-    case "basic-modal":
-      return { kind: "open-basic" };
-    case "media-modal":
-      return { kind: "open-media" };
-    case "author-modal":
-      return { kind: "open-author" };
-    case "footer-modal":
-      return { kind: "open-footer" };
-    case "field-add-modal":
-      return { kind: "open-field-add" };
-    case "script-modal":
-      return { kind: "open-script" };
-    case "sticky-toggle":
-      return { kind: "toggle-sticky" };
-    case "script-toggle":
-      return { kind: "toggle-script" };
-    case "field-remove-last":
-      return { kind: "remove-last-field" };
-    case "preview":
-      return { kind: "preview" };
-    case "save":
-      return { kind: "save" };
-    case "cancel":
-      return { kind: "cancel" };
-    case "basic-submit":
-      return { kind: "submit-basic" };
-    case "media-submit":
-      return { kind: "submit-media" };
-    case "author-submit":
-      return { kind: "submit-author" };
-    case "footer-submit":
-      return { kind: "submit-footer" };
-    case "field-add-submit":
-      return { kind: "submit-field-add" };
-    case "script-submit":
-      return { kind: "submit-script" };
-    case "channel-select":
-      return { kind: "select-channel" };
-    case "schedule-select":
-      return { kind: "select-schedule" };
-    default:
-      return null;
-  }
-}
-
 function truncate(value: string | null | undefined, length: number): string {
   if (!value) return "-";
   return value.length > length ? `${value.slice(0, length)}...` : value;
@@ -245,7 +152,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     ),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "basic-modal"))
+        .setCustomId(embedRoutes["open-basic"].id({ session: id }))
         .setLabel("Edit Basic")
         .setStyle(ButtonStyle.Secondary),
     ),
@@ -259,7 +166,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     ),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "media-modal"))
+        .setCustomId(embedRoutes["open-media"].id({ session: id }))
         .setLabel("Edit Media")
         .setStyle(ButtonStyle.Secondary),
     ),
@@ -273,7 +180,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     ),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "author-modal"))
+        .setCustomId(embedRoutes["open-author"].id({ session: id }))
         .setLabel("Edit Author")
         .setStyle(ButtonStyle.Secondary),
     ),
@@ -281,7 +188,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     text(`**Footer**\nText: ${truncate(draft.embedFooterText, 40)}`),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "footer-modal"))
+        .setCustomId(embedRoutes["open-footer"].id({ session: id }))
         .setLabel("Edit Footer")
         .setStyle(ButtonStyle.Secondary),
     ),
@@ -289,11 +196,11 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     text(`**Fields**\n${fieldCount}/${EMBED_MAX_FIELDS} fields`),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "field-add-modal"))
+        .setCustomId(embedRoutes["open-field-add"].id({ session: id }))
         .setLabel("Add Field")
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "field-remove-last"))
+        .setCustomId(embedRoutes["remove-last-field"].id({ session: id }))
         .setLabel("Remove Last")
         .setStyle(ButtonStyle.Danger)
         .setDisabled(fieldCount === 0),
@@ -309,7 +216,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     ),
     row(
       new ChannelSelectMenuBuilder()
-        .setCustomId(wizardId(id, "channel-select"))
+        .setCustomId(embedRoutes["select-channel"].id({ session: id }))
         .setPlaceholder("Set delivery channel")
         .addChannelTypes(ChannelType.GuildText)
         .setMinValues(1)
@@ -317,7 +224,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     ),
     row(
       new StringSelectMenuBuilder()
-        .setCustomId(wizardId(id, "schedule-select"))
+        .setCustomId(embedRoutes["select-schedule"].id({ session: id }))
         .setPlaceholder("Set schedule")
         .addOptions(
           SCHEDULE_OPTIONS.map((option) =>
@@ -330,7 +237,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     ),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "sticky-toggle"))
+        .setCustomId(embedRoutes["toggle-sticky"].id({ session: id }))
         .setLabel(`Sticky: ${draft.stickyEnabled ? "ON" : "OFF"}`)
         .setStyle(draft.stickyEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
     ),
@@ -344,26 +251,26 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
     ),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "script-modal"))
+        .setCustomId(embedRoutes["open-script"].id({ session: id }))
         .setLabel("Edit Script")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "script-toggle"))
+        .setCustomId(embedRoutes["toggle-script"].id({ session: id }))
         .setLabel(`Script: ${draft.scriptEnabled ? "ON" : "OFF"}`)
         .setStyle(draft.scriptEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
     ),
     separator("sm"),
     row(
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "preview"))
+        .setCustomId(embedRoutes.preview.id({ session: id }))
         .setLabel("Preview")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "save"))
+        .setCustomId(embedRoutes.save.id({ session: id }))
         .setLabel("Save")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(wizardId(id, "cancel"))
+        .setCustomId(embedRoutes.cancel.id({ session: id }))
         .setLabel("Cancel")
         .setStyle(ButtonStyle.Danger),
     ),
@@ -375,7 +282,7 @@ export function renderWizardPanel(session: EmbedWizardSession): WizardPanelPaylo
 /** Builds the modal that edits title, description, and color. */
 export function buildBasicModal(session: EmbedWizardSession): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(wizardId(session.id, "basic-submit"))
+    .setCustomId(embedRoutes["submit-basic"].id({ session: session.id }))
     .setTitle("Basic Settings")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -415,7 +322,7 @@ export function buildBasicModal(session: EmbedWizardSession): ModalBuilder {
 /** Builds the modal for embed URL, thumbnail, and image URL. */
 export function buildMediaModal(session: EmbedWizardSession): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(wizardId(session.id, "media-submit"))
+    .setCustomId(embedRoutes["submit-media"].id({ session: session.id }))
     .setTitle("Media")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -448,7 +355,7 @@ export function buildMediaModal(session: EmbedWizardSession): ModalBuilder {
 /** Builds the modal for embed author properties. */
 export function buildAuthorModal(session: EmbedWizardSession): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(wizardId(session.id, "author-submit"))
+    .setCustomId(embedRoutes["submit-author"].id({ session: session.id }))
     .setTitle("Author")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -482,7 +389,7 @@ export function buildAuthorModal(session: EmbedWizardSession): ModalBuilder {
 /** Builds the modal for footer text and icon URL. */
 export function buildFooterModal(session: EmbedWizardSession): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(wizardId(session.id, "footer-submit"))
+    .setCustomId(embedRoutes["submit-footer"].id({ session: session.id }))
     .setTitle("Footer")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -508,7 +415,7 @@ export function buildFooterModal(session: EmbedWizardSession): ModalBuilder {
 /** Builds the modal for appending one embed field. */
 export function buildFieldAddModal(session: EmbedWizardSession): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(wizardId(session.id, "field-add-submit"))
+    .setCustomId(embedRoutes["submit-field-add"].id({ session: session.id }))
     .setTitle("Add Field")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -541,7 +448,7 @@ export function buildFieldAddModal(session: EmbedWizardSession): ModalBuilder {
 /** Builds the modal for the optional admin-authored script function. */
 export function buildScriptModal(session: EmbedWizardSession): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(wizardId(session.id, "script-submit"))
+    .setCustomId(embedRoutes["submit-script"].id({ session: session.id }))
     .setTitle("Script")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(

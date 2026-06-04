@@ -44,7 +44,6 @@ import {
   type EmbedWizardRegistry,
   type EmbedWizardSession,
   embedWizardSessions,
-  parseEmbedCustomId,
   renderWizardPanel,
 } from "./wizard";
 
@@ -70,7 +69,8 @@ export interface EmbedInteractionDeps {
   now(): Date;
 }
 
-function defaultDeps(
+/** Builds the live repository/runtime deps for embed interactions. */
+export function makeEmbedDeps(
   invalidateSticky: (guildId: string, channelId: string) => void,
 ): EmbedInteractionDeps {
   return {
@@ -85,31 +85,18 @@ function defaultDeps(
   };
 }
 
-/** Routes every `emb:` component/modal interaction through typed custom-id actions. */
-export async function handleEmbedInteraction(
+/**
+ * Resolves a wizard session by id (with owner check) and dispatches one decoded
+ * action. The customId is parsed by the route layer; this is the shared body
+ * behind every session-scoped route handler.
+ */
+export async function runSessionAction(
   interaction: ComponentInteraction,
-  options: {
-    invalidateSticky(guildId: string, channelId: string): void;
-    deps?: EmbedInteractionDeps;
-  },
+  sessionId: string,
+  action: EmbedWizardAction,
+  deps: EmbedInteractionDeps,
 ): Promise<void> {
-  const parsed = parseEmbedCustomId(interaction.customId);
-  if (!parsed) return;
-  const deps = options.deps ?? defaultDeps(options.invalidateSticky);
-
-  if (parsed.scope === "direct") {
-    await handleDirectAction(interaction, parsed.action, deps);
-    return;
-  }
-
-  if (parsed.scope === "list") {
-    if (interaction instanceof ButtonInteraction) {
-      await openEditWizard(interaction, parsed.action.name, deps);
-    }
-    return;
-  }
-
-  const session = deps.sessions.get(parsed.sessionId);
+  const session = deps.sessions.get(sessionId);
   if (!session) {
     await replyEphemeralText(interaction, "Wizard session expired. Run `/embed` again.");
     return;
@@ -118,11 +105,10 @@ export async function handleEmbedInteraction(
     await replyEphemeralText(interaction, "This wizard belongs to another user.");
     return;
   }
-
-  await handleSessionAction(interaction, session, parsed.action, deps);
+  await handleSessionAction(interaction, session, action, deps);
 }
 
-async function handleDirectAction(
+export async function handleDirectAction(
   interaction: ComponentInteraction,
   action: { kind: "delete"; name: string } | { kind: "cancel" },
   deps: EmbedInteractionDeps,
@@ -148,7 +134,7 @@ async function handleDirectAction(
   await replacePanelWithStatus(interaction, `Embed \`${action.name}\` deleted.`, "ok");
 }
 
-async function openEditWizard(
+export async function openEditWizard(
   interaction: ButtonInteraction,
   name: string,
   deps: EmbedInteractionDeps,

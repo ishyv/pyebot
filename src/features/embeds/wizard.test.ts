@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { EMBED_WIZARD_TTL_MS } from "./config";
+import { embedRoutes } from "./routes";
 import type { EmbedConfigDraft } from "./wizard";
-import { EmbedWizardRegistry, parseWizardId, renderWizardPanel, wizardId } from "./wizard";
+import { EmbedWizardRegistry, renderWizardPanel } from "./wizard";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -114,48 +115,6 @@ describe("EmbedWizardRegistry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// wizardId / parseWizardId
-// ---------------------------------------------------------------------------
-
-describe("wizardId and parseWizardId", () => {
-  it("round-trip: parseWizardId(wizardId(id, action)) returns correct parts", () => {
-    const id = "abc12345";
-    const action = "basic-modal";
-    const encoded = wizardId(id, action);
-    const parsed = parseWizardId(encoded);
-    expect(parsed).not.toBeNull();
-    expect(parsed?.sessionId).toBe(id);
-    expect(parsed?.action).toBe(action);
-  });
-
-  it("round-trip works with action containing colons", () => {
-    const id = "deadbeef";
-    const action = "field:add:0";
-    const encoded = wizardId(id, action);
-    const parsed = parseWizardId(encoded);
-    expect(parsed).not.toBeNull();
-    expect(parsed?.sessionId).toBe(id);
-    expect(parsed?.action).toBe(action);
-  });
-
-  it("parseWizardId returns null for 'emb:' (no session, no action)", () => {
-    expect(parseWizardId("emb:")).toBeNull();
-  });
-
-  it("parseWizardId returns null for 'emb:abc' (no action segment)", () => {
-    expect(parseWizardId("emb:abc")).toBeNull();
-  });
-
-  it("parseWizardId returns null for wrong prefix 'abc:x:y'", () => {
-    expect(parseWizardId("abc:x:y")).toBeNull();
-  });
-
-  it("parseWizardId returns null for empty string", () => {
-    expect(parseWizardId("")).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // renderWizardPanel
 // ---------------------------------------------------------------------------
 
@@ -191,17 +150,17 @@ describe("renderWizardPanel", () => {
     expect(json).toContain("Preview");
   });
 
-  it("container contains wizardId-encoded custom IDs for buttons", () => {
+  it("container contains route-encoded custom IDs for buttons", () => {
     const registry = new EmbedWizardRegistry();
     const session = registry.create(OWNER_ID, GUILD_ID, EMBED_NAME, makeDraft(), false);
 
     const payload = renderWizardPanel(session);
     const json = JSON.stringify(payload.container.toJSON());
 
-    expect(json).toContain(wizardId(session.id, "basic-modal"));
-    expect(json).toContain(wizardId(session.id, "media-modal"));
-    expect(json).toContain(wizardId(session.id, "save"));
-    expect(json).toContain(wizardId(session.id, "cancel"));
+    expect(json).toContain(embedRoutes["open-basic"].id({ session: session.id }));
+    expect(json).toContain(embedRoutes["open-media"].id({ session: session.id }));
+    expect(json).toContain(embedRoutes.save.id({ session: session.id }));
+    expect(json).toContain(embedRoutes.cancel.id({ session: session.id }));
   });
 
   it("fields section shows field count", () => {
