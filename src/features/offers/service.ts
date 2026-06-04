@@ -11,7 +11,7 @@
 import { randomBytes } from "node:crypto";
 import {
   ActionRowBuilder,
-  ButtonBuilder,
+  type ButtonBuilder,
   ButtonStyle,
   type Guild as DjsGuild,
   ModalBuilder,
@@ -32,6 +32,7 @@ import {
 } from "@/db/schemas/offer";
 import type { AccentKey } from "@/ui/theme";
 import { container, separator, text, v2Message } from "@/ui/v2";
+import { routes } from "./routes";
 
 const log = createLogger("offers");
 
@@ -39,17 +40,6 @@ export type { Offer, OfferDetails, OfferStatus };
 export { OfferDetailsSchema, OfferSchema, OfferStatusSchema };
 
 const ACTIVE_STATUSES: OfferStatus[] = ["PENDING_REVIEW", "CHANGES_REQUESTED"];
-
-// ─── customId constants ───────────────────────────────────────────────────────
-// Button prefixes carry the offerId as a suffix: `offer:approve:{offerId}`
-export const OFFER_APPROVE_PREFIX = "offer:approve:";
-export const OFFER_REJECT_PREFIX = "offer:reject:";
-export const OFFER_CHANGES_PREFIX = "offer:changes:";
-// Modal prefixes follow the same suffix convention for reject/changes.
-export const OFFER_REJECT_MODAL_PREFIX = "offer:reject-modal:";
-export const OFFER_CHANGES_MODAL_PREFIX = "offer:changes-modal:";
-// Fixed id — no offerId needed; the author is read from the modal interaction.
-export const OFFER_CREATE_MODAL_ID = "offer:create-modal";
 
 /** Five-field modal shown to the user when they run /offer create. */
 export function buildCreateModal(): ModalBuilder {
@@ -70,7 +60,7 @@ export function buildCreateModal(): ModalBuilder {
     );
 
   return new ModalBuilder()
-    .setCustomId(OFFER_CREATE_MODAL_ID)
+    .setCustomId(routes["create-modal"].id({}))
     .setTitle("Submit an Offer")
     .addComponents(
       input("title", "Title", TextInputStyle.Short, true, 100),
@@ -84,7 +74,7 @@ export function buildCreateModal(): ModalBuilder {
 /** Single-field modal for a moderator to enter a rejection reason. */
 export function buildRejectModal(offerId: string): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(`${OFFER_REJECT_MODAL_PREFIX}${offerId}`)
+    .setCustomId(routes["reject-modal"].id({ offer: offerId }))
     .setTitle("Reject Offer")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -102,7 +92,7 @@ export function buildRejectModal(offerId: string): ModalBuilder {
 /** Single-field modal for a moderator to describe needed changes. */
 export function buildChangesModal(offerId: string): ModalBuilder {
   return new ModalBuilder()
-    .setCustomId(`${OFFER_CHANGES_MODAL_PREFIX}${offerId}`)
+    .setCustomId(routes["changes-modal"].id({ offer: offerId }))
     .setTitle("Request Changes")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -119,21 +109,18 @@ export function buildChangesModal(offerId: string): ModalBuilder {
 
 function buildReviewButtons(offerId: string, disabled = false): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${OFFER_APPROVE_PREFIX}${offerId}`)
-      .setLabel("Approve")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(`${OFFER_REJECT_PREFIX}${offerId}`)
-      .setLabel("Reject")
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(`${OFFER_CHANGES_PREFIX}${offerId}`)
-      .setLabel("Request Changes")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(disabled),
+    routes.approve.button(
+      { offer: offerId },
+      { label: "Approve", style: ButtonStyle.Success, disabled },
+    ),
+    routes.reject.button(
+      { offer: offerId },
+      { label: "Reject", style: ButtonStyle.Danger, disabled },
+    ),
+    routes.changes.button(
+      { offer: offerId },
+      { label: "Request Changes", style: ButtonStyle.Secondary, disabled },
+    ),
   );
 }
 

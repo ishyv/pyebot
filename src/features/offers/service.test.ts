@@ -13,15 +13,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import {
-  OFFER_APPROVE_PREFIX,
-  OFFER_CHANGES_PREFIX,
-  OFFER_REJECT_PREFIX,
-  OfferDetailsSchema,
-  OfferError,
-  OfferSchema,
-  OfferStatusSchema,
-} from "./service";
+import { routes } from "./routes";
+import { OfferDetailsSchema, OfferError, OfferSchema, OfferStatusSchema } from "./service";
 
 describe("OfferStatusSchema", () => {
   test("accepts every documented status", () => {
@@ -174,21 +167,20 @@ describe("OfferError", () => {
 });
 
 describe("button customId prefixes", () => {
-  // Handlers (handlers/review.ts) split a customId on these literal prefixes
-  // to extract the offer id. The values must stay in sync with the buttons
-  // built by buildReviewButtons() — these tests pin the contract.
+  // The route table owns these prefixes; the buttons built by buildReviewButtons()
+  // and the handler routes share them. These tests pin the contract.
   test("approve prefix is 'offer:approve:'", () => {
-    expect(OFFER_APPROVE_PREFIX).toBe("offer:approve:");
+    expect(routes.approve.prefix).toBe("offer:approve:");
   });
   test("reject prefix is 'offer:reject:'", () => {
-    expect(OFFER_REJECT_PREFIX).toBe("offer:reject:");
+    expect(routes.reject.prefix).toBe("offer:reject:");
   });
   test("changes prefix is 'offer:changes:'", () => {
-    expect(OFFER_CHANGES_PREFIX).toBe("offer:changes:");
+    expect(routes.changes.prefix).toBe("offer:changes:");
   });
 
   test("prefixes are mutually distinct (no accidental shared prefix)", () => {
-    const prefixes = [OFFER_APPROVE_PREFIX, OFFER_REJECT_PREFIX, OFFER_CHANGES_PREFIX];
+    const prefixes = [routes.approve.prefix, routes.reject.prefix, routes.changes.prefix];
     for (const a of prefixes) {
       for (const b of prefixes) {
         if (a === b) continue;
