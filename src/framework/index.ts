@@ -13,6 +13,33 @@ export { component } from "./component";
 export { Handle, Listen, On } from "./decorators";
 export { defineFeature } from "./feature";
 export type {
+  ArgsOf,
+  ButtonOptions,
+  Codec,
+  ComponentHandlersFor,
+  ComponentKind,
+  FeatureHandlers,
+  InteractionOf,
+  Registration,
+  RouteDef,
+  RouteEntry,
+  RouteInput,
+  RouteTable,
+} from "./routing";
+export {
+  defineHandlers,
+  defineRoutes,
+  int,
+  listen,
+  on,
+  oneOf,
+  rest,
+  route,
+  routeHandlers,
+  snowflake,
+  str,
+} from "./routing";
+export type {
   CommandHelp,
   CommandModule,
   Component,

@@ -35,6 +35,7 @@ function feature(id: string, commands: CommandModule[]): LoadedFeature {
     },
     commands,
     handlers: null,
+    registrations: [],
   };
 }
 

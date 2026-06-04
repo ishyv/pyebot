@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ChannelType } from "discord.js";
 import { Handle, Listen, On } from "@/framework/decorators";
+import { registrationsFromHandlers } from "@/framework/routing/normalize";
 import type { CommandModule, LoadedFeature } from "@/framework/types";
 import {
   buildCapabilityGraph,
@@ -73,6 +74,7 @@ function feature(
     },
     commands,
     handlers,
+    registrations: registrationsFromHandlers(handlers),
   };
 }
 

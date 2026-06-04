@@ -26,6 +26,7 @@ const bootstrapDependencies = {
       },
       commands: [adminCommand],
       handlers: null,
+      registrations: [],
     },
   ],
   createWorld: async () =>

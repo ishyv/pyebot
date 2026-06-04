@@ -9,6 +9,7 @@ import {
   TxCliUsageError,
 } from "@/cli";
 import { Handle } from "@/framework/decorators";
+import { registrationsFromHandlers } from "@/framework/routing/normalize";
 
 class DuplicateAuthoringHandlers {
   @Handle("dup:")
@@ -250,6 +251,7 @@ describe("checkAuthoring", () => {
             },
           ],
           handlers: null,
+          registrations: [],
         },
       ],
       featureConfigs: {},
@@ -282,7 +284,8 @@ describe("checkAuthoring", () => {
               execute: async () => {},
             },
           ],
-          handlers: new DuplicateAuthoringHandlers(),
+          handlers: null,
+          registrations: registrationsFromHandlers(new DuplicateAuthoringHandlers()),
         },
       ],
       featureConfigs: { missing: { fields: {} } },
@@ -311,7 +314,8 @@ describe("checkAuthoring", () => {
             defaultEnabled: true,
           },
           commands: [],
-          handlers: new DuplicateAuthoringHandlers(),
+          handlers: null,
+          registrations: registrationsFromHandlers(new DuplicateAuthoringHandlers()),
         },
       ],
       featureConfigs: {},

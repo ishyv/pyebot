@@ -33,7 +33,9 @@ import { readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createLogger } from "@/core/logger";
-import type { CommandModule, FeatureDescriptor, LoadedFeature } from "./types";
+import { registrationsFromHandlers } from "./routing/normalize";
+import { isFeatureHandlers } from "./routing/registry";
+import type { CommandModule, FeatureDescriptor, LoadedFeature, RuntimeRegistration } from "./types";
 
 const log = createLogger("framework:loader");
 
@@ -111,7 +113,24 @@ async function loadCommands(featureDir: string): Promise<CommandModule[]> {
   return result;
 }
 
-async function loadHandlers(featureDir: string): Promise<object | null> {
+interface LoadedHandlers {
+  /** Legacy class instance (or null) — kept only for back-compat during migration. */
+  readonly instance: object | null;
+  /** Normalized triggers consumed by bootstrap and the capability graph. */
+  readonly registrations: RuntimeRegistration[];
+}
+
+const EMPTY_HANDLERS: LoadedHandlers = { instance: null, registrations: [] };
+
+/**
+ * Load a feature's `handlers.ts` and normalize it into `RuntimeRegistration`s,
+ * supporting BOTH authoring styles during the routing migration:
+ *
+ *   - new: `export default defineHandlers([...])` → a registration array.
+ *   - legacy: `export default class { @On/@Handle/@Listen }` → read prototype
+ *     metadata and bind each decorated method.
+ */
+async function loadHandlers(featureDir: string): Promise<LoadedHandlers> {
   const handlersFile = join(featureDir, "handlers.ts");
   const handlersFileJs = join(featureDir, "handlers.js");
   const path = (await fileExists(handlersFile))
@@ -119,9 +138,19 @@ async function loadHandlers(featureDir: string): Promise<object | null> {
     : (await fileExists(handlersFileJs))
       ? handlersFileJs
       : null;
-  if (!path) return null;
-  const HandlerClass = await importDefault<new () => object>(path);
-  return new HandlerClass();
+  if (!path) return EMPTY_HANDLERS;
+
+  const exported = await importDefault<unknown>(path);
+
+  // New style: defineHandlers([...]) — no class instance.
+  if (isFeatureHandlers(exported)) {
+    return { instance: null, registrations: registrationsFromHandlers(exported) };
+  }
+
+  // Legacy style: a decorated class — instantiate, then read prototype metadata.
+  const HandlerClass = exported as new () => object;
+  const instance = new HandlerClass();
+  return { instance, registrations: registrationsFromHandlers(instance) };
 }
 
 /**
@@ -159,9 +188,14 @@ export async function loadFeatures(): Promise<LoadedFeature[]> {
     }
     const commands = await loadCommands(featureDir);
     const handlers = await loadHandlers(featureDir);
-    features.push({ descriptor, commands, handlers });
+    features.push({
+      descriptor,
+      commands,
+      handlers: handlers.instance,
+      registrations: handlers.registrations,
+    });
     log.info(
-      `Loaded feature: ${descriptor.id} (${commands.length} commands, handlers: ${handlers ? "yes" : "no"})`,
+      `Loaded feature: ${descriptor.id} (${commands.length} commands, ${handlers.registrations.length} registrations)`,
     );
   }
   return features;

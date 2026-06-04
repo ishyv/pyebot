@@ -5,7 +5,6 @@ import {
   GUIDE_FEATURE_METADATA,
   type GuideCapabilityId,
 } from "@/core/featureGuideMetadata";
-import { getHandleMetadata, getListenMetadata, getOnMetadata } from "@/framework/decorators";
 import type { LoadedFeature } from "@/framework/types";
 import type {
   GuideBadge,
@@ -229,42 +228,37 @@ function collectCommands(
 }
 
 function collectRuntimeRoutes(feature: LoadedFeature): GuideRuntimeRoute[] {
-  if (!feature.handlers) return [];
+  const featureId = feature.descriptor.id;
   const routes: GuideRuntimeRoute[] = [];
-  for (const entry of getListenMetadata(feature.handlers)) {
-    routes.push({
-      id: runtimeRouteId(feature.descriptor.id, "discord_event", entry.event, entry.methodKey),
-      featureId: feature.descriptor.id,
-      kind: "discord_event",
-      label: entry.event,
-      method: entry.methodKey,
-      badges: ["event", "passive"],
-    });
-  }
-  for (const entry of getOnMetadata(feature.handlers)) {
-    routes.push({
-      id: runtimeRouteId(
-        feature.descriptor.id,
-        "framework_event",
-        entry.event.name,
-        entry.methodKey,
-      ),
-      featureId: feature.descriptor.id,
-      kind: "framework_event",
-      label: entry.event.name,
-      method: entry.methodKey,
-      badges: ["event", "passive"],
-    });
-  }
-  for (const entry of getHandleMetadata(feature.handlers)) {
-    routes.push({
-      id: runtimeRouteId(feature.descriptor.id, "component", entry.prefix, entry.methodKey),
-      featureId: feature.descriptor.id,
-      kind: "component",
-      label: entry.prefix,
-      method: entry.methodKey,
-      badges: ["component"],
-    });
+  for (const reg of feature.registrations) {
+    if (reg.kind === "listen") {
+      routes.push({
+        id: runtimeRouteId(featureId, "discord_event", reg.event, reg.method),
+        featureId,
+        kind: "discord_event",
+        label: reg.event,
+        method: reg.method,
+        badges: ["event", "passive"],
+      });
+    } else if (reg.kind === "event") {
+      routes.push({
+        id: runtimeRouteId(featureId, "framework_event", reg.ctor.name, reg.method),
+        featureId,
+        kind: "framework_event",
+        label: reg.ctor.name,
+        method: reg.method,
+        badges: ["event", "passive"],
+      });
+    } else {
+      routes.push({
+        id: runtimeRouteId(featureId, "component", reg.prefix, reg.method),
+        featureId,
+        kind: "component",
+        label: reg.prefix,
+        method: reg.method,
+        badges: ["component"],
+      });
+    }
   }
   return routes;
 }

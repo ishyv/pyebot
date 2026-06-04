@@ -28,6 +28,7 @@ describe("feature catalog", () => {
           },
           commands: [],
           handlers: null,
+          registrations: [],
         },
         {
           descriptor: {
@@ -37,6 +38,7 @@ describe("feature catalog", () => {
           },
           commands: [],
           handlers: null,
+          registrations: [],
         },
       ],
       { counting: countingConfig },

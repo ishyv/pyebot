@@ -36,12 +36,11 @@ import { MessageFlags } from "discord.js";
 import { setFeatureCatalog } from "@/core/featureCatalog";
 import { createLogger } from "@/core/logger";
 import { FEATURE_CONFIGS } from "@/features/config";
-import { getListenMetadata, getOnMetadata } from "./decorators";
 import { loadFeatures } from "./loader";
 import { isAdmin, isFeatureEnabled, safeReply } from "./middleware";
 import { buildFeaturesCommand, buildToggleHandler, TOGGLE_CUSTOM_ID_PREFIX } from "./panel";
 import { ComponentRouter } from "./router";
-import type { CommandModule, Ctx, FeatureDescriptor, LoadedFeature } from "./types";
+import type { CommandModule, FeatureDescriptor, LoadedFeature } from "./types";
 import { World } from "./world";
 
 const log = createLogger("framework:bootstrap");
@@ -102,39 +101,34 @@ export async function bootstrapFramework(
   commandMap.set(featuresCommand.data.name, featuresCommand);
   commandOwner.set(featuresCommand.data.name, null);
 
-  // ─── Wire event listeners from @On metadata ──────────────────────────
+  // ─── Wire every trigger from the normalized registration list ────────
+  // The loader produced these from either the legacy decorated class or the new
+  // defineHandlers([...]) array, so this single pass covers both authoring styles.
   for (const feat of features) {
-    if (!feat.handlers) continue;
-    const entries = getOnMetadata(feat.handlers);
-    for (const entry of entries) {
-      const method = (feat.handlers as Record<string, unknown>)[entry.methodKey];
-      if (typeof method !== "function") continue;
-      const bound = (method as (...a: unknown[]) => unknown).bind(feat.handlers);
-      world.bus.on(entry.event, bound as unknown as (e: unknown, c: Ctx) => Promise<void>);
+    const featureId = feat.descriptor.id;
+    for (const reg of feat.registrations) {
+      switch (reg.kind) {
+        case "component":
+          router.add(reg.prefix, featureId, reg.run);
+          break;
+        case "event":
+          world.bus.on(reg.ctor, reg.run);
+          break;
+        case "listen":
+          client.on(reg.event, async (...args: unknown[]) => {
+            try {
+              const ctx = world.forInteraction(null, featureId);
+              await reg.run(...args, ctx);
+            } catch (err) {
+              log.error(`listen("${reg.event}") on ${featureId} threw`, err);
+            }
+          });
+          break;
+      }
     }
   }
 
-  // ─── Wire raw Discord events from @Listen metadata ───────────────────
-  for (const feat of features) {
-    if (!feat.handlers) continue;
-    const listens = getListenMetadata(feat.handlers);
-    for (const entry of listens) {
-      const method = (feat.handlers as Record<string, unknown>)[entry.methodKey];
-      if (typeof method !== "function") continue;
-      const bound = (method as (...a: unknown[]) => unknown).bind(feat.handlers);
-      client.on(entry.event, async (...args: unknown[]) => {
-        try {
-          const ctx = world.forInteraction(null, feat.descriptor.id);
-          await (bound as (...a: unknown[]) => unknown)(...args, ctx);
-        } catch (err) {
-          log.error(`@Listen("${entry.event}") on ${feat.descriptor.id} threw`, err);
-        }
-      });
-    }
-  }
-
-  // ─── Wire component routes from @Handle metadata + framework's own ───
-  for (const feat of features) router.registerFeature(feat);
+  // Framework's own component route for the /features panel toggle buttons.
   router.add(TOGGLE_CUSTOM_ID_PREFIX, "framework", async (interaction, ctx) => {
     await buildToggleHandler(descriptors)(interaction as ButtonInteraction, ctx);
   });

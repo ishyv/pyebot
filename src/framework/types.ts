@@ -146,6 +146,39 @@ export type BoundComponentHandler = (
   ctx: Ctx,
 ) => Promise<void>;
 
+/** A bound raw-discord.js listener: raw event args followed by a Ctx. */
+export type BoundListenHandler = (...args: unknown[]) => void | Promise<void>;
+
+/**
+ * The normalized trigger shape the framework wires at boot. The loader produces
+ * one list per feature from EITHER the legacy decorated handler class OR the new
+ * `defineHandlers([...])` registration array, so bootstrap and the capability
+ * graph consume a single representation regardless of authoring style.
+ *
+ * `method` is a stable per-feature key used only for capability-graph route ids:
+ * the legacy class supplies the JS method name; the new path supplies the
+ * prefix/event token.
+ */
+export type RuntimeRegistration =
+  | {
+      readonly kind: "component";
+      readonly prefix: string;
+      readonly run: BoundComponentHandler;
+      readonly method: string;
+    }
+  | {
+      readonly kind: "event";
+      readonly ctor: EventConstructor;
+      readonly run: EventHandler<unknown>;
+      readonly method: string;
+    }
+  | {
+      readonly kind: "listen";
+      readonly event: string;
+      readonly run: BoundListenHandler;
+      readonly method: string;
+    };
+
 // ─── Feature manifest ──────────────────────────────────────────────────────
 
 /**
@@ -178,8 +211,14 @@ export interface LoadedFeature {
   readonly descriptor: FeatureDescriptor;
   /** Auto-discovered command modules from `<feature>/commands/*.ts`. */
   readonly commands: ReadonlyArray<CommandModule>;
-  /** Optional handler-class instance (one per feature) with @On/@Handle methods. */
+  /**
+   * Legacy handler-class instance (one per feature) with @On/@Handle/@Listen
+   * methods, or null. Retained only during the routing migration; bootstrap and
+   * the capability graph read `registrations` instead.
+   */
   readonly handlers: object | null;
+  /** Normalized triggers from either the legacy class or the new registration array. */
+  readonly registrations: ReadonlyArray<RuntimeRegistration>;
 }
 
 // ─── Ctx ────────────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ function feature(commands: CommandModule[]): LoadedFeature {
     descriptor: { id: "sample", name: "Sample", description: "Sample feature" },
     commands,
     handlers: null,
+    registrations: [],
   };
 }
 

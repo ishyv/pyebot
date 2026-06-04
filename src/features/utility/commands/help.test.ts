@@ -24,6 +24,7 @@ function feature(id: string, name: string, commands: CommandModule[]): LoadedFea
     },
     commands,
     handlers: null,
+    registrations: [],
   };
 }
 
