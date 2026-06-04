@@ -58,6 +58,12 @@ function fakeCtx(state: ComponentState, failOnSet = false): Ctx {
     locks: {} as never,
     interaction: null,
     respond: {} as never,
+    of: (() => {
+      throw new Error("entity API not used in this mock");
+    }) as Ctx["of"],
+    select: (() => {
+      throw new Error("entity API not used in this mock");
+    }) as Ctx["select"],
   };
 }
 

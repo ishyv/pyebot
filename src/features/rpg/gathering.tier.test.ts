@@ -53,6 +53,12 @@ function makeCtx(): Ctx {
     sessions: {} as Ctx["sessions"],
     interaction: null,
     respond: {} as Ctx["respond"],
+    of: (() => {
+      throw new Error("entity API not used in this mock");
+    }) as Ctx["of"],
+    select: (() => {
+      throw new Error("entity API not used in this mock");
+    }) as Ctx["select"],
   };
 }
 

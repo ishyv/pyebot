@@ -50,6 +50,8 @@ import { getDb } from "@/core/db";
 import { createInteractionResponder, type InteractionResponder } from "@/core/interactionResponder";
 import { createLogger, type Logger } from "@/core/logger";
 import { cooldowns, locks, sessions } from "@/core/state";
+import type { EntityComponent, EntityKind } from "./entity";
+import { EntityCache, EntityHandle, EntityQuery } from "./entity-handle";
 import { EntityStore } from "./entity-store";
 import { EventBus } from "./event-bus";
 import type { Component, ComponentRecord, Ctx, Entity } from "./types";
@@ -243,6 +245,7 @@ export class World {
  */
 class InteractionCtx implements Ctx {
   private readonly cache = new Map<string, unknown>();
+  private entityCache: EntityCache | null = null;
   private responder: InteractionResponder | null = null;
   readonly logger: Logger;
 
@@ -334,6 +337,15 @@ class InteractionCtx implements Ctx {
   ): Promise<ReadonlyArray<ComponentRecord<T>>> {
     // `query` results are NOT cached — they vary by options and can be large.
     return this.world.queryDirect(component, options);
+  }
+
+  of(kind: EntityKind, id: Entity): EntityHandle {
+    this.entityCache ??= new EntityCache(this.world.entities);
+    return new EntityHandle(this.world.entities, this.entityCache, kind, id);
+  }
+
+  select<T>(component: EntityComponent<T>): EntityQuery<T> {
+    return new EntityQuery(this.world.entities, component);
   }
 
   emit<E>(event: E): Promise<void> {

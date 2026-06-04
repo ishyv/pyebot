@@ -94,6 +94,12 @@ function makeCtx(
     set: async () => {},
     delete: async () => {},
     query: async () => [],
+    of: () => {
+      throw new Error("entity API not used in this mock");
+    },
+    select: () => {
+      throw new Error("entity API not used in this mock");
+    },
   } as Ctx;
 }
 

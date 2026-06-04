@@ -31,6 +31,8 @@ import type { ZodType } from "zod";
 import type { InteractionResponder } from "@/core/interactionResponder";
 import type { Logger } from "@/core/logger";
 import type { CooldownManager, LockSet, SessionManager } from "@/core/state";
+import type { EntityComponent, EntityKind } from "./entity";
+import type { EntityHandle, EntityQuery } from "./entity-handle";
 
 // ─── Entity ─────────────────────────────────────────────────────────────────
 
@@ -264,6 +266,22 @@ export interface Ctx {
       skip?: number;
     },
   ): Promise<ReadonlyArray<ComponentRecord<T>>>;
+
+  // -- Entity-component access (entity-store.ts) --------------------------
+
+  /**
+   * Open a handle to one entity for component reads/writes. Components attached
+   * to the entity's kind live as fields on a single document, so the first read
+   * loads them all and same-entity writes are atomic. See entity-handle.ts.
+   */
+  of(kind: EntityKind, id: Entity): EntityHandle;
+
+  /**
+   * Cross-entity query over one component — the entity-model leaderboard
+   * surface. Named `select` (not `query`) only because the legacy `query` above
+   * still occupies that name; it can reclaim it once the legacy surface retires.
+   */
+  select<T>(component: EntityComponent<T>): EntityQuery<T>;
 
   // -- Events -------------------------------------------------------------
 
