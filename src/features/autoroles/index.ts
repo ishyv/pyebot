@@ -4,11 +4,11 @@
  * Surface:
  *   /autorole create | delete | list | enable | disable
  *
- * Reactions:
- *   - onJoin rules apply via @On(MemberJoined).
- *   - onReact rules apply via @Listen("messageReactionAdd"/"messageReactionRemove").
- *   - messageContains rules apply via @Listen("messageCreate").
- *   - onButton rules apply via @Handle("autorole:toggle:").
+ * Reactions (wired in handlers.ts via defineHandlers):
+ *   - onJoin rules apply via on(MemberJoined).
+ *   - onReact rules apply via listen("messageReactionAdd"/"messageReactionRemove").
+ *   - messageContains rules apply via listen("messageCreate").
+ *   - onButton rules apply via the autorole:toggle route.
  */
 
 import { defineFeature } from "@/framework";

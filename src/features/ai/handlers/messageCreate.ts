@@ -1,7 +1,7 @@
 /**
  * AI message handler — responds to @mentions and replies to prior AI messages.
  *
- * Export: handleAiMessage(message, botId) — called by the root handlers.ts via @Listen.
+ * Export: handleAiMessage(message, botId) — called by handlers.ts via listen("messageCreate").
  */
 
 import type { Message } from "discord.js";
