@@ -13,9 +13,9 @@
  * also works for quick text.
  */
 
-import { ButtonBuilder, ButtonStyle } from "discord.js";
 import { command } from "@/framework";
 import { container, section, v2Message } from "@/ui/v2";
+import { routes } from "../routes";
 
 export default command("example")
   .description("Reference command — demonstrates options, subcommands, and Components V2")
@@ -33,13 +33,10 @@ export default command("example")
   .handle("greet", async (c) => {
     const target = c.options.user ?? c.user;
 
-    // customId convention is `feature:action:arg…` (see src/ui/customId.ts).
-    // The "example:" prefix is what handlers.ts routes on. Encoding is a plain
-    // template string at the call site that owns it.
-    const button = new ButtonBuilder()
-      .setCustomId(`example:greet:${target.id}`)
-      .setLabel("Wave back")
-      .setStyle(ButtonStyle.Primary);
+    // Typed encode: routes.greet.button(...) prefills the customId from the route
+    // schema (see ../routes.ts). The arg is checked at compile time — there is no
+    // hand-written `example:greet:${id}` string to drift from the handler.
+    const button = routes.greet.button({ target: target.id }, { label: "Wave back" });
 
     return v2Message(
       container("ok", section(`## Hello, ${target.username}!\n${c.options.message}`, button)),

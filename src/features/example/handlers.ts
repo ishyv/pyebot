@@ -1,53 +1,40 @@
 /**
- * Handlers route component interactions (buttons, selects, modals) and react to
- * events. The framework discovers the decorated methods on this default-exported
- * class at boot — you never register them in src/index.ts.
+ * Handlers are a flat list of registrations — no class, no decorators. The
+ * framework discovers this default-exported list at boot and wires each entry.
  *
- *   @Handle(prefix)        — component customIds starting with `prefix`
- *   @On(EventClass)        — framework event bus (e.g. MemberJoined)
- *   @Listen("discordEvent") — raw discord.js client events
+ *   routeHandlers(routes, { name: (i, args, ctx) => ... })  — component routes
+ *   on(EventClass, (event, ctx) => ...)                     — framework bus events
+ *   listen("messageCreate", (message, ctx) => ...)          — raw discord.js events
  *
- * This example ships ONLY a @Handle route, because it is safe: a prefix route
- * fires only when a user clicks a button this feature created, which only
- * exists while the feature is enabled. The @On / @Listen examples below are
- * intentionally left as commented documentation — see the caveat on @Listen.
+ * For component routes, `args` is decoded and typed from the route's schema (see
+ * ./routes.ts) — a garbled or stale customId is skipped before the handler runs,
+ * so there is no parsing or guarding to write here.
  */
 
-import type { ButtonInteraction } from "discord.js";
 import { MessageFlags } from "discord.js";
-import { type Ctx, Handle } from "@/framework";
-import { parseCustomId } from "@/ui/customId";
+import { defineHandlers, routeHandlers } from "@/framework";
+import { routes } from "./routes";
 
-export default class ExampleHandlers {
-  @Handle("example:")
-  async onButton(interaction: ButtonInteraction, _ctx: Ctx): Promise<void> {
-    // Decode the customId into named segments. parseCustomId returns null if
-    // the segment count doesn't match the layout, so guard before reading.
-    const parts = parseCustomId(interaction.customId, ["feature", "action", "userId"] as const);
-    if (!parts || parts.action !== "greet") return; // not ours / stale — ignore
+export default defineHandlers([
+  ...routeHandlers(routes, {
+    // `interaction` is a ButtonInteraction (the route's default kind) and
+    // `args.target` is the snowflake encoded by routes.greet.button(...).
+    greet: async (interaction, args) => {
+      const wavedBack = args.target === interaction.user.id;
+      await interaction.reply({
+        content: wavedBack ? "👋 You waved back at yourself!" : "👋 Wave received.",
+        flags: MessageFlags.Ephemeral,
+      });
+    },
+  }),
 
-    const wavedBack = parts.userId === interaction.user.id;
-    await interaction.reply({
-      content: wavedBack ? "👋 You waved back at yourself!" : "👋 Wave received.",
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-
-  // ── Event hooks (documentation only) ──────────────────────────────────────
+  // Events fold into the same list. Examples (left commented — the example
+  // feature has no real event behavior to ship):
   //
-  // Framework bus event — fires when the framework emits a typed event:
+  //   on(MemberJoined, async (event, ctx) => { /* framework bus */ }),
   //
-  //   @On(MemberJoined)
-  //   async onJoin(event: MemberJoined, ctx: Ctx): Promise<void> { ... }
-  //
-  // Raw discord.js event. CAUTION: @Listen handlers bypass the feature toggle —
-  // they run in every guild even when this feature is disabled. If you add one,
-  // self-gate it (check the feature is enabled for the guild) and bail on bot
-  // authors. See src/features/counting/handlers.ts for the real pattern:
-  //
-  //   @Listen("messageCreate")
-  //   async onMessage(message: Message, ctx: Ctx): Promise<void> {
-  //     if (message.author.bot || !message.guildId) return;
-  //     // ...resolve guild config, check resolveFeatureEnabled(...), then act
-  //   }
-}
+  //   listen("messageCreate", async (message, ctx) => {
+  //     // Raw discord.js events bypass the feature toggle — self-gate them.
+  //     // See src/features/counting/handlers.ts for the real pattern.
+  //   }),
+]);

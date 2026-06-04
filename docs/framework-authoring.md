@@ -109,42 +109,86 @@ e.g. a component handler editing its own message via `interaction.update()` /
 `interaction.deferUpdate()`, or posting a *public* `interaction.followUp()` while keeping an
 ephemeral deferred reply.
 
-## Components
+## Handlers: routes and events
 
-Component routes live in an optional `handlers.ts` class. Use `@Handle` with
-the custom ID prefix the route owns.
+A feature's optional `handlers.ts` default-exports a flat list of registrations
+built by free-scope helpers — no class, no decorators. The loader discovers the
+list; bootstrap wires each entry. There are three kinds: component routes,
+framework bus events, and raw Discord events.
 
-```ts
-import type { ButtonInteraction } from "discord.js";
-import { Handle } from "@/framework";
+### Typed component routes
 
-export default class PollHandlers {
-  @Handle("poll:")
-  async handlePollButton(interaction: ButtonInteraction): Promise<void> {
-    const actionId = interaction.customId.slice("poll:".length);
-    await interaction.reply(`Handled ${actionId}.`);
-  }
-}
-```
-
-The router chooses the longest matching prefix, so specific prefixes can sit
-beside broader ones.
-
-## Events
-
-Use `@On(EventClass)` for framework events and `@Listen("discordEvent")` for
-raw Discord.js events that need direct client event access.
+Declare a feature's component routes once with `defineRoutes` (conventionally in
+`routes.ts`). The same typed table drives BOTH encoding (building a button's
+customId) and decoding (handing the handler already-parsed, typed args). This
+replaces stringly-typed `customId`s and hand-written parsers.
 
 ```ts
-import { Listen } from "@/framework";
+// routes.ts
+import { defineRoutes, snowflake } from "@/framework";
 
-export default class CountingHandlers {
-  @Listen("messageCreate")
-  async onMessage(message: import("discord.js").Message): Promise<void> {
-    // ...
-  }
-}
+export const routes = defineRoutes("poll", {
+  vote: { pollId: snowflake, choice: snowflake }, // → "poll:vote:<id>:<id>"
+});
 ```
+
+Encode at the call site, fully typed (a wrong arg name/type is a compile error):
+
+```ts
+// in a command/view
+routes.vote.button({ pollId, choice }, { label: "Vote" }); // prefilled ButtonBuilder
+routes.vote.id({ pollId, choice }); // the raw customId string, if you build the component yourself
+```
+
+Handle by route name; `args` is decoded and typed from the schema with no
+annotations. A stale or malformed customId is skipped before the handler runs:
+
+```ts
+// handlers.ts
+import { defineHandlers, routeHandlers } from "@/framework";
+import { routes } from "./routes";
+
+export default defineHandlers([
+  ...routeHandlers(routes, {
+    vote: async (interaction, args, ctx) => {
+      // args: { pollId: string; choice: string }
+    },
+  }),
+]);
+```
+
+Codec primitives: `str`, `int`, `snowflake`, `oneOf([...])` (a literal union),
+and `rest` (a greedy trailing field that may contain colons — must be last).
+Declare a component kind with `route(schema, "select" | "modal" | ...)` so the
+handler's `interaction` narrows (e.g. to `StringSelectMenuInteraction`); a bare
+schema defaults to `"button"`. The codec owns only the `customId` — a select's
+`interaction.values` and a modal's `interaction.fields` are read directly.
+
+### Events
+
+Fold events into the same list. `on(EventClass, ...)` listens on the framework
+bus (the class is both the key and the payload type); `listen("name", ...)`
+listens to a raw Discord event (args typed from discord.js `ClientEvents`):
+
+```ts
+import { defineHandlers, listen, on } from "@/framework";
+import { MemberJoined } from "@/events/member-joined";
+
+export default defineHandlers([
+  on(MemberJoined, async (event, ctx) => { /* event: MemberJoined */ }),
+  listen("messageCreate", async (message, ctx) => { /* message: Message */ }),
+]);
+```
+
+Raw `listen(...)` handlers bypass the feature toggle — self-gate them (see
+`src/features/counting/handlers.ts`). `src/features/example/` is the runnable
+reference adopter.
+
+### Legacy decorator class (being migrated out)
+
+The previous style — a `handlers.ts` class with `@Handle`/`@On`/`@Listen`
+methods — still loads (the loader supports both) while features migrate to the
+list above. Do not author new features with it.
 
 ## Latest-Only Boundary
 
