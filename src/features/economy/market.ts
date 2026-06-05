@@ -15,8 +15,8 @@
  * It does not change command UX or support instance-item listings yet.
  */
 
+import type { MarketListingDoc } from "@/components/economy/market-listing";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import type { MarketListingDoc } from "@/db/schemas/market";
 import type { Ctx } from "@/framework/types";
 import { buildListingId } from "@/utils/ids";
 import {
@@ -121,7 +121,7 @@ export async function createListing(
     expiresAt: null,
   };
 
-  const result = await createListingTx({ listing, config: cfg });
+  const result = await createListingTx(ctx, { listing, config: cfg });
   if (result.isErr()) return ErrResult(mapPersistenceError(result.error));
 
   ctx.cooldowns.set(sellerId, "market:create", cfg.createCooldownMs);
@@ -155,7 +155,7 @@ export async function buyListing(
   }
 
   return withListingLock(ctx, listingId, async () => {
-    const result = await buyListingTx({ buyerId, listingId, quantity, config: cfg });
+    const result = await buyListingTx(ctx, { buyerId, listingId, quantity, config: cfg });
     if (result.isErr()) return ErrResult(mapPersistenceError(result.error));
 
     ctx.cooldowns.set(buyerId, "market:buy", cfg.buyCooldownMs);
@@ -179,7 +179,7 @@ export async function cancelListing(
   options: { allowModeratorOverride?: boolean } = {},
 ): Promise<Result<CancelListingResult, MarketError>> {
   return withListingLock(ctx, listingId, async () => {
-    const result = await cancelListingTx({
+    const result = await cancelListingTx(ctx, {
       actorId,
       listingId,
       allowModeratorOverride: options.allowModeratorOverride,
@@ -209,7 +209,7 @@ export async function browseListings(
   const pageSize = options.pageSize ?? cfg.pageSize;
   const skip = page * pageSize;
 
-  const res = await findActiveMarketListings(guildId, {
+  const res = await findActiveMarketListings(ctx, guildId, {
     itemId: options.itemId,
     sellerId: options.sellerId,
     skip,

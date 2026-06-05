@@ -11,12 +11,17 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { defineComponent, entity, parseComponentField } from "./entity";
-import { EntityCache, EntityHandle } from "./entity-handle";
+import { EntityCache, EntityHandle, EntityQuery } from "./entity-handle";
 import type { EntityDoc, EntityStore } from "./entity-store";
 
 const User = entity("users");
 const Counter = defineComponent(User, "counter", z.object({ count: z.number().int().default(0) }));
 const Wallet = defineComponent(User, "wallet", z.object({ coins: z.number().int().default(0) }));
+const Profile = defineComponent(
+  User,
+  "profile",
+  z.object({ count: z.number().int().default(0), label: z.string().default("") }),
+);
 
 /** In-memory stand-in for EntityStore that records how often it reads. */
 function fakeStore() {
@@ -48,6 +53,9 @@ function fakeStore() {
     removeComponent: async (id: string, component: { name: string }) => {
       const doc = docs.get(id);
       if (doc) delete doc[component.name];
+    },
+    query: async (_component: unknown, options: unknown) => {
+      return [{ id: "options", value: options }];
     },
   };
   return { store: store as unknown as EntityStore, docs, loads: () => loads };
@@ -96,5 +104,26 @@ describe("EntityHandle", () => {
     await u.remove(Counter);
     expect(await u.peek(Counter)).toBeNull();
     expect(await u.get(Wallet)).toEqual({ coins: 9 });
+  });
+});
+
+describe("EntityQuery", () => {
+  it("builds typed equality filters, stable sort keys, and pagination", async () => {
+    const { store } = fakeStore();
+    const rows = await new EntityQuery(store, Profile)
+      .whereEq((c) => c.count, 3)
+      .sortAsc((c) => c.count)
+      .thenDesc((c) => c.label)
+      .skip(10)
+      .limit(5)
+      .run();
+
+    const [{ value }] = rows as unknown as Array<{ value: unknown }>;
+    expect(value).toEqual({
+      filter: { "profile.count": 3 },
+      sort: { "profile.count": 1, "profile.label": -1 },
+      skip: 10,
+      limit: 5,
+    });
   });
 });

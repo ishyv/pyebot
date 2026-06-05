@@ -15,7 +15,7 @@ import { disconnectDb, getDb } from "../src/core/db";
 
 // Per-user gameplay component collections. Moderation/support state and guild
 // documents are intentionally excluded.
-const GAMEPLAY_COLLECTIONS = ["market_listings"] as const;
+const GAMEPLAY_COLLECTIONS = [] as const;
 
 const ENTITY_FIELD_RESETS = [
   {

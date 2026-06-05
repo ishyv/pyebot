@@ -81,6 +81,7 @@ export type ComponentRecord<T> = T & { _id: Entity };
  */
 export interface Transaction {
   of(kind: EntityKind, id: Entity): EntityHandle;
+  select<T>(component: EntityComponent<T>): EntityQuery<T>;
 }
 
 // ─── Events ────────────────────────────────────────────────────────────────

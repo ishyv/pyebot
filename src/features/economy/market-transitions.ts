@@ -9,7 +9,7 @@
  * Limits: only stackable item listings are supported. Instance items need a
  * different escrow and identity model, not a boolean flag slipped in here.
  */
-import type { MarketListingDoc } from "@/db/schemas/market";
+import type { MarketListingDoc } from "@/components/economy/market-listing";
 import {
   DEFAULT_MARKET_CONFIG,
   type MarketConfig,

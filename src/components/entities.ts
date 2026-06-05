@@ -54,3 +54,11 @@ export const TimedAutoroleGrant = entity("timed_autorole_grants");
  * it records which member currently needs expiry.
  */
 export const TempRoleGrant = entity("temp_role_grants");
+
+/**
+ * A marketplace listing, keyed by its generated listing id.
+ *
+ * Listings are queried by guild, seller, item, status, and price, so they keep
+ * their own entity kind instead of living under the seller user document.
+ */
+export const MarketListing = entity("marketListings");

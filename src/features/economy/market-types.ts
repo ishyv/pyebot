@@ -1,4 +1,4 @@
-import type { MarketListingDoc } from "@/db/schemas/market";
+import type { MarketListingDoc } from "@/components/economy/market-listing";
 
 /**
  * Domain error used by market commands and tests.

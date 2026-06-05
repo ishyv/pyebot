@@ -359,6 +359,7 @@ class InteractionCtx implements Ctx {
         const cache = new EntityCache(this.world.entities, session);
         const tx: Transaction = {
           of: (kind, id) => new EntityHandle(this.world.entities, cache, kind, id, session),
+          select: (component) => new EntityQuery(this.world.entities, component, session),
         };
         result = await fn(tx);
       });

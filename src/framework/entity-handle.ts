@@ -158,6 +158,7 @@ export class EntityHandle {
  * vary by options and can be large.
  */
 export class EntityQuery<T> {
+  private filterSpec: Record<string, unknown> = {};
   private sortSpec?: Record<string, 1 | -1>;
   private limitN?: number;
   private skipN?: number;
@@ -165,18 +166,43 @@ export class EntityQuery<T> {
   constructor(
     private readonly store: EntityStore,
     private readonly component: EntityComponent<T>,
+    private readonly session?: ClientSession,
   ) {}
+
+  /** Filter by equality on a component field while keeping Mongo paths hidden. */
+  whereEq(selector: (value: T) => unknown, value: unknown): this {
+    this.filterSpec[`${this.component.name}.${selectorPath(selector)}`] = value;
+    return this;
+  }
+
+  private addSort(selector: (value: T) => unknown, direction: 1 | -1): this {
+    this.sortSpec = {
+      ...(this.sortSpec ?? {}),
+      [`${this.component.name}.${selectorPath(selector)}`]: direction,
+    };
+    return this;
+  }
 
   /** Sort descending by the read field (highest first). */
   sortDesc(selector: (value: T) => unknown): this {
-    this.sortSpec = { [`${this.component.name}.${selectorPath(selector)}`]: -1 };
-    return this;
+    this.sortSpec = undefined;
+    return this.addSort(selector, -1);
   }
 
   /** Sort ascending by the read field (lowest first). */
   sortAsc(selector: (value: T) => unknown): this {
-    this.sortSpec = { [`${this.component.name}.${selectorPath(selector)}`]: 1 };
-    return this;
+    this.sortSpec = undefined;
+    return this.addSort(selector, 1);
+  }
+
+  /** Add a secondary descending sort key after the primary sort. */
+  thenDesc(selector: (value: T) => unknown): this {
+    return this.addSort(selector, -1);
+  }
+
+  /** Add a secondary ascending sort key after the primary sort. */
+  thenAsc(selector: (value: T) => unknown): this {
+    return this.addSort(selector, 1);
   }
 
   limit(n: number): this {
@@ -191,10 +217,15 @@ export class EntityQuery<T> {
 
   /** Execute the query and return id+value rows. */
   run(): Promise<ReadonlyArray<EntityQueryRow<T>>> {
-    return this.store.query(this.component, {
-      sort: this.sortSpec,
-      limit: this.limitN,
-      skip: this.skipN,
-    });
+    return this.store.query(
+      this.component,
+      {
+        filter: this.filterSpec,
+        sort: this.sortSpec,
+        limit: this.limitN,
+        skip: this.skipN,
+      },
+      this.session,
+    );
   }
 }

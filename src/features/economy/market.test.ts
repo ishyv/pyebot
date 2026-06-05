@@ -7,8 +7,8 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { MarketListingDoc } from "@/components/economy/market-listing";
 import { ErrResult, OkResult } from "@/core/result";
-import type { MarketListingDoc } from "@/db/schemas/market";
 import type { User } from "@/db/schemas/user";
 import {
   calculatePurchase,
@@ -140,7 +140,10 @@ let activeFailCurrency = new Set<string>();
 let activeFailInventory = new Set<string>();
 
 const mockCreateListingTx = mock(
-  async ({ listing, config }: { listing: MarketListingDoc; config: MarketConfig }) => {
+  async (
+    _ctx: unknown,
+    { listing, config }: { listing: MarketListingDoc; config: MarketConfig },
+  ) => {
     if (Array.from(listingStore.values()).filter((doc) => doc.status === "active").length >= 20) {
       return ErrResult(
         new MarketDomainError(
@@ -173,17 +176,20 @@ const mockCreateListingTx = mock(
 );
 
 const mockBuyListingTx = mock(
-  async ({
-    buyerId,
-    listingId,
-    quantity,
-    config,
-  }: {
-    buyerId: string;
-    listingId: string;
-    quantity: number;
-    config: MarketConfig;
-  }) => {
+  async (
+    _ctx: unknown,
+    {
+      buyerId,
+      listingId,
+      quantity,
+      config,
+    }: {
+      buyerId: string;
+      listingId: string;
+      quantity: number;
+      config: MarketConfig;
+    },
+  ) => {
     const listing = listingStore.get(listingId);
     if (!listing) return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
     const listingError = validateBuyableListing(listing, buyerId, quantity);
@@ -231,15 +237,18 @@ const mockBuyListingTx = mock(
 );
 
 const mockCancelListingTx = mock(
-  async ({
-    actorId,
-    listingId,
-    allowModeratorOverride,
-  }: {
-    actorId: string;
-    listingId: string;
-    allowModeratorOverride?: boolean;
-  }) => {
+  async (
+    _ctx: unknown,
+    {
+      actorId,
+      listingId,
+      allowModeratorOverride,
+    }: {
+      actorId: string;
+      listingId: string;
+      allowModeratorOverride?: boolean;
+    },
+  ) => {
     const listing = listingStore.get(listingId);
     if (!listing) return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
     const listingError = validateCancellableListing(listing, actorId, allowModeratorOverride);
@@ -264,6 +273,7 @@ const mockCancelListingTx = mock(
 
 const mockFindActiveMarketListings = mock(
   async (
+    _ctx: unknown,
     guildId: string,
     options: { itemId?: string; sellerId?: string; limit?: number; skip?: number } = {},
   ) =>
@@ -411,7 +421,10 @@ function resetAll() {
   activeFailCurrency = new Set();
   activeFailInventory = new Set();
   mockCreateListingTx.mockImplementation(
-    async ({ listing, config }: { listing: MarketListingDoc; config: MarketConfig }) => {
+    async (
+      _ctx: unknown,
+      { listing, config }: { listing: MarketListingDoc; config: MarketConfig },
+    ) => {
       if (
         Array.from(listingStore.values()).filter(
           (doc) =>
@@ -450,17 +463,20 @@ function resetAll() {
     },
   );
   mockBuyListingTx.mockImplementation(
-    async ({
-      buyerId,
-      listingId,
-      quantity,
-      config,
-    }: {
-      buyerId: string;
-      listingId: string;
-      quantity: number;
-      config: MarketConfig;
-    }) => {
+    async (
+      _ctx: unknown,
+      {
+        buyerId,
+        listingId,
+        quantity,
+        config,
+      }: {
+        buyerId: string;
+        listingId: string;
+        quantity: number;
+        config: MarketConfig;
+      },
+    ) => {
       const listing = listingStore.get(listingId);
       if (!listing)
         return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
@@ -508,15 +524,18 @@ function resetAll() {
     },
   );
   mockCancelListingTx.mockImplementation(
-    async ({
-      actorId,
-      listingId,
-      allowModeratorOverride,
-    }: {
-      actorId: string;
-      listingId: string;
-      allowModeratorOverride?: boolean;
-    }) => {
+    async (
+      _ctx: unknown,
+      {
+        actorId,
+        listingId,
+        allowModeratorOverride,
+      }: {
+        actorId: string;
+        listingId: string;
+        allowModeratorOverride?: boolean;
+      },
+    ) => {
       const listing = listingStore.get(listingId);
       if (!listing)
         return ErrResult(new MarketDomainError("LISTING_NOT_FOUND", "Listing not found"));
@@ -541,6 +560,7 @@ function resetAll() {
   );
   mockFindActiveMarketListings.mockImplementation(
     async (
+      _ctx: unknown,
       guildId: string,
       options: { itemId?: string; sellerId?: string; limit?: number; skip?: number } = {},
     ) =>
@@ -941,6 +961,7 @@ describe("browseListings", () => {
 
     expect(result.isOk()).toBe(true);
     expect(mockFindActiveMarketListings).toHaveBeenCalledWith(
+      expect.anything(),
       "guild-1",
       expect.objectContaining({ itemId: "wood" }),
     );
@@ -954,6 +975,7 @@ describe("browseListings", () => {
     expect(data.page).toBe(2);
     expect(data.pageSize).toBe(5);
     expect(mockFindActiveMarketListings).toHaveBeenCalledWith(
+      expect.anything(),
       "guild-1",
       expect.objectContaining({ skip: 10, limit: 5 }),
     );

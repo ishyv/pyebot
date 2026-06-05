@@ -1,21 +1,14 @@
 /**
  * Tests for economy achievements (updateProgress, incrementProgress, claimRewards, getBoard).
  *
- * Storage is the `Achievements` component on the User entity; the test ctx backs
- * `ctx.of(User, id)` with an in-memory map. Currency rewards go through
- * `adjustBalance`, which is mocked here so the suite stays independent of the
- * wallet's own storage.
+ * Storage is backed by an in-memory entity map, including wallet rewards, so
+ * the suite does not leak module mocks into other economy tests.
  */
 
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { Achievements, type AchievementsValue } from "@/components/economy/achievements";
+import { UserCurrency, type UserCurrencyValue } from "@/components/economy/wallet";
 import type { Ctx } from "@/framework/types";
-
-const adjustBalance = mock(
-  async (_ctx: unknown, _userId: string, _currencyId: string, _amount: number) => {},
-);
-
-mock.module("@/features/economy/mutations", () => ({ adjustBalance }));
 
 const {
   updateProgress,
@@ -27,6 +20,7 @@ const {
 } = await import("./achievements");
 
 const store = new Map<string, AchievementsValue>();
+const wallets = new Map<string, UserCurrencyValue>();
 
 function read(userId: string): AchievementsValue {
   return store.get(userId) ?? Achievements.schema.parse({});
@@ -44,14 +38,24 @@ function makeCtx(): Ctx {
     of(_kind: unknown, id: string) {
       return {
         async get(component: unknown) {
-          if (component !== Achievements) throw new Error("unexpected component in test ctx");
-          return store.get(id) ?? Achievements.schema.parse({});
+          if (component === Achievements) return store.get(id) ?? Achievements.schema.parse({});
+          if (component === UserCurrency) return wallets.get(id) ?? UserCurrency.schema.parse({});
+          throw new Error("unexpected component in test ctx");
         },
         async update(component: unknown, patch: unknown) {
-          if (component !== Achievements) throw new Error("unexpected component in test ctx");
-          const current = store.get(id) ?? Achievements.schema.parse({});
-          const partial = typeof patch === "function" ? patch(current) : patch;
-          store.set(id, { ...current, ...(partial as Partial<AchievementsValue>) });
+          if (component === Achievements) {
+            const current = store.get(id) ?? Achievements.schema.parse({});
+            const partial = typeof patch === "function" ? patch(current) : patch;
+            store.set(id, { ...current, ...(partial as Partial<AchievementsValue>) });
+            return;
+          }
+          if (component === UserCurrency) {
+            const current = wallets.get(id) ?? UserCurrency.schema.parse({});
+            const partial = typeof patch === "function" ? patch(current) : patch;
+            wallets.set(id, { ...current, ...(partial as Partial<UserCurrencyValue>) });
+            return;
+          }
+          throw new Error("unexpected component in test ctx");
         },
       };
     },
@@ -72,7 +76,7 @@ let ctx: Ctx;
 
 beforeEach(() => {
   store.clear();
-  adjustBalance.mockClear();
+  wallets.clear();
   ctx = makeCtx();
 });
 
@@ -173,7 +177,7 @@ describe("claimRewards", () => {
     expect(data.appliedRewards).toHaveLength(1);
     expect(data.appliedRewards[0].type).toBe("currency");
     expect(data.appliedRewards[0].amount).toBe(300);
-    expect(adjustBalance).toHaveBeenCalledTimes(1);
+    expect(wallets.get("user-1")?.balances.coins).toBe(300);
     expect(read("user-1").unlocked.trivia_10?.rewardsClaimed).toBe(true);
   });
 

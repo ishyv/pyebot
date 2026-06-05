@@ -1,25 +1,23 @@
 /**
- * Mongo transaction boundary for marketplace writes.
+ * Entity-backed transaction boundary for marketplace writes.
  *
  * The public market service owns command policy and cooldowns; this module owns
- * the multi-document invariant Mongo must commit atomically:
- * listing state, buyer/seller currency, escrowed inventory, and account upserts
- * change together or not at all.
- *
- * Gotcha: this intentionally bypasses `Ctx`/`World` caching. Market commands do
- * not read these same documents again inside the interaction after the write,
- * and correctness here depends on MongoDB session semantics that `World` does
- * not expose yet.
+ * the multi-entity invariant Mongo must commit atomically: listing state,
+ * buyer/seller currency, and inventory escrow change together or not at all.
  */
 
-import type { ClientSession, Collection, Db, Document, Filter } from "mongodb";
+import {
+  type MarketListingDoc,
+  MarketListingRecord,
+  type MarketListingValue,
+  withMarketListingId,
+} from "@/components/economy/market-listing";
 import { EconomyAccount, UserCurrency } from "@/components/economy/wallet";
-import { User } from "@/components/entities";
-import { UserInventory } from "@/components/rpg/inventory";
-import { getDb, getMongoClient } from "@/core/db";
+import { MarketListing as MarketListingKind, User } from "@/components/entities";
+import { UserInventory, type UserInventoryValue } from "@/components/rpg/inventory";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import { type MarketListingDoc, MarketListingSchema } from "@/db/schemas/market";
 import { isAccountActive } from "@/features/economy/account";
+import type { Ctx, Transaction } from "@/framework/types";
 import {
   calculatePurchase,
   cancelListingPatch,
@@ -39,17 +37,6 @@ import {
 const TRANSACTION_REQUIRED =
   "Marketplace requires MongoDB transactions. Run MongoDB as a replica set or sharded cluster before using marketplace writes.";
 
-type ComponentDoc = Document & { _id: string };
-
-interface MarketCollections {
-  readonly listings: Collection<MarketListingDoc>;
-  readonly users: Collection<ComponentDoc>;
-}
-
-interface MarketTxContext extends MarketCollections {
-  readonly session: ClientSession;
-}
-
 export class MarketPersistenceError extends Error {
   constructor(
     public readonly code: "TRANSACTION_UNSUPPORTED",
@@ -61,19 +48,6 @@ export class MarketPersistenceError extends Error {
 }
 
 type MarketPersistenceResult<T> = Result<T, MarketError | MarketPersistenceError>;
-
-function collectionSet(db: Db): MarketCollections {
-  return {
-    listings: db.collection<MarketListingDoc>("marketListings"),
-    users: db.collection<ComponentDoc>(User.collection),
-  };
-}
-
-function normalizeFindOneAndUpdate<T>(result: T | { value?: T | null } | null): T | null {
-  if (!result) return null;
-  if (typeof result === "object" && "value" in result) return result.value ?? null;
-  return result as T;
-}
 
 function transactionUnsupported(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -87,17 +61,11 @@ function unknownMessage(error: unknown, fallback: string): string {
 }
 
 async function runMarketTransaction<T>(
-  fn: (tx: MarketTxContext) => Promise<T>,
+  ctx: Ctx,
+  fn: (tx: Transaction) => Promise<T>,
 ): Promise<MarketPersistenceResult<T>> {
-  const [client, db] = await Promise.all([getMongoClient(), getDb()]);
-  const session = client.startSession();
-
   try {
-    let value: T | undefined;
-    await session.withTransaction(async () => {
-      value = await fn({ ...collectionSet(db), session });
-    });
-    return OkResult(value as T);
+    return OkResult(await ctx.transaction(fn));
   } catch (error) {
     if (transactionUnsupported(error)) {
       return ErrResult(new MarketPersistenceError("TRANSACTION_UNSUPPORTED", TRANSACTION_REQUIRED));
@@ -106,117 +74,122 @@ async function runMarketTransaction<T>(
     return ErrResult(
       new MarketError("TRANSACTION_FAILED", unknownMessage(error, "Market transaction failed")),
     );
-  } finally {
-    await session.endSession();
   }
 }
 
-async function ensureActiveAccount(
-  users: Collection<ComponentDoc>,
-  userId: string,
-  session: ClientSession,
-): Promise<void> {
-  const defaults = EconomyAccount.schema.parse({});
-  const existing = await users.findOne({ _id: userId }, { session });
-  if (!existing || !(EconomyAccount.name in existing)) {
-    await users.updateOne(
-      { _id: userId },
-      { $set: { [EconomyAccount.name]: defaults }, $setOnInsert: { _id: userId } },
-      { upsert: true, session },
-    );
+function listingValue(doc: MarketListingDoc): MarketListingValue {
+  return {
+    guildId: doc.guildId,
+    sellerId: doc.sellerId,
+    itemId: doc.itemId,
+    itemKind: doc.itemKind,
+    pricePerUnit: doc.pricePerUnit,
+    quantity: doc.quantity,
+    status: doc.status,
+    version: doc.version,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    expiresAt: doc.expiresAt,
+  };
+}
+
+function stackQty(slot: UserInventoryValue["slots"][string] | undefined): number {
+  return slot && "qty" in slot ? slot.qty : 0;
+}
+
+async function ensureActiveAccount(tx: Transaction, userId: string): Promise<void> {
+  const user = tx.of(User, userId);
+  if (!(await user.has(EconomyAccount))) {
+    await user.set(EconomyAccount, EconomyAccount.schema.parse({}));
   }
-  const doc = await users.findOne({ _id: userId }, { session });
-  const account = EconomyAccount.schema.parse(doc?.[EconomyAccount.name] ?? {});
+  const account = await user.get(EconomyAccount);
   if (!isAccountActive(account.status)) {
     throw new MarketError("ACCOUNT_INACTIVE", "Your economy account is not active");
   }
 }
 
-function stackPath(itemId: string): string {
-  return `${UserInventory.name}.slots.${itemId}.qty`;
-}
-
-function balancePath(currencyId: string): string {
-  return `${UserCurrency.name}.balances.${currencyId}`;
-}
-
 async function removeStackItems(
-  users: Collection<ComponentDoc>,
+  tx: Transaction,
   userId: string,
   itemId: string,
   quantity: number,
-  session: ClientSession,
 ): Promise<void> {
-  const updated = await users.findOneAndUpdate(
-    { _id: userId, [stackPath(itemId)]: { $gte: quantity } },
-    { $inc: { [stackPath(itemId)]: -quantity } },
-    { returnDocument: "after", session },
-  );
-
-  if (!normalizeFindOneAndUpdate(updated)) {
+  const user = tx.of(User, userId);
+  const inventory = await user.get(UserInventory);
+  const current = stackQty(inventory.slots[itemId]);
+  if (current < quantity) {
     throw new MarketError(
       "INSUFFICIENT_INVENTORY",
       `You need ${quantity} ${itemId}, but do not have enough`,
     );
   }
+  await user.update(UserInventory, {
+    slots: {
+      ...inventory.slots,
+      [itemId]: { qty: current - quantity },
+    },
+  });
 }
 
 async function addStackItems(
-  users: Collection<ComponentDoc>,
+  tx: Transaction,
   userId: string,
   itemId: string,
   quantity: number,
-  session: ClientSession,
 ): Promise<void> {
-  await users.findOneAndUpdate(
-    { _id: userId },
-    { $setOnInsert: { _id: userId }, $inc: { [stackPath(itemId)]: quantity } },
-    { upsert: true, returnDocument: "after", session },
-  );
+  const user = tx.of(User, userId);
+  const inventory = await user.get(UserInventory);
+  const current = stackQty(inventory.slots[itemId]);
+  await user.update(UserInventory, {
+    slots: {
+      ...inventory.slots,
+      [itemId]: { qty: current + quantity },
+    },
+  });
 }
 
 async function debitBuyer(
-  users: Collection<ComponentDoc>,
+  tx: Transaction,
   buyerId: string,
   currencyId: string,
   total: number,
-  session: ClientSession,
 ): Promise<number> {
-  const result = await users.findOneAndUpdate(
-    { _id: buyerId, [balancePath(currencyId)]: { $gte: total } },
-    { $inc: { [balancePath(currencyId)]: -total } },
-    { returnDocument: "after", session },
-  );
-  const doc = normalizeFindOneAndUpdate(result);
-  if (!doc) {
+  const user = tx.of(User, buyerId);
+  const currency = await user.get(UserCurrency);
+  const current = currency.balances[currencyId] ?? 0;
+  if (current < total) {
     throw new MarketError("INSUFFICIENT_FUNDS", `You need ${total} ${currencyId}`);
   }
-  const currency = UserCurrency.schema.parse(doc[UserCurrency.name] ?? {});
-  return currency.balances[currencyId] ?? 0;
+  const next = current - total;
+  await user.update(UserCurrency, {
+    balances: {
+      ...currency.balances,
+      [currencyId]: next,
+    },
+  });
+  return next;
 }
 
 async function creditSeller(
-  users: Collection<ComponentDoc>,
+  tx: Transaction,
   sellerId: string,
   currencyId: string,
   sellerPayout: number,
-  session: ClientSession,
 ): Promise<void> {
-  await users.findOneAndUpdate(
-    { _id: sellerId },
-    { $setOnInsert: { _id: sellerId }, $inc: { [balancePath(currencyId)]: sellerPayout } },
-    { upsert: true, returnDocument: "after", session },
-  );
+  const user = tx.of(User, sellerId);
+  const currency = await user.get(UserCurrency);
+  await user.update(UserCurrency, {
+    balances: {
+      ...currency.balances,
+      [currencyId]: (currency.balances[currencyId] ?? 0) + sellerPayout,
+    },
+  });
 }
 
-async function getParsedListing(
-  listings: Collection<MarketListingDoc>,
-  listingId: string,
-  session: ClientSession,
-): Promise<MarketListingDoc> {
-  const raw = await listings.findOne({ _id: listingId } as Filter<MarketListingDoc>, { session });
-  if (!raw) throw new MarketError("LISTING_NOT_FOUND", "Listing not found");
-  return MarketListingSchema.parse(raw);
+async function getListing(tx: Transaction, listingId: string): Promise<MarketListingDoc> {
+  const value = await tx.of(MarketListingKind, listingId).peek(MarketListingRecord);
+  if (!value) throw new MarketError("LISTING_NOT_FOUND", "Listing not found");
+  return withMarketListingId(listingId, value);
 }
 
 /**
@@ -224,22 +197,24 @@ async function getParsedListing(
  * Precondition: scalar input validation and listing ID generation have already
  * happened in `market.ts`.
  */
-export async function createListingTx(input: {
-  readonly listing: MarketListingDoc;
-  readonly config: MarketConfig;
-}): Promise<MarketPersistenceResult<CreateListingResult>> {
-  return runMarketTransaction(async ({ listings, session, users }) => {
-    await ensureActiveAccount(users, input.listing.sellerId, session);
+export async function createListingTx(
+  ctx: Ctx,
+  input: {
+    readonly listing: MarketListingDoc;
+    readonly config: MarketConfig;
+  },
+): Promise<MarketPersistenceResult<CreateListingResult>> {
+  return runMarketTransaction(ctx, async (tx) => {
+    await ensureActiveAccount(tx, input.listing.sellerId);
 
-    const activeCount = await listings.countDocuments(
-      {
-        guildId: input.listing.guildId,
-        sellerId: input.listing.sellerId,
-        status: "active",
-      } as Filter<MarketListingDoc>,
-      { session },
-    );
-    if (activeCount >= input.config.maxActiveListings) {
+    const activeRows = await tx
+      .select(MarketListingRecord)
+      .whereEq((listing) => listing.guildId, input.listing.guildId)
+      .whereEq((listing) => listing.sellerId, input.listing.sellerId)
+      .whereEq((listing) => listing.status, "active")
+      .limit(input.config.maxActiveListings)
+      .run();
+    if (activeRows.length >= input.config.maxActiveListings) {
       throw new MarketError(
         "LISTING_LIMIT_REACHED",
         `You can have at most ${input.config.maxActiveListings} active listings`,
@@ -247,13 +222,14 @@ export async function createListingTx(input: {
     }
 
     await removeStackItems(
-      users,
+      tx,
       input.listing.sellerId,
       input.listing.itemId,
       input.listing.quantity,
-      session,
     );
-    await listings.insertOne(input.listing, { session });
+    await tx
+      .of(MarketListingKind, input.listing._id)
+      .set(MarketListingRecord, listingValue(input.listing));
 
     return {
       listingId: input.listing._id,
@@ -268,16 +244,19 @@ export async function createListingTx(input: {
  * Buy quantity from a listing with listing CAS, buyer debit, seller credit, and
  * buyer inventory grant in the same transaction.
  */
-export async function buyListingTx(input: {
-  readonly buyerId: string;
-  readonly listingId: string;
-  readonly quantity: number;
-  readonly config: MarketConfig;
-}): Promise<MarketPersistenceResult<BuyListingResult>> {
-  return runMarketTransaction(async ({ listings, session, users }) => {
-    await ensureActiveAccount(users, input.buyerId, session);
+export async function buyListingTx(
+  ctx: Ctx,
+  input: {
+    readonly buyerId: string;
+    readonly listingId: string;
+    readonly quantity: number;
+    readonly config: MarketConfig;
+  },
+): Promise<MarketPersistenceResult<BuyListingResult>> {
+  return runMarketTransaction(ctx, async (tx) => {
+    await ensureActiveAccount(tx, input.buyerId);
 
-    const listing = await getParsedListing(listings, input.listingId, session);
+    const listing = await getListing(tx, input.listingId);
     const listingError = validateBuyableListing(listing, input.buyerId, input.quantity);
     if (listingError) throw listingError;
 
@@ -286,29 +265,21 @@ export async function buyListingTx(input: {
       input.quantity,
       input.config,
     );
-    const buyerNewBalance = await debitBuyer(
-      users,
-      input.buyerId,
-      input.config.currencyId,
-      total,
-      session,
-    );
+    const buyerNewBalance = await debitBuyer(tx, input.buyerId, input.config.currencyId, total);
 
     const listingPatch = purchaseListingPatch(listing, input.quantity);
-    const updated = await listings.findOneAndUpdate(
-      {
-        _id: input.listingId,
-        version: listing.version,
-        status: "active",
-        quantity: { $gte: input.quantity },
-      } as Filter<MarketListingDoc>,
-      { $set: listingPatch },
-      { returnDocument: "after", session },
-    );
-    if (!normalizeFindOneAndUpdate(updated)) throw marketConflict();
+    const current = await getListing(tx, input.listingId);
+    if (
+      current.version !== listing.version ||
+      current.status !== "active" ||
+      current.quantity < input.quantity
+    ) {
+      throw marketConflict();
+    }
+    await tx.of(MarketListingKind, input.listingId).update(MarketListingRecord, listingPatch);
 
-    await creditSeller(users, listing.sellerId, input.config.currencyId, sellerPayout, session);
-    await addStackItems(users, input.buyerId, listing.itemId, input.quantity, session);
+    await creditSeller(tx, listing.sellerId, input.config.currencyId, sellerPayout);
+    await addStackItems(tx, input.buyerId, listing.itemId, input.quantity);
 
     return {
       listingId: input.listingId,
@@ -329,13 +300,16 @@ export async function buyListingTx(input: {
  * Moderator override only affects the ownership check; status/version still
  * guard the write.
  */
-export async function cancelListingTx(input: {
-  readonly actorId: string;
-  readonly listingId: string;
-  readonly allowModeratorOverride?: boolean;
-}): Promise<MarketPersistenceResult<CancelListingResult>> {
-  return runMarketTransaction(async ({ listings, session, users }) => {
-    const listing = await getParsedListing(listings, input.listingId, session);
+export async function cancelListingTx(
+  ctx: Ctx,
+  input: {
+    readonly actorId: string;
+    readonly listingId: string;
+    readonly allowModeratorOverride?: boolean;
+  },
+): Promise<MarketPersistenceResult<CancelListingResult>> {
+  return runMarketTransaction(ctx, async (tx) => {
+    const listing = await getListing(tx, input.listingId);
     const listingError = validateCancellableListing(
       listing,
       input.actorId,
@@ -343,18 +317,15 @@ export async function cancelListingTx(input: {
     );
     if (listingError) throw listingError;
 
-    const updated = await listings.findOneAndUpdate(
-      {
-        _id: input.listingId,
-        version: listing.version,
-        status: "active",
-      } as Filter<MarketListingDoc>,
-      { $set: cancelListingPatch(listing) },
-      { returnDocument: "after", session },
-    );
-    if (!normalizeFindOneAndUpdate(updated)) throw marketConflict();
+    const current = await getListing(tx, input.listingId);
+    if (current.version !== listing.version || current.status !== "active") {
+      throw marketConflict();
+    }
+    await tx
+      .of(MarketListingKind, input.listingId)
+      .update(MarketListingRecord, cancelListingPatch(listing));
 
-    await addStackItems(users, listing.sellerId, listing.itemId, listing.quantity, session);
+    await addStackItems(tx, listing.sellerId, listing.itemId, listing.quantity);
 
     return {
       listingId: input.listingId,
@@ -366,20 +337,24 @@ export async function cancelListingTx(input: {
 
 /** Return active listings for market browse without opening a transaction. */
 export async function findActiveMarketListings(
+  ctx: Ctx,
   guildId: string,
   options: { itemId?: string; sellerId?: string; limit?: number; skip?: number } = {},
 ): Promise<Result<MarketListingDoc[]>> {
   try {
-    const listings = collectionSet(await getDb()).listings;
-    const filter: Filter<MarketListingDoc> = { guildId, status: "active" };
-    if (options.itemId) filter.itemId = options.itemId;
-    if (options.sellerId) filter.sellerId = options.sellerId;
-
-    let cursor = listings.find(filter).sort({ pricePerUnit: 1, createdAt: 1 });
-    if (options.skip) cursor = cursor.skip(options.skip);
-    if (options.limit) cursor = cursor.limit(options.limit);
-    const docs = await cursor.toArray();
-    return OkResult(docs.map((doc) => MarketListingSchema.parse(doc)));
+    let query = ctx
+      .select(MarketListingRecord)
+      .whereEq((listing) => listing.guildId, guildId)
+      .whereEq((listing) => listing.status, "active");
+    if (options.itemId) query = query.whereEq((listing) => listing.itemId, options.itemId);
+    if (options.sellerId) query = query.whereEq((listing) => listing.sellerId, options.sellerId);
+    query = query
+      .sortAsc((listing) => listing.pricePerUnit)
+      .thenAsc((listing) => listing.createdAt);
+    if (options.skip) query = query.skip(options.skip);
+    if (options.limit) query = query.limit(options.limit);
+    const rows = await query.run();
+    return OkResult(rows.map((row) => withMarketListingId(row.id, row.value)));
   } catch (error) {
     return ErrResult(error instanceof Error ? error : new Error(String(error)));
   }
