@@ -140,7 +140,7 @@ export default defineHandlers([
         ...detectMessageContentSignals(message, config),
         ...detectCrossChannelSpam(message, config),
         ...detectMentionSpam(message, config),
-        ...(await detectBannedImageSignals(message, config)),
+        ...(await detectBannedImageSignals(ctx, message, config)),
         ...(await detectAiClassificationSignals(message, config)),
       ];
       await processAutomodSignals(message, config, signals, ctx);

@@ -59,15 +59,14 @@ mock.module("@/features/automod/bannedImages", () => ({
   addBannedImage: async (...args: unknown[]) => {
     bannedImageCalls.push({ type: "addBannedImage", args });
     return {
-      _id: "guild-1:image-1",
+      id: "image-1",
       guildId: "guild-1",
       status: "active",
       reason: "scam image",
       label: "scam",
     };
   },
-  displayBannedImageId: (record: { _id: string; guildId: string }) =>
-    record._id.replace(`${record.guildId}:`, ""),
+  displayBannedImageId: (record: { id: string }) => record.id,
   fetchImageAttachmentBuffer: async (...args: unknown[]) => {
     bannedImageCalls.push({ type: "fetchImageAttachmentBuffer", args });
     return Buffer.from("image");
@@ -80,7 +79,7 @@ mock.module("@/features/automod/bannedImages", () => ({
   removeBannedImage: async (...args: unknown[]) => {
     bannedImageCalls.push({ type: "removeBannedImage", args });
     return {
-      _id: "guild-1:image-1",
+      id: "image-1",
       guildId: "guild-1",
       status: "removed",
       reason: "scam image",
@@ -635,7 +634,7 @@ describe("/automod banned images", () => {
       "fetchImageAttachmentBuffer",
       "addBannedImage",
     ]);
-    expect(bannedImageCalls[1]?.args[0]).toMatchObject({
+    expect(bannedImageCalls[1]?.args[1]).toMatchObject({
       guildId: "guild-1",
       actorId: "mod-1",
       reason: "scam image",
@@ -648,7 +647,7 @@ describe("/automod banned images", () => {
     bannedImageCalls.length = 0;
     activeBannedImages = [
       {
-        _id: "guild-1:image-1",
+        id: "image-1",
         guildId: "guild-1",
         reason: "scam image",
         label: "scam",
@@ -660,10 +659,8 @@ describe("/automod banned images", () => {
     await command.execute(imageInteraction("image-list") as never, ctx as never);
 
     expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
-    expect(bannedImageCalls[0]).toEqual({
-      type: "listActiveBannedImages",
-      args: ["guild-1"],
-    });
+    expect(bannedImageCalls[0]?.type).toBe("listActiveBannedImages");
+    expect(bannedImageCalls[0]?.args[1]).toBe("guild-1");
   });
 
   it("soft-removes a banned image by id", async () => {
@@ -674,10 +671,8 @@ describe("/automod banned images", () => {
     await command.execute(imageInteraction("image-remove") as never, ctx as never);
 
     expect(calls.map((call) => call.method)).toEqual(["defer", "send"]);
-    expect(bannedImageCalls[0]).toEqual({
-      type: "removeBannedImage",
-      args: ["guild-1", "image-1", "mod-1"],
-    });
+    expect(bannedImageCalls[0]?.type).toBe("removeBannedImage");
+    expect(bannedImageCalls[0]?.args.slice(1)).toEqual(["guild-1", "image-1", "mod-1"]);
   });
 
   it("toggles image detection and sets the image report channel", async () => {

@@ -11,6 +11,7 @@ import {
   removeBannedImage,
 } from "@/features/automod/bannedImages";
 import { hashImageBuffer, type ImageMatchTolerance } from "@/features/automod/imageHash";
+import { type EntityContext, headlessEntityContext } from "@/framework/entity-context";
 import type { ImageCliCommand } from "./types";
 
 type ImageAction = "add" | "edit" | "remove" | "test";
@@ -24,13 +25,14 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-/** Runs the legacy DB-backed banned-image utility commands. */
+/** Runs the DB-backed banned-image utility commands. */
 export async function runImageCommand(args: ImageCliCommand): Promise<void> {
   const action = args.action as ImageAction | null;
-  if (action === "add") return addImage(args);
-  if (action === "test") return testImage(args);
-  if (action === "remove") return removeImage(args);
-  if (action === "edit") return editImage(args);
+  const entities = await headlessEntityContext();
+  if (action === "add") return addImage(entities, args);
+  if (action === "test") return testImage(entities, args);
+  if (action === "remove") return removeImage(entities, args);
+  if (action === "edit") return editImage(entities, args);
   throw new Error(`Unknown image action: ${args.action ?? "(missing)"}`);
 }
 
@@ -69,25 +71,26 @@ function tolerance(args: ImageCliCommand): ImageMatchTolerance {
 }
 
 async function resolveRecordId(
+  entities: EntityContext,
   guildId: string,
   target: string,
   matchTolerance: ImageMatchTolerance,
 ) {
   if (!existsSync(target)) return target;
   const { hashes } = await hashFile(target);
-  const records = await listActiveBannedImages(guildId);
+  const records = await listActiveBannedImages(entities, guildId);
   const match = findBannedImageMatch(hashes, records, matchTolerance);
   if (!match) throw new Error("No active banned-image record matches that file.");
   return displayBannedImageId(match.record);
 }
 
-async function addImage(args: ImageCliCommand): Promise<void> {
+async function addImage(entities: EntityContext, args: ImageCliCommand): Promise<void> {
   if (!args.target) throw new Error("Missing image path.");
   const reason = stringOption(args, "reason");
   if (!reason) throw new Error("Missing reason. Pass --reason <text>.");
   const guildId = requireGuildId(args);
   const { absolute, hashes } = await hashFile(args.target);
-  const record = await addBannedImage({
+  const record = await addBannedImage(entities, {
     guildId,
     actorId: actorId(args),
     reason,
@@ -101,11 +104,11 @@ async function addImage(args: ImageCliCommand): Promise<void> {
   console.log(`Reason: ${record.reason}`);
 }
 
-async function testImage(args: ImageCliCommand): Promise<void> {
+async function testImage(entities: EntityContext, args: ImageCliCommand): Promise<void> {
   if (!args.target) throw new Error("Missing image path.");
   const guildId = requireGuildId(args);
   const { hashes } = await hashFile(args.target);
-  const records = await listActiveBannedImages(guildId);
+  const records = await listActiveBannedImages(entities, guildId);
   const match = findBannedImageMatch(hashes, records, tolerance(args));
   if (!match) {
     console.log(`No banned-image match in guild ${guildId}. Checked ${records.length} record(s).`);
@@ -119,23 +122,23 @@ async function testImage(args: ImageCliCommand): Promise<void> {
   );
 }
 
-async function removeImage(args: ImageCliCommand): Promise<void> {
+async function removeImage(entities: EntityContext, args: ImageCliCommand): Promise<void> {
   if (!args.target) throw new Error("Missing banned image id or image path.");
   const guildId = requireGuildId(args);
-  const id = await resolveRecordId(guildId, args.target, tolerance(args));
-  const removed = await removeBannedImage(guildId, id, actorId(args));
+  const id = await resolveRecordId(entities, guildId, args.target, tolerance(args));
+  const removed = await removeBannedImage(entities, guildId, id, actorId(args));
   if (!removed) throw new Error(`No active banned-image record found for ${id}.`);
   console.log(`Removed banned image ${displayBannedImageId(removed)} from guild ${guildId}.`);
 }
 
-async function editImage(args: ImageCliCommand): Promise<void> {
+async function editImage(entities: EntityContext, args: ImageCliCommand): Promise<void> {
   if (!args.target) throw new Error("Missing banned image id or image path.");
   const reason = stringOption(args, "reason");
   const label = stringOption(args, "label");
   if (reason === null && label === null) throw new Error("Pass --reason, --label, or both.");
   const guildId = requireGuildId(args);
-  const id = await resolveRecordId(guildId, args.target, tolerance(args));
-  const edited = await editBannedImage(guildId, id, {
+  const id = await resolveRecordId(entities, guildId, args.target, tolerance(args));
+  const edited = await editBannedImage(entities, guildId, id, {
     ...(reason !== null ? { reason } : {}),
     ...(label !== null ? { label } : {}),
   });

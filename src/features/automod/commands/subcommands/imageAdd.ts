@@ -46,7 +46,7 @@ export async function handleImageAdd(
     return;
   }
 
-  const record = await addBannedImage({
+  const record = await addBannedImage(ctx.entities, {
     guildId: ctx.guildId,
     actorId: interaction.user.id,
     reason,

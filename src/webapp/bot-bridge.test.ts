@@ -16,8 +16,32 @@ const guildWrites: Array<{ guildId: string; paths: Record<string, unknown>; opti
 const moderationCalls: Array<{ type: string; args: unknown[] }> = [];
 const embedConfigs = new Map<string, Record<string, unknown>>();
 const sentEmbeds: Array<{ args: unknown[] }> = [];
-let activeBridgeBannedImages: unknown[] = [];
+const activeBridgeBannedImages: unknown[] = [];
 let mockFeatureCatalog: Array<Record<string, unknown>> = [{ id: "economy", defaultEnabled: true }];
+
+// Banned-image storage is the entity model now: an in-memory guild→records map
+// behind a mocked headless entity context.
+const bridgeImages = new Map<string, Record<string, Record<string, unknown>>>();
+
+mock.module("@/framework/entity-context", () => ({
+  headlessEntityContext: async () => ({
+    of(_kind: unknown, id: string) {
+      return {
+        async get() {
+          return { records: bridgeImages.get(id) ?? {} };
+        },
+        async update(_component: unknown, patch: unknown) {
+          const current = { records: bridgeImages.get(id) ?? {} };
+          const partial = typeof patch === "function" ? patch(current) : patch;
+          bridgeImages.set(
+            id,
+            (partial as { records: Record<string, Record<string, unknown>> }).records,
+          );
+        },
+      };
+    },
+  }),
+}));
 
 function matchesFilter(doc: Record<string, unknown>, filter: unknown): boolean {
   if (!filter || typeof filter !== "object") return true;
@@ -432,7 +456,7 @@ describe("webapp bot bridge", () => {
   });
 
   it("adds dashboard-uploaded banned images without storing image bytes", async () => {
-    activeBridgeBannedImages = [];
+    bridgeImages.clear();
     const { createBridgeFromClient } = await import("./bot-bridge");
     const bridge = createBridgeFromClient(fakeClient() as never) as never as {
       addBannedImage: (
@@ -462,8 +486,9 @@ describe("webapp bot bridge", () => {
 
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toMatchObject({ sourceUrl: null });
-    expect(activeBridgeBannedImages).toHaveLength(1);
-    expect(activeBridgeBannedImages[0]).toMatchObject({
+    const stored = Object.values(bridgeImages.get("guild-1") ?? {});
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
       guildId: "guild-1",
       reason: "blocked",
       label: "bad image",
@@ -471,15 +496,14 @@ describe("webapp bot bridge", () => {
       sourceContentType: "image/png",
       sourceFilename: "image.png",
     });
-    expect(activeBridgeBannedImages[0]).not.toHaveProperty("bytes");
+    expect(stored[0]).not.toHaveProperty("bytes");
   });
 
   it("tests uploaded images against active banned-image records without mutating", async () => {
     const { hashImageBuffer } = await import("@/features/automod/imageHash");
     const png = await samplePng();
-    activeBridgeBannedImages = [
-      {
-        _id: "guild-1:img-1",
+    bridgeImages.set("guild-1", {
+      "img-1": {
         guildId: "guild-1",
         status: "active",
         reason: "blocked",
@@ -493,7 +517,7 @@ describe("webapp bot bridge", () => {
         removedBy: null,
         removedAt: null,
       },
-    ];
+    });
     const { createBridgeFromClient } = await import("./bot-bridge");
     const bridge = createBridgeFromClient(fakeClient() as never) as never as {
       testBannedImage: (
@@ -521,7 +545,7 @@ describe("webapp bot bridge", () => {
       record: expect.objectContaining({ id: "img-1" }),
       distance: { average: 0, difference: 0, verticalDifference: 0, total: 0 },
     });
-    expect(activeBridgeBannedImages).toHaveLength(1);
+    expect(Object.keys(bridgeImages.get("guild-1") ?? {})).toEqual(["img-1"]);
   });
 
   it("does not fetch uncached guild status from Discord during dashboard reads", async () => {

@@ -7,10 +7,11 @@
  */
 
 import type { Attachment, Message } from "discord.js";
-import { BannedImage, type BannedImageValue, bannedImageId } from "@/components/banned-image";
-import { getDb } from "@/core/db";
+import { BannedImages, type BannedImageValue } from "@/components/banned-image";
+import { Guild } from "@/components/entities";
 import { createLogger } from "@/core/logger";
 import type { AutomodConfig } from "@/db/schemas/guild";
+import type { EntityContext } from "@/framework/entity-context";
 import { buildCorrelationId } from "@/utils/ids";
 import {
   hashImageBuffer,
@@ -26,7 +27,8 @@ export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
 
 export interface BannedImageRecord extends BannedImageValue {
-  readonly _id: string;
+  /** The record's short id — its key in the guild's banned-image map. */
+  readonly id: string;
 }
 
 export interface AddBannedImageInput {
@@ -53,25 +55,25 @@ export interface ImageAttachmentCandidate {
   readonly size: number | null;
 }
 
-/** Lists active banned-image records for a guild. */
-export async function listActiveBannedImages(guildId: string): Promise<BannedImageRecord[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection(BannedImage.collection)
-    .find({ guildId, status: "active" })
-    .sort({ addedAt: -1 })
-    .toArray();
-  return docs.map((doc) => {
-    const parsed = BannedImage.schema.parse(doc);
-    return { ...parsed, _id: String(doc._id) };
-  });
+/** Lists active banned-image records for a guild, newest first. */
+export async function listActiveBannedImages(
+  entities: EntityContext,
+  guildId: string,
+): Promise<BannedImageRecord[]> {
+  const { records } = await entities.of(Guild, guildId).get(BannedImages);
+  return Object.entries(records)
+    .filter(([, value]) => value.status === "active")
+    .map(([id, value]) => ({ ...value, id }))
+    .sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
 }
 
 /** Stores one active banned-image hash record. */
-export async function addBannedImage(input: AddBannedImageInput): Promise<BannedImageRecord> {
+export async function addBannedImage(
+  entities: EntityContext,
+  input: AddBannedImageInput,
+): Promise<BannedImageRecord> {
   const id = buildCorrelationId();
-  const doc: BannedImageRecord = {
-    _id: bannedImageId(input.guildId, id),
+  const value: BannedImageValue = {
     guildId: input.guildId,
     status: "active",
     reason: input.reason,
@@ -85,63 +87,57 @@ export async function addBannedImage(input: AddBannedImageInput): Promise<Banned
     removedBy: null,
     removedAt: null,
   };
-  const db = await getDb();
-  await db.collection(BannedImage.collection).insertOne(doc as never);
-  return doc;
+  await entities
+    .of(Guild, input.guildId)
+    .update(BannedImages, (s) => ({ records: { ...s.records, [id]: value } }));
+  return { ...value, id };
 }
 
-/** Soft-removes a banned-image record, preserving audit metadata. */
+/** Soft-removes an active banned-image record, preserving audit metadata. */
 export async function removeBannedImage(
+  entities: EntityContext,
   guildId: string,
   id: string,
   actorId: string,
 ): Promise<BannedImageRecord | null> {
-  const db = await getDb();
-  const _id = id.includes(":") ? id : bannedImageId(guildId, id);
-  const removedAt = new Date();
-  const doc = await db.collection(BannedImage.collection).findOneAndUpdate(
-    { _id, guildId, status: "active" } as never,
-    {
-      $set: {
-        status: "removed",
-        removedBy: actorId,
-        removedAt,
-      },
-    } as never,
-    { returnDocument: "after" },
-  );
-  if (!doc) return null;
-  const parsed = BannedImage.schema.parse(doc);
-  return { ...parsed, _id: String(doc._id) };
+  const handle = entities.of(Guild, guildId);
+  const current = (await handle.get(BannedImages)).records[id];
+  if (!current || current.status !== "active") return null;
+
+  const updated: BannedImageValue = {
+    ...current,
+    status: "removed",
+    removedBy: actorId,
+    removedAt: new Date(),
+  };
+  await handle.update(BannedImages, (s) => ({ records: { ...s.records, [id]: updated } }));
+  return { ...updated, id };
 }
 
 /** Updates moderator-facing metadata on an active banned-image record. */
 export async function editBannedImage(
+  entities: EntityContext,
   guildId: string,
   id: string,
   patch: { readonly reason?: string; readonly label?: string | null },
 ): Promise<BannedImageRecord | null> {
-  const $set: Record<string, unknown> = {};
-  if (patch.reason !== undefined) $set.reason = patch.reason;
-  if (patch.label !== undefined) $set.label = patch.label?.trim() || null;
-  if (Object.keys($set).length === 0) return null;
+  const next: Partial<BannedImageValue> = {};
+  if (patch.reason !== undefined) next.reason = patch.reason;
+  if (patch.label !== undefined) next.label = patch.label?.trim() || null;
+  if (Object.keys(next).length === 0) return null;
 
-  const db = await getDb();
-  const _id = id.includes(":") ? id : bannedImageId(guildId, id);
-  const doc = await db
-    .collection(BannedImage.collection)
-    .findOneAndUpdate({ _id, guildId, status: "active" } as never, { $set } as never, {
-      returnDocument: "after",
-    });
-  if (!doc) return null;
-  const parsed = BannedImage.schema.parse(doc);
-  return { ...parsed, _id: String(doc._id) };
+  const handle = entities.of(Guild, guildId);
+  const current = (await handle.get(BannedImages)).records[id];
+  if (!current || current.status !== "active") return null;
+
+  const updated: BannedImageValue = { ...current, ...next };
+  await handle.update(BannedImages, (s) => ({ records: { ...s.records, [id]: updated } }));
+  return { ...updated, id };
 }
 
 /** Returns the short id moderators use in list/remove command output. */
-export function displayBannedImageId(record: Pick<BannedImageRecord, "_id" | "guildId">): string {
-  const prefix = `${record.guildId}:`;
-  return record._id.startsWith(prefix) ? record._id.slice(prefix.length) : record._id;
+export function displayBannedImageId(record: Pick<BannedImageRecord, "id">): string {
+  return record.id;
 }
 
 /** Finds the closest active banned image within the configured tolerance. */
@@ -237,6 +233,7 @@ function signalForMatch(
 
 /** Detects banned-image matches from current message attachments. */
 export async function detectBannedImageSignals(
+  entities: EntityContext,
   message: Message,
   config: AutomodConfig,
 ): Promise<AutomodSignal[]> {
@@ -244,7 +241,7 @@ export async function detectBannedImageSignals(
   const candidates = imageAttachmentCandidates(message);
   if (candidates.length === 0) return [];
 
-  const records = await listActiveBannedImages(message.guild.id);
+  const records = await listActiveBannedImages(entities, message.guild.id);
   if (records.length === 0) return [];
 
   const signals: AutomodSignal[] = [];

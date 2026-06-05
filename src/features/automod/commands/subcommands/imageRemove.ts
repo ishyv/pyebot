@@ -11,7 +11,7 @@ export async function handleImageRemove(
   await ctx.respond.defer({ visibility: "ephemeral" });
 
   const id = interaction.options.getString("id", true).trim();
-  const removed = await removeBannedImage(ctx.guildId, id, interaction.user.id);
+  const removed = await removeBannedImage(ctx.entities, ctx.guildId, id, interaction.user.id);
   if (!removed) {
     await ctx.respond.send({ content: `No active banned image \`${id}\` was found.` });
     return;

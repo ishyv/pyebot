@@ -12,6 +12,7 @@ import {
   editBannedImage as updateBannedImage,
 } from "@/features/automod/bannedImages";
 import { hashImageBuffer } from "@/features/automod/imageHash";
+import { headlessEntityContext } from "@/framework/entity-context";
 import type { BannedImageSummary, BotBridge, ImageDetectionTolerance } from "../bridge-types";
 import { type BridgeEmit, requireGuildPermission } from "./shared";
 
@@ -59,7 +60,10 @@ export function createBannedImagesBridge(
   return {
     async listBannedImages(guildId) {
       try {
-        return OkResult((await listActiveBannedImages(guildId)).map(summarizeBannedImage));
+        const entities = await headlessEntityContext();
+        return OkResult(
+          (await listActiveBannedImages(entities, guildId)).map(summarizeBannedImage),
+        );
       } catch (error) {
         return ErrResult(error instanceof Error ? error : new Error(String(error)));
       }
@@ -82,7 +86,7 @@ export function createBannedImagesBridge(
 
       try {
         const hashes = await hashImageBuffer(Buffer.from(input.bytes));
-        const record = await storeBannedImage({
+        const record = await storeBannedImage(await headlessEntityContext(), {
           guildId,
           actorId: actorId ?? permission.unwrap().member.id,
           reason,
@@ -117,7 +121,7 @@ export function createBannedImagesBridge(
       if (patch.reason !== undefined && !reason) return ErrResult(new Error("Reason required."));
 
       try {
-        const record = await updateBannedImage(guildId, id, {
+        const record = await updateBannedImage(await headlessEntityContext(), guildId, id, {
           ...(reason !== undefined ? { reason } : {}),
           ...(patch.label !== undefined ? { label: patch.label } : {}),
         });
@@ -146,6 +150,7 @@ export function createBannedImagesBridge(
 
       try {
         const record = await softRemoveBannedImage(
+          await headlessEntityContext(),
           guildId,
           id,
           actorId ?? permission.unwrap().member.id,
@@ -172,7 +177,7 @@ export function createBannedImagesBridge(
 
       try {
         const [records, configResult] = await Promise.all([
-          listActiveBannedImages(guildId),
+          headlessEntityContext().then((entities) => listActiveBannedImages(entities, guildId)),
           ensureGuild(guildId),
         ]);
         if (configResult.isErr()) return ErrResult(configResult.error);

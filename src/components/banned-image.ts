@@ -1,12 +1,16 @@
 /**
- * BannedImage — one moderator-managed image fingerprint for AutoMod.
+ * Banned images — moderator-managed image fingerprints for AutoMod, stored as a
+ * per-guild map on the `Guild` entity (keyed by the record's short id; the old
+ * `{guildId}:{id}` document id becomes the map key).
  *
  * The original image is not stored. Discord CDN metadata is kept only so
  * moderators can understand what they added; matching depends on hashes.
+ * `removed` records are kept (soft delete) for audit; only `active` ones match.
  */
 
 import { z } from "zod";
-import { component } from "@/framework/component";
+import { Guild } from "@/components/entities";
+import { defineComponent } from "@/framework";
 
 export const BannedImageHashSchema = z.object({
   average: z.string(),
@@ -16,27 +20,30 @@ export const BannedImageHashSchema = z.object({
 
 export type BannedImageHashValue = z.infer<typeof BannedImageHashSchema>;
 
-export const BannedImage = component({
-  collection: "banned_images",
-  schema: z.object({
-    guildId: z.string(),
-    status: z.enum(["active", "removed"]).default("active"),
-    reason: z.string(),
-    label: z.string().nullable().default(null),
-    sourceUrl: z.string().nullable().default(null),
-    sourceContentType: z.string().nullable().default(null),
-    sourceFilename: z.string().nullable().default(null),
-    hashes: BannedImageHashSchema,
-    addedBy: z.string(),
-    addedAt: z.coerce.date().default(() => new Date()),
-    removedBy: z.string().nullable().default(null),
-    removedAt: z.coerce.date().nullable().default(null),
-  }),
+export const BannedImageSchema = z.object({
+  guildId: z.string(),
+  status: z.enum(["active", "removed"]).default("active"),
+  reason: z.string(),
+  label: z.string().nullable().default(null),
+  sourceUrl: z.string().nullable().default(null),
+  sourceContentType: z.string().nullable().default(null),
+  sourceFilename: z.string().nullable().default(null),
+  hashes: BannedImageHashSchema,
+  addedBy: z.string(),
+  addedAt: z.coerce.date().default(() => new Date()),
+  removedBy: z.string().nullable().default(null),
+  removedAt: z.coerce.date().nullable().default(null),
 });
 
-export type BannedImageValue = z.infer<typeof BannedImage.schema>;
+export type BannedImageValue = z.infer<typeof BannedImageSchema>;
 
-/** Stable document id for a guild-scoped banned image record. */
-export function bannedImageId(guildId: string, id: string): string {
-  return `${guildId}:${id}`;
-}
+export const BannedImages = defineComponent(
+  Guild,
+  "bannedImages",
+  z.object({
+    /** short image id → record. */
+    records: z.record(z.string(), BannedImageSchema).default(() => ({})),
+  }),
+);
+
+export type BannedImagesValue = z.infer<typeof BannedImages.schema>;

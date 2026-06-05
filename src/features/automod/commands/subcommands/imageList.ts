@@ -9,7 +9,7 @@ export async function handleImageList(
 ): Promise<void> {
   await ctx.respond.defer({ visibility: "ephemeral" });
 
-  const records = await listActiveBannedImages(ctx.guildId);
+  const records = await listActiveBannedImages(ctx.entities, ctx.guildId);
   if (records.length === 0) {
     await ctx.respond.send({ content: "No active banned images configured." });
     return;
