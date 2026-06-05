@@ -20,5 +20,14 @@ import { entity } from "@/framework";
 /** A Discord user, keyed by user-id snowflake. */
 export const User = entity("users");
 
-/** A Discord guild, keyed by guild-id snowflake. */
+/**
+ * A Discord guild, keyed by guild-id snowflake.
+ *
+ * The `guilds` collection is co-owned by the config system (`guildStore` /
+ * `GuildSchema`), which stores admin-tunable settings as fields on this same
+ * document. That coexistence is safe — `GuildSchema` is `.passthrough()` and all
+ * config writes are path-based `$set` (no whole-document replace) — so entity
+ * *state* fields can live here alongside config fields. Guild **config** never
+ * moves to entity components; see `docs/entity-vs-config-storage.md`.
+ */
 export const Guild = entity("guilds");

@@ -128,11 +128,20 @@ For leaderboards, add an index on the namespaced path
 
 ## When to use which
 
-- **Entity components** (this doc) for new data: anything attached to a user,
-  guild, or other entity. Default to this.
+- **Entity components** (this doc) for per-entity **state**: runtime data that
+  feature code reads/writes by its compile-time type (a counter, a streak, a
+  cached flag). Default to this for new state.
 - **Legacy `component()`** (`src/components/*` with a `collection`) is the
   original surface; existing instances keep working. There is no automated
   migration — components move over deliberately, one at a time, when touched.
+- **NOT for admin config.** Admin-*tunable* settings (the stuff a server owner
+  edits in the `/admin` panel) belong to the **config system**
+  (`defineFeatureConfig` + `src/core/featureConfig.ts`), stored as dot-paths on
+  the guild document. That system is a metadata/UX layer, not storage, and is
+  deliberately path-addressed so one generic panel can render every feature's
+  settings. Don't model config as entity components — see
+  [`docs/entity-vs-config-storage.md`](./entity-vs-config-storage.md) for why the
+  two systems are kept separate.
 
 See [`src/framework/entity.ts`](../src/framework/entity.ts),
 [`entity-store.ts`](../src/framework/entity-store.ts), and
