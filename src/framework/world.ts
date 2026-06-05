@@ -46,12 +46,13 @@
 
 import type { Client, Interaction } from "discord.js";
 import type { Collection, Db, Document, Filter as MongoFilter } from "mongodb";
-import { getDb, getMongoClient } from "@/core/db";
+import { getDb } from "@/core/db";
 import { createInteractionResponder, type InteractionResponder } from "@/core/interactionResponder";
 import { createLogger, type Logger } from "@/core/logger";
 import { cooldowns, locks, sessions } from "@/core/state";
 import type { EntityComponent, EntityKind } from "./entity";
-import { EntityCache, EntityHandle, EntityQuery } from "./entity-handle";
+import { createEntityContext, type EntityContext } from "./entity-context";
+import type { EntityHandle, EntityQuery } from "./entity-handle";
 import { EntityStore } from "./entity-store";
 import { EventBus } from "./event-bus";
 import type { Component, ComponentRecord, Ctx, Entity, Transaction } from "./types";
@@ -245,7 +246,10 @@ export class World {
  */
 class InteractionCtx implements Ctx {
   private readonly cache = new Map<string, unknown>();
-  private entityCache: EntityCache | null = null;
+  // The entity surface (of/select/transaction) is one shared implementation;
+  // see entity-context.ts. Built lazily so its request-scoped cache spans this
+  // interaction's reads.
+  private entities: EntityContext | null = null;
   private responder: InteractionResponder | null = null;
   readonly logger: Logger;
 
@@ -339,34 +343,22 @@ class InteractionCtx implements Ctx {
     return this.world.queryDirect(component, options);
   }
 
+  /** Lazily-built entity surface, shared across this interaction's reads. */
+  private get entityCtx(): EntityContext {
+    this.entities ??= createEntityContext(this.world.entities);
+    return this.entities;
+  }
+
   of(kind: EntityKind, id: Entity): EntityHandle {
-    this.entityCache ??= new EntityCache(this.world.entities);
-    return new EntityHandle(this.world.entities, this.entityCache, kind, id);
+    return this.entityCtx.of(kind, id);
   }
 
   select<T>(component: EntityComponent<T>): EntityQuery<T> {
-    return new EntityQuery(this.world.entities, component);
+    return this.entityCtx.select(component);
   }
 
-  async transaction<R>(fn: (tx: Transaction) => Promise<R>): Promise<R> {
-    const client = await getMongoClient();
-    const session = client.startSession();
-    try {
-      let result!: R;
-      // withTransaction may re-run fn on transient errors; rebuild the tx cache
-      // each attempt so a retry never reads a prior attempt's snapshot.
-      await session.withTransaction(async () => {
-        const cache = new EntityCache(this.world.entities, session);
-        const tx: Transaction = {
-          of: (kind, id) => new EntityHandle(this.world.entities, cache, kind, id, session),
-          select: (component) => new EntityQuery(this.world.entities, component, session),
-        };
-        result = await fn(tx);
-      });
-      return result;
-    } finally {
-      await session.endSession();
-    }
+  transaction<R>(fn: (tx: Transaction) => Promise<R>): Promise<R> {
+    return this.entityCtx.transaction(fn);
   }
 
   emit<E>(event: E): Promise<void> {
