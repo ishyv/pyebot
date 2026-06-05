@@ -21,7 +21,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 |---|---|---|---|---|
 | economy/wallet | `UserCurrency` (`user_currencies`), `EconomyAccount` (`economy_accounts`) | `User` | medium | 🚧 Vey 2026-06-05 |
 | economy/quests | `QuestProgress` (`quest_progress`) | `User` (`QuestLog` map keyed by questId) | medium | ✅ 2026-06-05 1d16f8b |
-| economy/achievements | `AchievementProgress` (`achievement_progress`), `UnlockedAchievements` (`unlocked_achievements`) | `User` (confirm id shape) | medium | ⬜ todo |
+| economy/achievements | `AchievementProgress` (`achievement_progress`), `UnlockedAchievements` (`unlocked_achievements`) | `User` (confirm id shape) | medium | 🚧 Hyv 2026-06-05 |
 | rpg/profile | `RpgProfile` (`rpg_profiles`) | `User` | medium | ✅ 2026-06-05 2014412 |
 | rpg/inventory | `UserInventory` (`user_inventories`) | `User` | easy | ✅ 2026-06-05 95fae86 |
 | tycoon | `UserFactory` (`user_factories`) | `User` | medium | ✅ 2026-06-05 bd3a6bc |
