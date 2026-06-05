@@ -2,7 +2,7 @@
  * Economy achievements: progress tracking, unlock recording, reward claiming.
  *
  * Architecture: Plain exported async functions — no classes (except AchievementError).
- * Dependencies: achievementProgressStore / achievementUnlocksStore from economy repo,
+ * Dependencies: the `Achievements` component on the User entity for storage,
  *   adjustBalance from mutations (for currency rewards).
  *
  * NOTE: XP rewards require the progression module (not yet implemented).
@@ -10,17 +10,12 @@
  *       Title/badge equipping is handled separately.
  */
 
+import { Achievements } from "@/components/economy/achievements";
+import { User } from "@/components/entities";
 import { ErrResult, OkResult, type Result } from "@/core/result";
-import {
-  achievementProgressStore,
-  achievementUnlocksStore,
-  getProgressForUser,
-  getUnlocksForUser,
-} from "@/db/repositories/economy";
-import type { AchievementProgressDoc, UnlockedAchievementDoc } from "@/db/schemas/achievement";
 import { adjustBalance } from "@/features/economy/mutations";
+import type { EntityHandle } from "@/framework/entity-handle";
 import type { Ctx } from "@/framework/types";
-import { buildAchievementId } from "@/utils/ids";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -177,25 +172,19 @@ function getDefinitionsForCondition(conditionType: UnlockConditionType): Achieve
   return ACHIEVEMENT_DEFINITIONS.filter((d) => d.conditionType === conditionType);
 }
 
-async function tryUnlock(
-  userId: string,
-  definition: AchievementDefinition,
-  progressDoc: AchievementProgressDoc,
-): Promise<boolean> {
-  if (!progressDoc.completed) return false;
-
-  const existingRes = await achievementUnlocksStore.get(buildAchievementId(userId, definition.id));
-  if (existingRes.isOk() && existingRes.unwrap()) return false; // already unlocked
-
-  const docId = buildAchievementId(userId, definition.id);
-  const unlockDoc: UnlockedAchievementDoc = {
-    _id: docId,
-    userId,
-    achievementId: definition.id,
-    unlockedAt: new Date(),
-    rewardsClaimed: false,
-  };
-  await achievementUnlocksStore.set(docId, unlockDoc);
+/**
+ * Record an unlock if one isn't already present. Callers invoke this only once
+ * the achievement is complete, so completion is the caller's precondition.
+ * Returns whether this call was the one that recorded the unlock.
+ */
+async function tryUnlock(u: EntityHandle, achievementId: string): Promise<boolean> {
+  if ((await u.get(Achievements)).unlocked[achievementId]) return false;
+  await u.update(Achievements, (a) => ({
+    unlocked: {
+      ...a.unlocked,
+      [achievementId]: { unlockedAt: new Date(), rewardsClaimed: false },
+    },
+  }));
   return true;
 }
 
@@ -204,35 +193,32 @@ async function tryUnlock(
 // ---------------------------------------------------------------------------
 
 export async function updateProgress(
+  ctx: Ctx,
   userId: string,
   conditionType: UnlockConditionType,
   value: number,
 ): Promise<Result<{ newlyUnlocked: string[] }, AchievementError>> {
+  const u = ctx.of(User, userId);
   const definitions = getDefinitionsForCondition(conditionType);
   const newlyUnlocked: string[] = [];
 
   for (const definition of definitions) {
-    const docId = buildAchievementId(userId, definition.id);
     const newProgress = Math.min(value, definition.target);
     const completed = value >= definition.target;
 
-    const progressDoc: AchievementProgressDoc = {
-      _id: docId,
-      userId,
-      achievementId: definition.id,
-      progress: newProgress,
-      target: definition.target,
-      completed,
-      updatedAt: new Date(),
-    };
+    await u.update(Achievements, (a) => ({
+      progress: {
+        ...a.progress,
+        [definition.id]: {
+          progress: newProgress,
+          target: definition.target,
+          completed,
+          updatedAt: new Date(),
+        },
+      },
+    }));
 
-    const saveRes = await achievementProgressStore.set(docId, progressDoc);
-    if (saveRes.isErr()) continue;
-
-    if (completed) {
-      const unlocked = await tryUnlock(userId, definition, progressDoc);
-      if (unlocked) newlyUnlocked.push(definition.id);
-    }
+    if (completed && (await tryUnlock(u, definition.id))) newlyUnlocked.push(definition.id);
   }
 
   return OkResult({ newlyUnlocked });
@@ -243,48 +229,36 @@ export async function updateProgress(
 // ---------------------------------------------------------------------------
 
 export async function incrementProgress(
+  ctx: Ctx,
   userId: string,
   conditionType: UnlockConditionType,
   amount = 1,
 ): Promise<Result<{ newlyUnlocked: string[] }, AchievementError>> {
+  const u = ctx.of(User, userId);
   const definitions = getDefinitionsForCondition(conditionType);
   const newlyUnlocked: string[] = [];
 
   for (const definition of definitions) {
-    const docId = buildAchievementId(userId, definition.id);
+    const a = await u.get(Achievements);
+    if (a.unlocked[definition.id]) continue; // already unlocked
 
-    // Skip if already unlocked
-    const existingUnlock = await achievementUnlocksStore.get(docId);
-    if (existingUnlock.isOk() && existingUnlock.unwrap()) continue;
-
-    // Get or create progress
-    let current = 0;
-    const existing = await achievementProgressStore.get(docId);
-    const existingDoc = existing.isOk() ? existing.unwrap() : null;
-    if (existingDoc) {
-      current = existingDoc.progress;
-    }
-
+    const current = a.progress[definition.id]?.progress ?? 0;
     const newProgress = Math.min(current + amount, definition.target);
     const completed = newProgress >= definition.target;
 
-    const progressDoc: AchievementProgressDoc = {
-      _id: docId,
-      userId,
-      achievementId: definition.id,
-      progress: newProgress,
-      target: definition.target,
-      completed,
-      updatedAt: new Date(),
-    };
+    await u.update(Achievements, (cur) => ({
+      progress: {
+        ...cur.progress,
+        [definition.id]: {
+          progress: newProgress,
+          target: definition.target,
+          completed,
+          updatedAt: new Date(),
+        },
+      },
+    }));
 
-    const saveRes = await achievementProgressStore.set(docId, progressDoc);
-    if (saveRes.isErr()) continue;
-
-    if (completed) {
-      const unlocked = await tryUnlock(userId, definition, progressDoc);
-      if (unlocked) newlyUnlocked.push(definition.id);
-    }
+    if (completed && (await tryUnlock(u, definition.id))) newlyUnlocked.push(definition.id);
   }
 
   return OkResult({ newlyUnlocked });
@@ -306,13 +280,8 @@ export async function claimRewards(
     );
   }
 
-  const docId = buildAchievementId(userId, achievementId);
-  const unlockRes = await achievementUnlocksStore.get(docId);
-  if (unlockRes.isErr()) {
-    return ErrResult(new AchievementError("UPDATE_FAILED", unlockRes.error.message));
-  }
-
-  const unlock = unlockRes.unwrap();
+  const u = ctx.of(User, userId);
+  const unlock = (await u.get(Achievements)).unlocked[achievementId];
   if (!unlock) {
     return ErrResult(
       new AchievementError("ACHIEVEMENT_NOT_UNLOCKED", "Achievement not yet unlocked"),
@@ -358,12 +327,12 @@ export async function claimRewards(
     }
   }
 
-  // Mark as claimed
-  await achievementUnlocksStore.set(docId, {
-    ...unlock,
-    rewardsClaimed: true,
-    rewardsClaimedAt: new Date(),
-  });
+  await u.update(Achievements, (a) => ({
+    unlocked: {
+      ...a.unlocked,
+      [achievementId]: { ...unlock, rewardsClaimed: true, rewardsClaimedAt: new Date() },
+    },
+  }));
 
   return OkResult({ appliedRewards });
 }
@@ -399,29 +368,20 @@ export interface AchievementBoard {
 }
 
 export async function getBoard(
+  ctx: Ctx,
   userId: string,
 ): Promise<Result<AchievementBoard, AchievementError>> {
-  const [unlocksRes, progressRes] = await Promise.all([
-    getUnlocksForUser(userId),
-    getProgressForUser(userId),
-  ]);
-
-  const unlocks = unlocksRes.isOk() ? unlocksRes.unwrap() : [];
-  const progressDocs = progressRes.isOk() ? progressRes.unwrap() : [];
-
-  const unlockMap = new Map(unlocks.map((u) => [u.achievementId, u]));
-  const progressMap = new Map(progressDocs.map((p) => [p.achievementId, p]));
+  const { progress, unlocked } = await ctx.of(User, userId).get(Achievements);
 
   const views: AchievementView[] = ACHIEVEMENT_DEFINITIONS.map((def) => {
-    const unlock = unlockMap.get(def.id);
-    const progress = progressMap.get(def.id);
+    const unlock = unlocked[def.id];
     return {
       id: def.id,
       name: def.name,
       description: def.description,
       tier: def.tier,
       category: def.category,
-      progress: progress?.progress ?? 0,
+      progress: progress[def.id]?.progress ?? 0,
       target: def.target,
       isUnlocked: !!unlock,
       unlockedAt: unlock?.unlockedAt,
@@ -432,7 +392,7 @@ export async function getBoard(
 
   return OkResult({
     achievements: views,
-    unlockedCount: unlocks.length,
+    unlockedCount: Object.keys(unlocked).length,
     totalCount: ACHIEVEMENT_DEFINITIONS.length,
   });
 }

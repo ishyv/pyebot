@@ -2,7 +2,7 @@
  * Tests for repository-level pure logic that doesn't require a live Mongo:
  *   - counting: countingStateId composition, default factory, schema
  *   - tempBans: TempBanSchema validation
- *   - smoke checks for the 3 repos (counting, tempBans, economy) not covered
+ *   - smoke checks for the counting and tempBans repos not covered
  *     by repositories.test.ts
  *
  * Full functional tests against a real or in-memory Mongo are intentionally
@@ -148,13 +148,5 @@ describe("repository module exports (smoke)", () => {
     expect(typeof repo.deleteTempBan).toBe("function");
     expect(typeof repo.getExpiredTempBans).toBe("function");
     expect(typeof repo.tempBanStore).toBe("object");
-  });
-
-  test("economy repo exports achievement stores/helpers", async () => {
-    const repo = await import("./economy");
-    expect(typeof repo.achievementProgressStore).toBe("object");
-    expect(typeof repo.achievementUnlocksStore).toBe("object");
-    expect(typeof repo.getUnlocksForUser).toBe("function");
-    expect(typeof repo.getProgressForUser).toBe("function");
   });
 });

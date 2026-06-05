@@ -6,9 +6,9 @@
  * and are recommended for clarity in feature files.
  */
 
-export * from "./achievement";
 export * from "./autorole-rule";
 export * from "./banned-image";
+export * from "./economy/achievements";
 export * from "./economy/quests";
 export * from "./economy-account";
 export * from "./guild-features";
