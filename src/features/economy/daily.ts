@@ -2,7 +2,8 @@
  * Daily reward service.
  */
 
-import { EconomyAccount } from "@/components/economy-account";
+import { EconomyAccount } from "@/components/economy/wallet";
+import { User } from "@/components/entities";
 import { getGuild } from "@/db/repositories/guilds";
 import { ensureAccount } from "@/features/economy/account";
 import { adjustBalance } from "@/features/economy/mutations";
@@ -41,7 +42,7 @@ export async function claimDaily(ctx: Ctx, userId: string, guildId: string): Pro
   const streakCap = config?.dailyStreakCap ?? 10;
   const currencyId = config?.dailyCurrencyId ?? "coins";
 
-  const account = await ctx.ensure(userId, EconomyAccount);
+  const account = await ctx.of(User, userId).get(EconomyAccount);
   const lastDailyAt = account.lastDailyAt;
   const currentStreak = account.dailyStreak;
   const now = Date.now();
@@ -64,7 +65,10 @@ export async function claimDaily(ctx: Ctx, userId: string, guildId: string): Pro
 
   const newBalance = await adjustBalance(ctx, userId, currencyId, total);
 
-  await ctx.patch(userId, EconomyAccount, { dailyStreak: newStreak, lastDailyAt: new Date(now) });
+  await ctx.of(User, userId).update(EconomyAccount, {
+    dailyStreak: newStreak,
+    lastDailyAt: new Date(now),
+  });
 
   return {
     base: baseReward,

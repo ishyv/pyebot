@@ -1,4 +1,5 @@
-import { UserCurrency } from "@/components/user-currency";
+import { UserCurrency } from "@/components/economy/wallet";
+import { User } from "@/components/entities";
 import { ensureAccount } from "@/features/economy/account";
 import { command } from "@/framework";
 import type { AccentKey } from "@/ui/theme";
@@ -16,7 +17,7 @@ export default command("eco-profile")
 
     const [account, wallet] = await Promise.all([
       ensureAccount(ctx, target.id),
-      ctx.get(target.id, UserCurrency),
+      ctx.of(User, target.id).peek(UserCurrency),
     ]);
 
     const handCoins = wallet?.balances.coins ?? 0;

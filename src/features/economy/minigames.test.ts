@@ -4,6 +4,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { EconomyAccount, UserCurrency } from "@/components/economy/wallet";
+import { User } from "@/components/entities";
 import { CooldownManager, SessionManager } from "@/core/state";
 import {
   answerTrivia,
@@ -13,6 +15,7 @@ import {
   rob,
   startTrivia,
 } from "@/features/economy/minigames";
+import type { EntityComponent, EntityKind } from "@/framework";
 import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------
@@ -39,63 +42,60 @@ function makeCtx(
     interaction: null,
     respond: {} as never,
     emit: async () => {},
-    get: async (id, component) => {
-      if (component.collection === "user_currencies") {
-        const bal = wallets[id as string];
-        if (!bal) return null;
-        return { balances: bal, bankBalances: {} } as never;
-      }
-      if (component.collection === "economy_accounts") {
-        const status = accounts[id as string];
-        if (!status) return null;
-        return {
-          status,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          lastActivityAt: new Date(),
-          version: 0,
-          dailyStreak: 0,
-          lastDailyAt: null,
-        } as never;
-      }
-      return null;
+    get: async () => null,
+    ensure: async () => {
+      throw new Error("legacy ensure should not be used in economy minigame tests");
     },
-    ensure: async (id, component) => {
-      if (component.collection === "user_currencies") {
-        if (!wallets[id as string]) wallets[id as string] = {};
-        return { balances: wallets[id as string], bankBalances: {} } as never;
-      }
-      if (component.collection === "economy_accounts") {
-        if (!accounts[id as string]) accounts[id as string] = "ok";
-        return {
-          status: accounts[id as string],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          lastActivityAt: new Date(),
-          version: 0,
-          dailyStreak: 0,
-          lastDailyAt: null,
-        } as never;
-      }
-      return {} as never;
-    },
-    patch: async (id, component, patchArg) => {
-      if (component.collection === "user_currencies") {
-        if (!wallets[id as string]) wallets[id as string] = {};
-        const current = { balances: wallets[id as string], bankBalances: {} };
-        const partial = (
-          typeof patchArg === "function" ? patchArg(current as never) : patchArg
-        ) as { balances?: Record<string, number> };
-        if (partial.balances) {
-          wallets[id as string] = partial.balances;
-        }
-      }
+    patch: async () => {
+      throw new Error("legacy patch should not be used in economy minigame tests");
     },
     set: async () => {},
     delete: async () => {},
     query: async () => [],
-    of: () => {
-      throw new Error("entity API not used in this mock");
+    of: (kind: EntityKind, id: string) => {
+      if (kind !== User) throw new Error("unknown entity kind in economy minigame test ctx");
+      const account = () => ({
+        status: accounts[id] ?? "ok",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastActivityAt: new Date(),
+        version: 0,
+        dailyStreak: 0,
+        lastDailyAt: null,
+      });
+      const wallet = () => {
+        wallets[id] ??= {};
+        return { balances: wallets[id], bankBalances: {} };
+      };
+      return {
+        async get<T>(component: EntityComponent<T>) {
+          if (component === UserCurrency) return wallet() as T;
+          if (component === EconomyAccount) {
+            accounts[id] ??= "ok";
+            return account() as T;
+          }
+          return component.schema.parse({});
+        },
+        async peek<T>(component: EntityComponent<T>) {
+          if (component === UserCurrency) {
+            return wallets[id] ? (wallet() as T) : null;
+          }
+          if (component === EconomyAccount) {
+            return accounts[id] ? (account() as T) : null;
+          }
+          return null;
+        },
+        async update<T>(
+          component: EntityComponent<T>,
+          patchArg: Partial<T> | ((current: T) => Partial<T>),
+        ) {
+          if (component !== UserCurrency) return;
+          const current = wallet() as T;
+          const partial = typeof patchArg === "function" ? patchArg(current) : patchArg;
+          const balances = (partial as { balances?: Record<string, number> }).balances;
+          if (balances) wallets[id] = balances;
+        },
+      };
     },
     select: () => {
       throw new Error("entity API not used in this mock");
@@ -103,7 +103,7 @@ function makeCtx(
     transaction: () => {
       throw new Error("entity API not used in this mock");
     },
-  } as Ctx;
+  } as unknown as Ctx;
 }
 
 // ---------------------------------------------------------------------------

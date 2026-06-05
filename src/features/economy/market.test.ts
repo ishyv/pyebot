@@ -29,18 +29,6 @@ const mockSetCooldown = mock((_userId: string, _key: string, _ms: number) => {})
 
 const NOW = new Date("2026-01-01T00:00:00.000Z");
 
-function makeAccountValue(status: "ok" | "blocked" | "banned" = "ok") {
-  return {
-    status,
-    createdAt: NOW,
-    updatedAt: NOW,
-    lastActivityAt: NOW,
-    version: 0,
-    dailyStreak: 0,
-    lastDailyAt: null,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Mock @/db/repositories/users BEFORE importing market
 // (mutations.ts uses userStore directly)
@@ -340,30 +328,12 @@ function makeCtx(
     logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
     interaction: null,
     emit: async () => {},
-    get: async (id: string, component: { collection?: string }) => {
-      if (component.collection === "economy_accounts") {
-        return makeAccountValue() as never;
-      }
-
-      const bal = walletStore[id];
-      return bal ? ({ balances: bal, bankBalances: {} } as never) : null;
+    get: async () => null,
+    ensure: async () => {
+      throw new Error("legacy ensure should not be used in market tests");
     },
-    ensure: async (id: string, component: { collection?: string }) => {
-      if (component.collection === "economy_accounts") {
-        return makeAccountValue() as never;
-      }
-
-      if (!walletStore[id]) walletStore[id] = { coins: 0 };
-      return { balances: walletStore[id], bankBalances: {} } as never;
-    },
-    patch: async (id: string, _component: { collection?: string }, fn: unknown) => {
-      if (failCurrency.has(id)) throw new Error("currency patch failed");
-      if (!walletStore[id]) walletStore[id] = { coins: 0 };
-      const cur = { balances: walletStore[id], bankBalances: {} };
-      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
-        balances?: Record<string, number>;
-      };
-      if (patch.balances) walletStore[id] = patch.balances;
+    patch: async () => {
+      throw new Error("legacy patch should not be used in market tests");
     },
     set: async () => {},
     delete: async () => {},

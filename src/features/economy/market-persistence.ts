@@ -13,10 +13,9 @@
  */
 
 import type { ClientSession, Collection, Db, Document, Filter } from "mongodb";
-import { EconomyAccount } from "@/components/economy-account";
+import { EconomyAccount, UserCurrency } from "@/components/economy/wallet";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
-import { UserCurrency } from "@/components/user-currency";
 import { getDb, getMongoClient } from "@/core/db";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { type MarketListingDoc, MarketListingSchema } from "@/db/schemas/market";
@@ -44,9 +43,7 @@ type ComponentDoc = Document & { _id: string };
 
 interface MarketCollections {
   readonly listings: Collection<MarketListingDoc>;
-  readonly currencies: Collection<ComponentDoc>;
-  readonly inventories: Collection<ComponentDoc>;
-  readonly accounts: Collection<ComponentDoc>;
+  readonly users: Collection<ComponentDoc>;
 }
 
 interface MarketTxContext extends MarketCollections {
@@ -68,9 +65,7 @@ type MarketPersistenceResult<T> = Result<T, MarketError | MarketPersistenceError
 function collectionSet(db: Db): MarketCollections {
   return {
     listings: db.collection<MarketListingDoc>("marketListings"),
-    currencies: db.collection<ComponentDoc>(UserCurrency.collection),
-    inventories: db.collection<ComponentDoc>(User.collection),
-    accounts: db.collection<ComponentDoc>(EconomyAccount.collection),
+    users: db.collection<ComponentDoc>(User.collection),
   };
 }
 
@@ -117,18 +112,21 @@ async function runMarketTransaction<T>(
 }
 
 async function ensureActiveAccount(
-  accounts: Collection<ComponentDoc>,
+  users: Collection<ComponentDoc>,
   userId: string,
   session: ClientSession,
 ): Promise<void> {
   const defaults = EconomyAccount.schema.parse({});
-  const result = await accounts.findOneAndUpdate(
-    { _id: userId },
-    { $setOnInsert: { _id: userId, ...defaults } },
-    { upsert: true, returnDocument: "after", session },
-  );
-  const doc = normalizeFindOneAndUpdate(result);
-  const account = EconomyAccount.schema.parse(doc);
+  const existing = await users.findOne({ _id: userId }, { session });
+  if (!existing || !(EconomyAccount.name in existing)) {
+    await users.updateOne(
+      { _id: userId },
+      { $set: { [EconomyAccount.name]: defaults }, $setOnInsert: { _id: userId } },
+      { upsert: true, session },
+    );
+  }
+  const doc = await users.findOne({ _id: userId }, { session });
+  const account = EconomyAccount.schema.parse(doc?.[EconomyAccount.name] ?? {});
   if (!isAccountActive(account.status)) {
     throw new MarketError("ACCOUNT_INACTIVE", "Your economy account is not active");
   }
@@ -139,17 +137,17 @@ function stackPath(itemId: string): string {
 }
 
 function balancePath(currencyId: string): string {
-  return `balances.${currencyId}`;
+  return `${UserCurrency.name}.balances.${currencyId}`;
 }
 
 async function removeStackItems(
-  inventories: Collection<ComponentDoc>,
+  users: Collection<ComponentDoc>,
   userId: string,
   itemId: string,
   quantity: number,
   session: ClientSession,
 ): Promise<void> {
-  const updated = await inventories.findOneAndUpdate(
+  const updated = await users.findOneAndUpdate(
     { _id: userId, [stackPath(itemId)]: { $gte: quantity } },
     { $inc: { [stackPath(itemId)]: -quantity } },
     { returnDocument: "after", session },
@@ -164,13 +162,13 @@ async function removeStackItems(
 }
 
 async function addStackItems(
-  inventories: Collection<ComponentDoc>,
+  users: Collection<ComponentDoc>,
   userId: string,
   itemId: string,
   quantity: number,
   session: ClientSession,
 ): Promise<void> {
-  await inventories.findOneAndUpdate(
+  await users.findOneAndUpdate(
     { _id: userId },
     { $setOnInsert: { _id: userId }, $inc: { [stackPath(itemId)]: quantity } },
     { upsert: true, returnDocument: "after", session },
@@ -178,13 +176,13 @@ async function addStackItems(
 }
 
 async function debitBuyer(
-  currencies: Collection<ComponentDoc>,
+  users: Collection<ComponentDoc>,
   buyerId: string,
   currencyId: string,
   total: number,
   session: ClientSession,
 ): Promise<number> {
-  const result = await currencies.findOneAndUpdate(
+  const result = await users.findOneAndUpdate(
     { _id: buyerId, [balancePath(currencyId)]: { $gte: total } },
     { $inc: { [balancePath(currencyId)]: -total } },
     { returnDocument: "after", session },
@@ -193,18 +191,18 @@ async function debitBuyer(
   if (!doc) {
     throw new MarketError("INSUFFICIENT_FUNDS", `You need ${total} ${currencyId}`);
   }
-  const currency = UserCurrency.schema.parse(doc);
+  const currency = UserCurrency.schema.parse(doc[UserCurrency.name] ?? {});
   return currency.balances[currencyId] ?? 0;
 }
 
 async function creditSeller(
-  currencies: Collection<ComponentDoc>,
+  users: Collection<ComponentDoc>,
   sellerId: string,
   currencyId: string,
   sellerPayout: number,
   session: ClientSession,
 ): Promise<void> {
-  await currencies.findOneAndUpdate(
+  await users.findOneAndUpdate(
     { _id: sellerId },
     { $setOnInsert: { _id: sellerId }, $inc: { [balancePath(currencyId)]: sellerPayout } },
     { upsert: true, returnDocument: "after", session },
@@ -230,8 +228,8 @@ export async function createListingTx(input: {
   readonly listing: MarketListingDoc;
   readonly config: MarketConfig;
 }): Promise<MarketPersistenceResult<CreateListingResult>> {
-  return runMarketTransaction(async ({ accounts, inventories, listings, session }) => {
-    await ensureActiveAccount(accounts, input.listing.sellerId, session);
+  return runMarketTransaction(async ({ listings, session, users }) => {
+    await ensureActiveAccount(users, input.listing.sellerId, session);
 
     const activeCount = await listings.countDocuments(
       {
@@ -249,7 +247,7 @@ export async function createListingTx(input: {
     }
 
     await removeStackItems(
-      inventories,
+      users,
       input.listing.sellerId,
       input.listing.itemId,
       input.listing.quantity,
@@ -276,8 +274,8 @@ export async function buyListingTx(input: {
   readonly quantity: number;
   readonly config: MarketConfig;
 }): Promise<MarketPersistenceResult<BuyListingResult>> {
-  return runMarketTransaction(async ({ accounts, currencies, inventories, listings, session }) => {
-    await ensureActiveAccount(accounts, input.buyerId, session);
+  return runMarketTransaction(async ({ listings, session, users }) => {
+    await ensureActiveAccount(users, input.buyerId, session);
 
     const listing = await getParsedListing(listings, input.listingId, session);
     const listingError = validateBuyableListing(listing, input.buyerId, input.quantity);
@@ -289,7 +287,7 @@ export async function buyListingTx(input: {
       input.config,
     );
     const buyerNewBalance = await debitBuyer(
-      currencies,
+      users,
       input.buyerId,
       input.config.currencyId,
       total,
@@ -309,14 +307,8 @@ export async function buyListingTx(input: {
     );
     if (!normalizeFindOneAndUpdate(updated)) throw marketConflict();
 
-    await creditSeller(
-      currencies,
-      listing.sellerId,
-      input.config.currencyId,
-      sellerPayout,
-      session,
-    );
-    await addStackItems(inventories, input.buyerId, listing.itemId, input.quantity, session);
+    await creditSeller(users, listing.sellerId, input.config.currencyId, sellerPayout, session);
+    await addStackItems(users, input.buyerId, listing.itemId, input.quantity, session);
 
     return {
       listingId: input.listingId,
@@ -342,7 +334,7 @@ export async function cancelListingTx(input: {
   readonly listingId: string;
   readonly allowModeratorOverride?: boolean;
 }): Promise<MarketPersistenceResult<CancelListingResult>> {
-  return runMarketTransaction(async ({ inventories, listings, session }) => {
+  return runMarketTransaction(async ({ listings, session, users }) => {
     const listing = await getParsedListing(listings, input.listingId, session);
     const listingError = validateCancellableListing(
       listing,
@@ -362,7 +354,7 @@ export async function cancelListingTx(input: {
     );
     if (!normalizeFindOneAndUpdate(updated)) throw marketConflict();
 
-    await addStackItems(inventories, listing.sellerId, listing.itemId, listing.quantity, session);
+    await addStackItems(users, listing.sellerId, listing.itemId, listing.quantity, session);
 
     return {
       listingId: input.listingId,

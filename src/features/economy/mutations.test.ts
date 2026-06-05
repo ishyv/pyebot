@@ -4,8 +4,9 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { EconomyAccount } from "@/components/economy-account";
-import { UserCurrency } from "@/components/user-currency";
+import { EconomyAccount, UserCurrency } from "@/components/economy/wallet";
+import { User } from "@/components/entities";
+import type { EntityComponent } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import { adjustBalance, getBalance, MutationError, transfer } from "./mutations";
 
@@ -13,11 +14,22 @@ import { adjustBalance, getBalance, MutationError, transfer } from "./mutations"
 // In-memory Ctx stub
 // ---------------------------------------------------------------------------
 
-type WalletMap = Map<string, { balances: Record<string, number> }>;
-type AccountMap = Map<
-  string,
-  { status: string; createdAt: Date; updatedAt: Date; lastActivityAt: Date; version: number }
->;
+type Wallet = {
+  balances: Record<string, number>;
+  bankBalances: Record<string, number>;
+};
+type Account = {
+  status: "ok" | "blocked" | "banned";
+  createdAt: Date;
+  updatedAt: Date;
+  lastActivityAt: Date;
+  version: number;
+  dailyStreak: number;
+  lastDailyAt: Date | null;
+};
+
+type WalletMap = Map<string, Wallet>;
+type AccountMap = Map<string, Account>;
 
 function makeCtx(
   opts: {
@@ -26,7 +38,7 @@ function makeCtx(
   } = {},
 ): Ctx {
   const wallets: WalletMap = new Map(
-    Object.entries(opts.wallets ?? {}).map(([id, b]) => [id, { balances: b }]),
+    Object.entries(opts.wallets ?? {}).map(([id, b]) => [id, { balances: b, bankBalances: {} }]),
   );
   const accounts: AccountMap = new Map(
     Object.entries(opts.accounts ?? {}).map(([id, status]) => [
@@ -37,6 +49,8 @@ function makeCtx(
         updatedAt: new Date(),
         lastActivityAt: new Date(),
         version: 0,
+        dailyStreak: 0,
+        lastDailyAt: null,
       },
     ]),
   );
@@ -47,7 +61,7 @@ function makeCtx(
   function ensureWallet(id: string) {
     const existing = wallets.get(id);
     if (existing) return existing;
-    const fresh = { balances: {} };
+    const fresh = UserCurrency.schema.parse({});
     wallets.set(id, fresh);
     return fresh;
   }
@@ -63,38 +77,61 @@ function makeCtx(
       updatedAt: new Date(),
       lastActivityAt: new Date(),
       version: 0,
+      dailyStreak: 0,
+      lastDailyAt: null,
     };
     accounts.set(id, fresh);
     return fresh;
   }
 
+  function read<T>(id: string, component: EntityComponent<T>): T | null {
+    if (component === UserCurrency) return getWallet(id) as T | null;
+    if (component === EconomyAccount) return getAccount(id) as T | null;
+    return null;
+  }
+
+  function ensure<T>(id: string, component: EntityComponent<T>): T {
+    if (component === UserCurrency) return ensureWallet(id) as T;
+    if (component === EconomyAccount) return ensureAccountDoc(id) as T;
+    throw new Error("Unknown component in test ctx");
+  }
+
+  function update<T>(
+    id: string,
+    component: EntityComponent<T>,
+    patchOrFn: Partial<T> | ((current: T) => Partial<T>),
+  ) {
+    const current = ensure(id, component);
+    const delta = typeof patchOrFn === "function" ? patchOrFn(current) : patchOrFn;
+    Object.assign(current as Record<string, unknown>, delta);
+  }
+
   return {
-    async get(id: string, component: unknown) {
-      if (component === UserCurrency) return getWallet(id);
-      if (component === EconomyAccount) return getAccount(id);
+    of(kind: typeof User, id: string) {
+      if (kind !== User) throw new Error("Unknown entity kind in test ctx");
+      return {
+        async get<T>(component: EntityComponent<T>) {
+          return ensure(id, component);
+        },
+        async peek<T>(component: EntityComponent<T>) {
+          return read(id, component);
+        },
+        async update<T>(
+          component: EntityComponent<T>,
+          patchOrFn: Partial<T> | ((current: T) => Partial<T>),
+        ) {
+          update(id, component, patchOrFn);
+        },
+      };
+    },
+    async get() {
       return null;
     },
-    async ensure(id: string, component: unknown) {
-      if (component === UserCurrency) return ensureWallet(id);
-      if (component === EconomyAccount) return ensureAccountDoc(id);
-      throw new Error("Unknown component in test ctx");
+    async ensure() {
+      throw new Error("legacy ensure should not be used in economy mutation tests");
     },
-    async patch(id: string, component: unknown, patchOrFn: unknown) {
-      if (component === UserCurrency) {
-        const current = ensureWallet(id);
-        const delta =
-          typeof patchOrFn === "function"
-            ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current)
-            : (patchOrFn as Partial<typeof current>);
-        if (delta.balances) current.balances = delta.balances;
-      } else if (component === EconomyAccount) {
-        const current = ensureAccountDoc(id);
-        const delta =
-          typeof patchOrFn === "function"
-            ? (patchOrFn as (v: typeof current) => Partial<typeof current>)(current)
-            : (patchOrFn as Partial<typeof current>);
-        Object.assign(current, delta);
-      }
+    async patch() {
+      throw new Error("legacy patch should not be used in economy mutation tests");
     },
     async set() {},
     async delete() {},

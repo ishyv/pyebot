@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { UserCurrency } from "@/components/economy/wallet";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
 import { RpgProfile } from "@/components/rpg/profile";
@@ -100,6 +101,28 @@ function factorySeed(factory: unknown): Record<string, Record<string, unknown>> 
   return userSeed({ [UserFactory.name]: factory });
 }
 
+function walletSeed(coins = 0, scrip = 0): Record<string, Record<string, unknown>> {
+  return userSeed({
+    [UserCurrency.name]: { balances: { coins, scrip }, bankBalances: {} },
+  });
+}
+
+function seed(...parts: Record<string, Record<string, unknown>>[]) {
+  const merged: Record<string, Record<string, unknown>> = {};
+  for (const part of parts) {
+    for (const [collection, docs] of Object.entries(part)) {
+      merged[collection] ??= {};
+      for (const [id, doc] of Object.entries(docs)) {
+        merged[collection][id] = {
+          ...((merged[collection][id] as Record<string, unknown> | undefined) ?? {}),
+          ...(doc as Record<string, unknown>),
+        };
+      }
+    }
+  }
+  return merged;
+}
+
 function stockpileDashboardCtx(stashSize: number): Ctx {
   return makeCtx({
     ...userSeed({
@@ -116,18 +139,15 @@ function stockpileDashboardCtx(stashSize: number): Ctx {
       },
       [UserInventory.name]: { slots: {} },
       [RpgProfile.name]: { stashSize },
+      [UserCurrency.name]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} },
     }),
-    user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
   });
 }
 
 describe("renderDashboard()", () => {
   test("first run console offers the first charter path without a dead collect button", async () => {
     const payload = await renderDashboard(
-      makeCtx({
-        ...factorySeed({ lines: {}, lifetimeScrip: 0 }),
-        user_currencies: { [USER]: { balances: { coins: 500, scrip: 0 }, bankBalances: {} } },
-      }),
+      makeCtx(seed(factorySeed({ lines: {}, lifetimeScrip: 0 }), walletSeed(500, 0))),
       USER,
     );
 
@@ -143,24 +163,26 @@ describe("renderDashboard()", () => {
 
   test("ready output promotes Collect Ready as the primary action", async () => {
     const payload = await renderDashboard(
-      makeCtx({
-        ...factorySeed({
-          lines: {
-            lumber_mill: {
-              stages: {
-                extractor: { level: 1 },
-                refinery: { level: 1 },
-                assembler: { level: 1 },
+      makeCtx(
+        seed(
+          factorySeed({
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
               },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt: 0,
             },
-          },
-          lifetimeScrip: 0,
-        }),
-        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
-      }),
+            lifetimeScrip: 0,
+          }),
+          walletSeed(0, 0),
+        ),
+      ),
       USER,
     );
 
@@ -174,10 +196,7 @@ describe("renderDashboard()", () => {
 
   test("first-run primary button charters the first line in one tap", async () => {
     const payload = await renderDashboard(
-      makeCtx({
-        ...factorySeed({ lines: {}, lifetimeScrip: 0 }),
-        user_currencies: { [USER]: { balances: { coins: 500, scrip: 0 }, bankBalances: {} } },
-      }),
+      makeCtx(seed(factorySeed({ lines: {}, lifetimeScrip: 0 }), walletSeed(500, 0))),
       USER,
     );
     expect(payloadJson(payload)).toContain("tycoon:do-charter:lumber_mill");
@@ -185,24 +204,26 @@ describe("renderDashboard()", () => {
 
   test("offers a one-tap fix-bottleneck button when no output is ready", async () => {
     const payload = await renderDashboard(
-      makeCtx({
-        ...factorySeed({
-          lines: {
-            lumber_mill: {
-              stages: {
-                extractor: { level: 1 },
-                refinery: { level: 1 },
-                assembler: { level: 1 },
+      makeCtx(
+        seed(
+          factorySeed({
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: Date.now(),
               },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt: Date.now(),
             },
-          },
-          lifetimeScrip: 0,
-        }),
-        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
-      }),
+            lifetimeScrip: 0,
+          }),
+          walletSeed(0, 0),
+        ),
+      ),
       USER,
     );
     expect(payloadJson(payload)).toContain("tycoon:do-upgrade:lumber_mill");
@@ -215,24 +236,26 @@ describe("renderDashboard()", () => {
 
   test("quantifies idle loss on a capped manual line", async () => {
     const payload = await renderDashboard(
-      makeCtx({
-        ...factorySeed({
-          lines: {
-            lumber_mill: {
-              stages: {
-                extractor: { level: 1 },
-                refinery: { level: 1 },
-                assembler: { level: 1 },
+      makeCtx(
+        seed(
+          factorySeed({
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
               },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt: 0,
             },
-          },
-          lifetimeScrip: 0,
-        }),
-        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
-      }),
+            lifetimeScrip: 0,
+          }),
+          walletSeed(0, 0),
+        ),
+      ),
       USER,
     );
     expect(payloadText(payload)).toContain("Storage full");
@@ -259,44 +282,46 @@ describe("renderDashboard()", () => {
 
   test("shows distinct automated, manual full, and manual running statuses", async () => {
     const payload = await renderDashboard(
-      makeCtx({
-        ...factorySeed({
-          lines: {
-            lumber_mill: {
-              stages: {
-                extractor: { level: 1 },
-                refinery: { level: 1 },
-                assembler: { level: 1 },
+      makeCtx(
+        seed(
+          factorySeed({
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
               },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt: 0,
-            },
-            copper_works: {
-              stages: {
-                extractor: { level: 1 },
-                refinery: { level: 1 },
-                assembler: { level: 1 },
+              copper_works: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: true,
+                lastCollectedAt: 0,
               },
-              mode: "sell",
-              automated: true,
-              lastCollectedAt: 0,
-            },
-            iron_works: {
-              stages: {
-                extractor: { level: 1 },
-                refinery: { level: 1 },
-                assembler: { level: 1 },
+              iron_works: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: Date.now(),
               },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt: Date.now(),
             },
-          },
-          lifetimeScrip: 0,
-        }),
-        user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
-      }),
+            lifetimeScrip: 0,
+          }),
+          walletSeed(0, 0),
+        ),
+      ),
       USER,
     );
 
@@ -316,20 +341,22 @@ describe("renderDashboard()", () => {
       }
     }
 
-    const ctx = makeCtx({
-      ...factorySeed({
-        lines: {
-          lumber_mill: {
-            stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
-            mode: "sell",
-            automated: false,
-            lastCollectedAt: anchor,
+    const ctx = makeCtx(
+      seed(
+        factorySeed({
+          lines: {
+            lumber_mill: {
+              stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
+              mode: "sell",
+              automated: false,
+              lastCollectedAt: anchor,
+            },
           },
-        },
-        lifetimeScrip: 0,
-      }),
-      user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
-    });
+          lifetimeScrip: 0,
+        }),
+        walletSeed(0, 0),
+      ),
+    );
 
     expect(rollEvent(eventSeed(USER, "lumber_mill", anchor)).id).not.toBe("none");
     expect(payloadText(await renderDashboard(ctx, USER))).toContain("Event queued");

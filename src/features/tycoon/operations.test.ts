@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { UserCurrency } from "@/components/economy/wallet";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
 import { RpgProfile } from "@/components/rpg/profile";
@@ -161,7 +162,27 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
 const USER = "user-1";
 
 function wallet(coins = 0, scrip = 0) {
-  return { user_currencies: { [USER]: { balances: { coins, scrip }, bankBalances: {} } } };
+  return {
+    [User.collection]: {
+      [USER]: { [UserCurrency.name]: { balances: { coins, scrip }, bankBalances: {} } },
+    },
+  };
+}
+
+function seed(...parts: Record<string, Record<string, unknown>>[]) {
+  const merged: Record<string, Record<string, unknown>> = {};
+  for (const part of parts) {
+    for (const [collection, docs] of Object.entries(part)) {
+      merged[collection] ??= {};
+      for (const [id, doc] of Object.entries(docs)) {
+        merged[collection][id] = {
+          ...((merged[collection][id] as Record<string, unknown> | undefined) ?? {}),
+          ...(doc as Record<string, unknown>),
+        };
+      }
+    }
+  }
+  return merged;
 }
 
 describe("charter()", () => {
@@ -212,8 +233,7 @@ describe("upgrade()", () => {
 
 describe("collect() — sell mode", () => {
   function seededFactory(lastCollectedAt: number) {
-    return {
-      ...wallet(0, 0),
+    return seed(wallet(0, 0), {
       [User.collection]: {
         [USER]: {
           [UserFactory.name]: {
@@ -233,7 +253,7 @@ describe("collect() — sell mode", () => {
           },
         },
       },
-    };
+    });
   }
 
   test("credits scrip, bumps lifetimeScrip, and applies the seeded event", async () => {
@@ -271,8 +291,7 @@ describe("collect() — sell mode", () => {
 });
 
 function stockpileFactory(stashSize: number) {
-  return {
-    ...wallet(0, 0),
+  return seed(wallet(0, 0), {
     [User.collection]: {
       [USER]: {
         [UserInventory.name]: { slots: {} },
@@ -290,7 +309,7 @@ function stockpileFactory(stashSize: number) {
         },
       },
     },
-  };
+  });
 }
 
 describe("collect() — stockpile mode", () => {
@@ -385,37 +404,39 @@ describe("coinsInvested() and netWorth()", () => {
   });
 
   test("adds lifetime scrip, current scrip, and invested coins", async () => {
-    const ctx = makeCtx({
-      ...wallet(0, 200),
-      [User.collection]: {
-        [USER]: {
-          [UserFactory.name]: {
-            lines: {
-              lumber_mill: {
-                stages: {
-                  extractor: { level: 2 },
-                  refinery: { level: 1 },
-                  assembler: { level: 1 },
+    const ctx = makeCtx(
+      seed(wallet(0, 200), {
+        [User.collection]: {
+          [USER]: {
+            [UserFactory.name]: {
+              lines: {
+                lumber_mill: {
+                  stages: {
+                    extractor: { level: 2 },
+                    refinery: { level: 1 },
+                    assembler: { level: 1 },
+                  },
+                  mode: "sell",
+                  automated: false,
+                  lastCollectedAt: 0,
                 },
-                mode: "sell",
-                automated: false,
-                lastCollectedAt: 0,
               },
+              lifetimeScrip: 1000,
             },
-            lifetimeScrip: 1000,
           },
         },
-      },
-    });
+      }),
+    );
 
     expect(await netWorth(ctx, USER)).toBe(1000 + 200 + LINES.lumber_mill.charterCost + 120);
   });
 
   test("exchange spending leaves lifetime scrip intact but lowers current-scrip value", async () => {
-    const ctx = makeCtx({
-      ...wallet(0, 1000),
-      [User.collection]: { [USER]: { [UserFactory.name]: { lines: {}, lifetimeScrip: 5000 } } },
-    });
+    const ctx = makeCtx(
+      seed(wallet(0, 1000), {
+        [User.collection]: { [USER]: { [UserFactory.name]: { lines: {}, lifetimeScrip: 5000 } } },
+      }),
+    );
 
     expect(await netWorth(ctx, USER)).toBe(6000);
     await exchange(ctx, USER, 400);
@@ -426,15 +447,13 @@ describe("coinsInvested() and netWorth()", () => {
 describe("topMagnates()", () => {
   test("ranks by net worth and keeps lifetime scrip for display", async () => {
     const ctx = makeCtx({
-      user_currencies: {
-        rich: { balances: { scrip: 0 }, bankBalances: {} },
-        investor: { balances: { scrip: 0 }, bankBalances: {} },
-        mid: { balances: { scrip: 50 }, bankBalances: {} },
-        broke: { balances: { scrip: 0 }, bankBalances: {} },
-      },
       [User.collection]: {
-        rich: { [UserFactory.name]: { lines: {}, lifetimeScrip: 9000 } },
+        rich: {
+          [UserCurrency.name]: { balances: { scrip: 0 }, bankBalances: {} },
+          [UserFactory.name]: { lines: {}, lifetimeScrip: 9000 },
+        },
         investor: {
+          [UserCurrency.name]: { balances: { scrip: 0 }, bankBalances: {} },
           [UserFactory.name]: {
             lines: {
               silver_forge: {
@@ -451,8 +470,14 @@ describe("topMagnates()", () => {
             lifetimeScrip: 100,
           },
         },
-        mid: { [UserFactory.name]: { lines: {}, lifetimeScrip: 500 } },
-        broke: { [UserFactory.name]: { lines: {}, lifetimeScrip: 0 } },
+        mid: {
+          [UserCurrency.name]: { balances: { scrip: 50 }, bankBalances: {} },
+          [UserFactory.name]: { lines: {}, lifetimeScrip: 500 },
+        },
+        broke: {
+          [UserCurrency.name]: { balances: { scrip: 0 }, bankBalances: {} },
+          [UserFactory.name]: { lines: {}, lifetimeScrip: 0 },
+        },
       },
     });
     const top = await topMagnates(ctx, 10);

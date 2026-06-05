@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { EconomyAccount, UserCurrency } from "@/components/economy/wallet";
+import { UserInventory } from "@/components/rpg/inventory";
 import type { MarketListingDoc } from "@/db/schemas/market";
 import type { MarketConfig } from "./market-types";
 
@@ -12,9 +14,7 @@ const state = {
   failBuyerInventory: false,
   failCancelReturn: false,
   listings: new Map<string, MarketListingDoc>(),
-  currencies: new Map<string, Doc>(),
-  inventories: new Map<string, Doc>(),
-  accounts: new Map<string, Doc>(),
+  users: new Map<string, Doc>(),
 };
 
 function cloneMap<T>(source: Map<string, T>): Map<string, T> {
@@ -27,9 +27,7 @@ function resetState() {
   state.failBuyerInventory = false;
   state.failCancelReturn = false;
   state.listings.clear();
-  state.currencies.clear();
-  state.inventories.clear();
-  state.accounts.clear();
+  state.users.clear();
 }
 
 function makeListing(overrides: Partial<MarketListingDoc> = {}): MarketListingDoc {
@@ -107,6 +105,26 @@ class FakeCollection<T extends Doc> {
     return Array.from(this.docs.values()).filter((doc) => matches(doc, filter)).length;
   }
 
+  async updateOne(
+    filter: Record<string, unknown>,
+    update: Record<string, unknown>,
+    options: { upsert?: boolean } = {},
+  ) {
+    const existing = Array.from(this.docs.values()).find((doc) => matches(doc, filter));
+    if (!existing && !options.upsert) return { matchedCount: 0, modifiedCount: 0 };
+
+    const doc =
+      existing ??
+      ({
+        _id: String(filter._id),
+        ...((update.$setOnInsert ?? {}) as Record<string, unknown>),
+      } as T);
+
+    applyUpdate(doc, update);
+    this.docs.set(doc._id, doc);
+    return { matchedCount: existing ? 1 : 0, modifiedCount: 1 };
+  }
+
   find(filter: Record<string, unknown>) {
     const docs = Array.from(this.docs.values()).filter((doc) => matches(doc, filter));
     return {
@@ -126,13 +144,29 @@ class FakeCollection<T extends Doc> {
     update: Record<string, unknown>,
     options: { upsert?: boolean; returnDocument?: "after" } = {},
   ) {
-    if (this.docs === state.currencies && filter._id === "seller-1" && state.failSellerCredit) {
+    const inc = (update.$inc ?? {}) as Record<string, number>;
+    if (
+      this.docs === state.users &&
+      filter._id === "seller-1" &&
+      state.failSellerCredit &&
+      Object.keys(inc).some((path) => path.startsWith(`${UserCurrency.name}.balances.`))
+    ) {
       throw new Error("seller credit failed");
     }
-    if (this.docs === state.inventories && filter._id === "buyer-1" && state.failBuyerInventory) {
+    if (
+      this.docs === state.users &&
+      filter._id === "buyer-1" &&
+      state.failBuyerInventory &&
+      Object.keys(inc).some((path) => path.startsWith(`${UserInventory.name}.slots.`))
+    ) {
       throw new Error("buyer inventory failed");
     }
-    if (this.docs === state.inventories && filter._id === "seller-1" && state.failCancelReturn) {
+    if (
+      this.docs === state.users &&
+      filter._id === "seller-1" &&
+      state.failCancelReturn &&
+      Object.keys(inc).some((path) => path.startsWith(`${UserInventory.name}.slots.`))
+    ) {
       throw new Error("cancel return failed");
     }
 
@@ -155,9 +189,7 @@ class FakeCollection<T extends Doc> {
 const fakeDb = {
   collection(name: string) {
     if (name === "marketListings") return new FakeCollection(state.listings as Map<string, Doc>);
-    if (name === "user_currencies") return new FakeCollection(state.currencies);
-    if (name === "users") return new FakeCollection(state.inventories);
-    if (name === "economy_accounts") return new FakeCollection(state.accounts);
+    if (name === "users") return new FakeCollection(state.users);
     throw new Error(`unexpected collection ${name}`);
   },
 };
@@ -172,17 +204,13 @@ mock.module("@/core/db", () => ({
         }
         const before = {
           listings: cloneMap(state.listings),
-          currencies: cloneMap(state.currencies),
-          inventories: cloneMap(state.inventories),
-          accounts: cloneMap(state.accounts),
+          users: cloneMap(state.users),
         };
         try {
           await fn();
         } catch (error) {
           state.listings = before.listings;
-          state.currencies = before.currencies;
-          state.inventories = before.inventories;
-          state.accounts = before.accounts;
+          state.users = before.users;
           throw error;
         }
       },
@@ -210,25 +238,30 @@ describe("market transaction persistence", () => {
   beforeEach(resetState);
 
   test("createListingTx commits inventory escrow and listing together", async () => {
-    state.inventories.set("seller-1", {
+    state.users.set("seller-1", {
       _id: "seller-1",
-      inventory: { slots: { wood: { qty: 10 } } },
+      [UserInventory.name]: { slots: { wood: { qty: 10 } } },
     });
 
     const result = await createListingTx({ listing: makeListing({ quantity: 4 }), config: cfg });
 
     expect(result.isOk()).toBe(true);
-    expect(state.inventories.get("seller-1")?.inventory).toEqual({
+    expect(state.users.get("seller-1")?.[UserInventory.name]).toEqual({
       slots: { wood: { qty: 6 } },
     });
     expect(state.listings.get("listing:test-1")?.quantity).toBe(4);
-    expect(state.accounts.get("seller-1")?.status).toBe("ok");
+    expect((state.users.get("seller-1")?.[EconomyAccount.name] as { status?: string }).status).toBe(
+      "ok",
+    );
   });
 
   test("buyListingTx aborts all writes when seller credit fails", async () => {
     state.failSellerCredit = true;
     state.listings.set("listing:test-1", makeListing());
-    state.currencies.set("buyer-1", { _id: "buyer-1", balances: { coins: 500 } });
+    state.users.set("buyer-1", {
+      _id: "buyer-1",
+      [UserCurrency.name]: { balances: { coins: 500 } },
+    });
 
     const result = await buyListingTx({
       listingId: "listing:test-1",
@@ -238,16 +271,21 @@ describe("market transaction persistence", () => {
     });
 
     expect(result.isErr()).toBe(true);
-    expect(state.currencies.get("buyer-1")?.balances).toEqual({ coins: 500 });
-    expect(state.currencies.get("seller-1")).toBeUndefined();
-    expect(state.inventories.get("buyer-1")).toBeUndefined();
+    expect(
+      (state.users.get("buyer-1")?.[UserCurrency.name] as { balances?: unknown }).balances,
+    ).toEqual({ coins: 500 });
+    expect(state.users.get("seller-1")).toBeUndefined();
+    expect((state.users.get("buyer-1")?.[UserInventory.name] as unknown) ?? null).toBeNull();
     expect(state.listings.get("listing:test-1")).toMatchObject({ quantity: 50, version: 0 });
   });
 
   test("buyListingTx aborts all writes when buyer inventory grant fails", async () => {
     state.failBuyerInventory = true;
     state.listings.set("listing:test-1", makeListing());
-    state.currencies.set("buyer-1", { _id: "buyer-1", balances: { coins: 500 } });
+    state.users.set("buyer-1", {
+      _id: "buyer-1",
+      [UserCurrency.name]: { balances: { coins: 500 } },
+    });
 
     const result = await buyListingTx({
       listingId: "listing:test-1",
@@ -257,9 +295,11 @@ describe("market transaction persistence", () => {
     });
 
     expect(result.isErr()).toBe(true);
-    expect(state.currencies.get("buyer-1")?.balances).toEqual({ coins: 500 });
-    expect(state.currencies.get("seller-1")).toBeUndefined();
-    expect(state.inventories.get("buyer-1")).toBeUndefined();
+    expect(
+      (state.users.get("buyer-1")?.[UserCurrency.name] as { balances?: unknown }).balances,
+    ).toEqual({ coins: 500 });
+    expect(state.users.get("seller-1")).toBeUndefined();
+    expect((state.users.get("buyer-1")?.[UserInventory.name] as unknown) ?? null).toBeNull();
     expect(state.listings.get("listing:test-1")).toMatchObject({ quantity: 50, version: 0 });
   });
 
@@ -270,15 +310,15 @@ describe("market transaction persistence", () => {
     const result = await cancelListingTx({ listingId: "listing:test-1", actorId: "seller-1" });
 
     expect(result.isErr()).toBe(true);
-    expect(state.inventories.get("seller-1")).toBeUndefined();
+    expect(state.users.get("seller-1")).toBeUndefined();
     expect(state.listings.get("listing:test-1")).toMatchObject({ status: "active", version: 0 });
   });
 
   test("returns TRANSACTION_UNSUPPORTED without mutating state when Mongo cannot transact", async () => {
     state.supportsTransactions = false;
-    state.inventories.set("seller-1", {
+    state.users.set("seller-1", {
       _id: "seller-1",
-      inventory: { slots: { wood: { qty: 10 } } },
+      [UserInventory.name]: { slots: { wood: { qty: 10 } } },
     });
 
     const result = await createListingTx({ listing: makeListing({ quantity: 4 }), config: cfg });
@@ -286,7 +326,7 @@ describe("market transaction persistence", () => {
     expect(result.isErr()).toBe(true);
     expect(result.error).toBeInstanceOf(MarketPersistenceError);
     expect(result.error.code).toBe("TRANSACTION_UNSUPPORTED");
-    expect(state.inventories.get("seller-1")?.inventory).toEqual({
+    expect(state.users.get("seller-1")?.[UserInventory.name]).toEqual({
       slots: { wood: { qty: 10 } },
     });
     expect(state.listings.size).toBe(0);

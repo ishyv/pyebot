@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { UserCurrency } from "@/components/economy/wallet";
 import { User } from "@/components/entities";
-import { UserCurrency } from "@/components/user-currency";
 import { UserFactory } from "@/components/user-factory";
 import { locks } from "@/core/state";
 import type { EntityComponent, EntityKind } from "@/framework";
@@ -130,7 +130,9 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
 
 function wallet(coins = 0, scrip = 0) {
   return {
-    [UserCurrency.collection]: { [USER]: { balances: { coins, scrip }, bankBalances: {} } },
+    [User.collection]: {
+      [USER]: { [UserCurrency.name]: { balances: { coins, scrip }, bankBalances: {} } },
+    },
   };
 }
 
@@ -154,6 +156,22 @@ function factoryWithLumber(
       },
     },
   };
+}
+
+function seed(...parts: Record<string, Record<string, unknown>>[]) {
+  const merged: Record<string, Record<string, unknown>> = {};
+  for (const part of parts) {
+    for (const [collection, docs] of Object.entries(part)) {
+      merged[collection] ??= {};
+      for (const [id, doc] of Object.entries(docs)) {
+        merged[collection][id] = {
+          ...((merged[collection][id] as Record<string, unknown> | undefined) ?? {}),
+          ...(doc as Record<string, unknown>),
+        };
+      }
+    }
+  }
+  return merged;
 }
 
 function interaction(customId: string, values: string[] = [], fields?: Record<string, string>) {
@@ -186,12 +204,12 @@ function interaction(customId: string, values: string[] = [], fields?: Record<st
 
 describe("tycoon dashboard handlers", () => {
   test("collect-ready button collects and refreshes the same console", async () => {
-    const ctx = makeCtx({ ...wallet(0, 0), ...factoryWithLumber() });
+    const ctx = makeCtx(seed(wallet(0, 0), factoryWithLumber()));
     const i = interaction("tycoon:collect:");
 
     await handleCollect(i as never, {}, ctx);
 
-    const walletDoc = await ctx.get(USER, UserCurrency);
+    const walletDoc = await ctx.of(User, USER).peek(UserCurrency);
     expect(walletDoc?.balances.scrip).toBeGreaterThan(0);
     expect(i.calls.editReply).toBe(1);
     expect(i.calls.followUp).toBe(1);
@@ -209,7 +227,7 @@ describe("tycoon dashboard handlers", () => {
   });
 
   test("expand select automates an owned line", async () => {
-    const ctx = makeCtx({ ...wallet(10_000, 0), ...factoryWithLumber() });
+    const ctx = makeCtx(seed(wallet(10_000, 0), factoryWithLumber()));
     const i = interaction("tycoon:expand:", ["automate:lumber_mill"]);
 
     await handleExpandSelect(i as never, {}, ctx);
@@ -220,7 +238,7 @@ describe("tycoon dashboard handlers", () => {
   });
 
   test("output select toggles sell and stockpile mode", async () => {
-    const ctx = makeCtx({ ...wallet(0, 0), ...factoryWithLumber() });
+    const ctx = makeCtx(seed(wallet(0, 0), factoryWithLumber()));
     const i = interaction("tycoon:mode:", ["lumber_mill:stockpile"]);
 
     await handleModeSelect(i as never, {}, ctx);
@@ -242,7 +260,7 @@ describe("tycoon dashboard handlers", () => {
   });
 
   test("next-action button upgrades a stage in one tap", async () => {
-    const ctx = makeCtx({ ...wallet(5000, 0), ...factoryWithLumber() });
+    const ctx = makeCtx(seed(wallet(5000, 0), factoryWithLumber()));
     const i = interaction("tycoon:do-upgrade:lumber_mill:refinery");
 
     await handleDoUpgrade(i as never, { line: "lumber_mill", stage: "refinery" }, ctx);
@@ -278,7 +296,7 @@ describe("tycoon dashboard handlers", () => {
 
     await handleExchangeSubmit(i as never, {}, ctx);
 
-    const walletDoc = await ctx.get(USER, UserCurrency);
+    const walletDoc = await ctx.of(User, USER).peek(UserCurrency);
     expect(walletDoc?.balances.scrip).toBe(300);
     expect(walletDoc?.balances.coins).toBeGreaterThan(0);
     expect(i.calls.editReply).toBe(1);

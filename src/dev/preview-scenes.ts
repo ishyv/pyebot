@@ -12,10 +12,10 @@
  * its render output, then run `bun run scenes:dump`.
  */
 
+import { UserCurrency } from "@/components/economy/wallet";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
 import { RpgProfile } from "@/components/rpg/profile";
-import { UserCurrency } from "@/components/user-currency";
 import { UserFactory } from "@/components/user-factory";
 import { renderDashboard } from "@/features/tycoon/dashboard";
 import type { EntityComponent, EntityKind } from "@/framework";
@@ -135,21 +135,21 @@ export const PREVIEW_SCENES: readonly PreviewScene[] = [
     id: "tycoon-empty",
     label: "tycoon · first run (no lines)",
     build: tycoon({
-      [UserCurrency.collection]: {
-        [USER]: { balances: { coins: 500, scrip: 0 }, bankBalances: {} },
+      [User.collection]: {
+        [USER]: {
+          [UserCurrency.name]: { balances: { coins: 500, scrip: 0 }, bankBalances: {} },
+          [UserFactory.name]: { lines: {}, lifetimeScrip: 0 },
+        },
       },
-      [User.collection]: { [USER]: { [UserFactory.name]: { lines: {}, lifetimeScrip: 0 } } },
     }),
   },
   {
     id: "tycoon-midgame",
     label: "tycoon · mid-game (ready + bottleneck)",
     build: tycoon({
-      [UserCurrency.collection]: {
-        [USER]: { balances: { coins: 8300, scrip: 1240 }, bankBalances: {} },
-      },
       [User.collection]: {
         [USER]: {
+          [UserCurrency.name]: { balances: { coins: 8300, scrip: 1240 }, bankBalances: {} },
           [UserFactory.name]: {
             lines: {
               iron_works: line({
@@ -172,11 +172,9 @@ export const PREVIEW_SCENES: readonly PreviewScene[] = [
     id: "tycoon-capped",
     label: "tycoon · storage full (manual cap)",
     build: tycoon({
-      [UserCurrency.collection]: {
-        [USER]: { balances: { coins: 400, scrip: 0 }, bankBalances: {} },
-      },
       [User.collection]: {
         [USER]: {
+          [UserCurrency.name]: { balances: { coins: 400, scrip: 0 }, bankBalances: {} },
           [UserInventory.name]: { slots: {} },
           [UserFactory.name]: {
             lines: { lumber_mill: line({ agoHours: 100 }) },

@@ -2,13 +2,14 @@
  * Tests for economy quests (acceptQuest, progressQuest, claimRewards, getActiveQuests).
  *
  * Quest progress lives on the User entity (`QuestLog` component); the test ctx
- * backs `ctx.of(User, id)` with an in-memory map. `adjustBalance` (used by
- * claimRewards) still reads the wallet through the legacy `get/ensure/patch`
- * surface, so the ctx mock implements both.
+ * backs `ctx.of(User, id)` with in-memory quest and wallet maps.
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
 import { QuestLog, type QuestLogValue } from "@/components/economy/quests";
+import { UserCurrency } from "@/components/economy/wallet";
+import type { User } from "@/components/entities";
+import type { EntityComponent } from "@/framework";
 import type { Ctx } from "@/framework/types";
 import {
   acceptQuest,
@@ -37,35 +38,41 @@ function makeCtx() {
     logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
     interaction: null,
     emit: async () => {},
-    of(_kind: unknown, id: string) {
+    of(_kind: typeof User, id: string) {
       return {
-        async get(component: unknown) {
-          if (component !== QuestLog) throw new Error("unexpected component in test ctx");
-          return logs.get(id) ?? QuestLog.schema.parse({});
+        async get<T>(component: EntityComponent<T>) {
+          if (component === QuestLog) return (logs.get(id) ?? QuestLog.schema.parse({})) as T;
+          if (component === UserCurrency) {
+            wallets[id] ??= { coins: 1000 };
+            return { balances: wallets[id], bankBalances: {} } as T;
+          }
+          return component.schema.parse({});
         },
-        async update(component: unknown, patch: unknown) {
+        async update<T>(
+          component: EntityComponent<T>,
+          patch: Partial<T> | ((current: T) => Partial<T>),
+        ) {
+          if (component === UserCurrency) {
+            wallets[id] ??= { coins: 1000 };
+            const current = { balances: wallets[id], bankBalances: {} } as T;
+            const partial = typeof patch === "function" ? patch(current) : patch;
+            const balances = (partial as { balances?: Record<string, number> }).balances;
+            if (balances) wallets[id] = balances;
+            return;
+          }
           if (component !== QuestLog) throw new Error("unexpected component in test ctx");
-          const current = logs.get(id) ?? QuestLog.schema.parse({});
+          const current = (logs.get(id) ?? QuestLog.schema.parse({})) as T;
           const partial = typeof patch === "function" ? patch(current) : patch;
-          logs.set(id, { ...current, ...(partial as Partial<QuestLogValue>) });
+          logs.set(id, { ...(current as QuestLogValue), ...(partial as Partial<QuestLogValue>) });
         },
       };
     },
-    get: async (id: string) => {
-      const bal = wallets[id];
-      return bal ? ({ balances: bal, bankBalances: {} } as never) : null;
+    get: async () => null,
+    ensure: async () => {
+      throw new Error("legacy ensure should not be used in quest tests");
     },
-    ensure: async (id: string) => {
-      if (!wallets[id]) wallets[id] = { coins: 1000 };
-      return { balances: wallets[id], bankBalances: {} } as never;
-    },
-    patch: async (id: string, _: unknown, fn: unknown) => {
-      if (!wallets[id]) wallets[id] = { coins: 1000 };
-      const cur = { balances: wallets[id], bankBalances: {} };
-      const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
-        balances?: Record<string, number>;
-      };
-      if (patch.balances) wallets[id] = patch.balances;
+    patch: async () => {
+      throw new Error("legacy patch should not be used in quest tests");
     },
     set: async () => {},
     delete: async () => {},

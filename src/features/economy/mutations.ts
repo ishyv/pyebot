@@ -7,8 +7,8 @@
  * caught at the interaction boundary.
  */
 
-import { EconomyAccount } from "@/components/economy-account";
-import { UserCurrency } from "@/components/user-currency";
+import { EconomyAccount, UserCurrency } from "@/components/economy/wallet";
+import { User } from "@/components/entities";
 import type { Ctx } from "@/framework/types";
 
 export class MutationError extends Error {
@@ -28,7 +28,7 @@ export class MutationError extends Error {
 
 /** Read a user's balance for a currency. Returns 0 when no wallet document exists. */
 export async function getBalance(ctx: Ctx, userId: string, currencyId: string): Promise<number> {
-  const wallet = await ctx.get(userId, UserCurrency);
+  const wallet = await ctx.of(User, userId).peek(UserCurrency);
   return wallet?.balances[currencyId] ?? 0;
 }
 
@@ -48,7 +48,7 @@ export async function adjustBalance(
     throw new MutationError("INVALID_CURRENCY", `Invalid currency ID: "${currencyId}"`);
   }
 
-  const wallet = await ctx.ensure(userId, UserCurrency);
+  const wallet = await ctx.of(User, userId).get(UserCurrency);
   const current = wallet.balances[currencyId] ?? 0;
   const next = current + delta;
 
@@ -60,7 +60,7 @@ export async function adjustBalance(
   }
 
   const final = options?.allowDebt ? next : Math.max(next, 0);
-  await ctx.patch(userId, UserCurrency, (w) => ({
+  await ctx.of(User, userId).update(UserCurrency, (w) => ({
     balances: { ...w.balances, [currencyId]: final },
   }));
   return final;
@@ -72,7 +72,7 @@ export async function getBankBalance(
   userId: string,
   currencyId: string,
 ): Promise<number> {
-  const wallet = await ctx.get(userId, UserCurrency);
+  const wallet = await ctx.of(User, userId).peek(UserCurrency);
   return wallet?.bankBalances[currencyId] ?? 0;
 }
 
@@ -87,14 +87,14 @@ export async function deposit(
   amount: number,
 ): Promise<{ handBalance: number; bankBalance: number }> {
   if (amount <= 0) throw new MutationError("INVALID_AMOUNT", "Deposit amount must be positive");
-  const wallet = await ctx.ensure(userId, UserCurrency);
+  const wallet = await ctx.of(User, userId).get(UserCurrency);
   const hand = wallet.balances[currencyId] ?? 0;
   if (hand < amount) {
     throw new MutationError("INSUFFICIENT_FUNDS", `Insufficient funds: balance is ${hand}`);
   }
   const handBalance = hand - amount;
   const bankBalance = (wallet.bankBalances[currencyId] ?? 0) + amount;
-  await ctx.patch(userId, UserCurrency, (w) => ({
+  await ctx.of(User, userId).update(UserCurrency, (w) => ({
     balances: { ...w.balances, [currencyId]: handBalance },
     bankBalances: { ...w.bankBalances, [currencyId]: bankBalance },
   }));
@@ -112,14 +112,14 @@ export async function withdraw(
   amount: number,
 ): Promise<{ handBalance: number; bankBalance: number }> {
   if (amount <= 0) throw new MutationError("INVALID_AMOUNT", "Withdrawal amount must be positive");
-  const wallet = await ctx.ensure(userId, UserCurrency);
+  const wallet = await ctx.of(User, userId).get(UserCurrency);
   const bank = wallet.bankBalances[currencyId] ?? 0;
   if (bank < amount) {
     throw new MutationError("INSUFFICIENT_FUNDS", `Insufficient bank funds: balance is ${bank}`);
   }
   const bankBalance = bank - amount;
   const handBalance = (wallet.balances[currencyId] ?? 0) + amount;
-  await ctx.patch(userId, UserCurrency, (w) => ({
+  await ctx.of(User, userId).update(UserCurrency, (w) => ({
     balances: { ...w.balances, [currencyId]: handBalance },
     bankBalances: { ...w.bankBalances, [currencyId]: bankBalance },
   }));
@@ -148,15 +148,15 @@ export async function transfer(
   }
 
   const [senderAccount, recipientAccount] = await Promise.all([
-    ctx.ensure(senderId, EconomyAccount),
-    ctx.ensure(recipientId, EconomyAccount),
+    ctx.of(User, senderId).get(EconomyAccount),
+    ctx.of(User, recipientId).get(EconomyAccount),
   ]);
   if (senderAccount.status !== "ok")
     throw new MutationError("ACCOUNT_INACTIVE", "Sender account is not active");
   if (recipientAccount.status !== "ok")
     throw new MutationError("ACCOUNT_INACTIVE", "Recipient account is not active");
 
-  const senderWallet = await ctx.ensure(senderId, UserCurrency);
+  const senderWallet = await ctx.of(User, senderId).get(UserCurrency);
   const senderCurrent = senderWallet.balances[currencyId] ?? 0;
   if (senderCurrent < amount) {
     throw new MutationError(

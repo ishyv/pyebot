@@ -1,4 +1,5 @@
-import { UserCurrency } from "@/components/user-currency";
+import { UserCurrency } from "@/components/economy/wallet";
+import { User } from "@/components/entities";
 import { ensureAccount } from "@/features/economy/account";
 import {
   deposit,
@@ -42,7 +43,7 @@ async function handleBalance(
   const { ctx, userId } = c;
   await ensureAccount(ctx, userId);
 
-  const wallet = await ctx.get(userId, UserCurrency);
+  const wallet = await ctx.of(User, userId).peek(UserCurrency);
   const balances = wallet?.balances ?? {};
   const bankBalances = wallet?.bankBalances ?? {};
 

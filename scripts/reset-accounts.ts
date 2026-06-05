@@ -1,6 +1,6 @@
 /**
  * Dev script — wipes all per-user gameplay data (economy, RPG, tycoon, market,
- * quests, achievements). Preserves moderation/support state on user documents,
+ * quests, achievements). Preserves moderation/support data on user documents,
  * ticket state, guild config (guilds), and feature toggles (guild_features).
  *
  * Most gameplay state still lives in legacy component collections, while
@@ -15,12 +15,20 @@ import { disconnectDb, getDb } from "../src/core/db";
 
 // Per-user gameplay component collections. Moderation/support state and guild
 // documents are intentionally excluded.
-const GAMEPLAY_COLLECTIONS = ["economy_accounts", "user_currencies", "market_listings"] as const;
+const GAMEPLAY_COLLECTIONS = ["market_listings"] as const;
 
 const ENTITY_FIELD_RESETS = [
   {
     collection: "users",
-    fields: ["inventory", "rpgProfile", "factory", "questLog", "achievements"],
+    fields: [
+      "currency",
+      "economyAccount",
+      "inventory",
+      "rpgProfile",
+      "factory",
+      "questLog",
+      "achievements",
+    ],
   },
 ] as const;
 
