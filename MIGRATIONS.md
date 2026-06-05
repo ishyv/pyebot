@@ -24,7 +24,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 | economy/achievements | `AchievementProgress` (`achievement_progress`), `UnlockedAchievements` (`unlocked_achievements`) | `User` (confirm id shape) | medium | ⬜ todo |
 | rpg/profile | `RpgProfile` (`rpg_profiles`) | `User` | medium | ✅ 2026-06-05 2014412 |
 | rpg/inventory | `UserInventory` (`user_inventories`) | `User` | easy | ✅ 2026-06-05 95fae86 |
-| tycoon | `UserFactory` (`user_factories`) | `User` | medium | 🚧 Hyv 2026-06-04 |
+| tycoon | `UserFactory` (`user_factories`) | `User` | medium | ✅ 2026-06-05 bd3a6bc |
 | moderation/sanctions | `UserSanctions` (`user_sanctions`) | `User` | medium | ⬜ todo |
 | moderation/banned-images | `BannedImage` (`banned_images`) | `Guild` or synthetic (repo + webapp + CLI surfaces) | hard | ⬜ todo |
 | tickets | `UserTickets` (`user_tickets`), `Ticket` (`tickets`) | `User` + new `Ticket` kind | hard | ⬜ todo |
