@@ -1,54 +1,39 @@
 /**
- * Dev script — wipes all user economy + RPG data from the database.
- * Preserves moderation data (warns, sanction_history) and guild docs.
+ * Dev script — wipes all per-user gameplay data (economy, RPG, tycoon, market,
+ * quests, achievements). Preserves moderation/support data (user_sanctions,
+ * user_tickets), guild config (guilds), and feature toggles (guild_features).
  *
- * Usage:
+ * There is no shared "users" document — each concern is its own component
+ * collection — so this clears those collections directly. (An earlier version of
+ * this script targeted a `users` document and camelCase collections that never
+ * existed; it was a silent no-op.)
+ *
  *   bun scripts/reset-accounts.ts
- *   bun scripts/reset-accounts.ts --hard   # deletes entire user documents
  */
 
 import "dotenv/config";
 import { disconnectDb, getDb } from "../src/core/db";
 
-const HARD = process.argv.includes("--hard");
+// Per-user gameplay component collections. Moderation/support collections
+// (user_sanctions, user_tickets) and guild documents are intentionally excluded.
+const GAMEPLAY_COLLECTIONS = [
+  "economy_accounts",
+  "user_currencies",
+  "user_inventories",
+  "rpg_profiles",
+  "user_factories",
+  "quest_progress",
+  "achievement_progress",
+  "unlocked_achievements",
+  "market_listings",
+] as const;
 
 async function main() {
   const db = await getDb();
-
-  if (HARD) {
-    // Nuke every user document entirely
-    const result = await db.collection("users").deleteMany({});
-    console.log(`[reset] Deleted ${result.deletedCount} user documents.`);
-  } else {
-    // Soft reset: zero out economy + RPG, keep warns/sanctions/tickets
-    const result = await db.collection("users").updateMany(
-      {},
-      {
-        $unset: {
-          economyAccount: "",
-          rpgProfile: "",
-          inventory: "",
-          currency: "",
-          minigames: "",
-        },
-      },
-    );
-    console.log(`[reset] Soft-reset ${result.modifiedCount} user documents.`);
+  for (const name of GAMEPLAY_COLLECTIONS) {
+    const result = await db.collection(name).deleteMany({});
+    console.log(`[reset] ${name}: deleted ${result.deletedCount}`);
   }
-
-  // Also clear market listings and quests so they don't reference wiped users
-  const market = await db.collection("marketListings").deleteMany({});
-  console.log(`[reset] Deleted ${market.deletedCount} market listings.`);
-
-  const quests = await db.collection("questProgress").deleteMany({});
-  console.log(`[reset] Deleted ${quests.deletedCount} quest progress docs.`);
-
-  const achievementProgress = await db.collection("achievementProgress").deleteMany({});
-  const achievementUnlocks = await db.collection("achievementUnlocks").deleteMany({});
-  console.log(
-    `[reset] Deleted ${achievementProgress.deletedCount} achievement progress, ${achievementUnlocks.deletedCount} unlocks.`,
-  );
-
   await disconnectDb();
   console.log("[reset] Done.");
 }
