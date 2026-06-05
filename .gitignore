@@ -18,6 +18,8 @@ coverage/
 # Superpowers specs, plans, and design docs
 docs/superpowers/
 
+# Local Agent Collab Protocol workspace
+acp/
 
 # Local refactor planning scratchpad
 plans/
