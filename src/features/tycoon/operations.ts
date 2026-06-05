@@ -10,6 +10,7 @@
  * is guarded by a per-(user, line) lock — the same pattern quest-claim uses.
  */
 
+import { User } from "@/components/entities";
 import { type LineState, UserFactory } from "@/components/user-factory";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { adjustBalance, getBalance, MutationError } from "@/features/economy/mutations";
@@ -63,7 +64,8 @@ export async function charter(
   lineId: LineId,
 ): Promise<Result<{ charterCost: number }, TycoonError>> {
   const def = LINES[lineId];
-  const factory = await ctx.ensure(userId, UserFactory);
+  const u = ctx.of(User, userId);
+  const factory = await u.get(UserFactory);
   if (factory.lines[lineId]) {
     return ErrResult(new TycoonError("ALREADY_OWNED", `You already own ${def.name}.`));
   }
@@ -74,7 +76,7 @@ export async function charter(
     return ErrResult(toFundsError(err, def.charterCost));
   }
 
-  await ctx.patch(userId, UserFactory, (cur) => ({
+  await u.update(UserFactory, (cur) => ({
     lines: {
       ...cur.lines,
       [lineId]: {
@@ -97,7 +99,8 @@ export async function upgrade(
   stage: StageKind,
 ): Promise<Result<{ cost: number; newLevel: number }, TycoonError>> {
   const def = LINES[lineId];
-  const factory = await ctx.ensure(userId, UserFactory);
+  const u = ctx.of(User, userId);
+  const factory = await u.get(UserFactory);
   const line = factory.lines[lineId];
   if (!line) return ErrResult(new TycoonError("NOT_OWNED", `You don't own ${def.name} yet.`));
 
@@ -111,7 +114,7 @@ export async function upgrade(
   }
 
   const newLevel = currentLevel + 1;
-  await ctx.patch(userId, UserFactory, (cur) => {
+  await u.update(UserFactory, (cur) => {
     const cl = cur.lines[lineId];
     if (!cl) return {};
     return {
@@ -152,7 +155,7 @@ export async function collect(
   }
   try {
     const def = LINES[lineId];
-    const factory = await ctx.ensure(userId, UserFactory);
+    const factory = await ctx.of(User, userId).get(UserFactory);
     const line = factory.lines[lineId];
     if (!line) return ErrResult(new TycoonError("NOT_OWNED", `You don't own ${def.name} yet.`));
 
@@ -220,7 +223,7 @@ async function resetAnchor(
   now: number,
   scripEarned: number,
 ): Promise<void> {
-  await ctx.patch(userId, UserFactory, (cur) => {
+  await ctx.of(User, userId).update(UserFactory, (cur) => {
     const cl = cur.lines[lineId];
     if (!cl) return {};
     return {
@@ -269,24 +272,24 @@ export function coinsInvested(lineId: LineId, line: LineState): number {
 /** Net worth for Magnates = lifetime scrip + current scrip value + invested coins. */
 export async function netWorth(ctx: Ctx, userId: string): Promise<number> {
   const [factory, currentScrip] = await Promise.all([
-    ctx.get(userId, UserFactory),
+    ctx.of(User, userId).get(UserFactory),
     getBalance(ctx, userId, "scrip"),
   ]);
-  const invested = Object.entries(factory?.lines ?? {}).reduce((sum, [lineId, line]) => {
+  const invested = Object.entries(factory.lines).reduce((sum, [lineId, line]) => {
     const parsed = parseLineId(lineId);
     return parsed ? sum + coinsInvested(parsed, line) : sum;
   }, 0);
-  return (factory?.lifetimeScrip ?? 0) + currentScrip * SCRIP_TO_COINS_RATE + invested;
+  return factory.lifetimeScrip + currentScrip * SCRIP_TO_COINS_RATE + invested;
 }
 
 /** Top magnates by read-time net worth, keeping lifetime scrip for display. */
 export async function topMagnates(ctx: Ctx, limit = 10): Promise<MagnateEntry[]> {
-  const rows = await ctx.query(UserFactory);
+  const rows = await ctx.select(UserFactory).run();
   const ranked = await Promise.all(
     rows.map(async (r) => ({
-      userId: r._id,
-      netWorth: await netWorth(ctx, r._id),
-      lifetimeScrip: r.lifetimeScrip,
+      userId: r.id,
+      netWorth: await netWorth(ctx, r.id),
+      lifetimeScrip: r.value.lifetimeScrip,
     })),
   );
   return ranked
@@ -297,8 +300,8 @@ export async function topMagnates(ctx: Ctx, limit = 10): Promise<MagnateEntry[]>
 
 /** A user's lifetime scrip earned (leaderboard metric). */
 export async function getLifetimeScrip(ctx: Ctx, userId: string): Promise<number> {
-  const factory = await ctx.get(userId, UserFactory);
-  return factory?.lifetimeScrip ?? 0;
+  const factory = await ctx.of(User, userId).get(UserFactory);
+  return factory.lifetimeScrip;
 }
 
 /** Coins paid per scrip at the Guild Exchange, before the fee. */
@@ -313,7 +316,8 @@ export async function automate(
   lineId: LineId,
 ): Promise<Result<{ cost: number }, TycoonError>> {
   const def = LINES[lineId];
-  const factory = await ctx.ensure(userId, UserFactory);
+  const u = ctx.of(User, userId);
+  const factory = await u.get(UserFactory);
   const line = factory.lines[lineId];
   if (!line) return ErrResult(new TycoonError("NOT_OWNED", `You don't own ${def.name} yet.`));
   if (line.automated) {
@@ -326,7 +330,7 @@ export async function automate(
     return ErrResult(toFundsError(err, def.automationCost));
   }
 
-  await ctx.patch(userId, UserFactory, (cur) => {
+  await u.update(UserFactory, (cur) => {
     const cl = cur.lines[lineId];
     if (!cl) return {};
     return { lines: { ...cur.lines, [lineId]: { ...cl, automated: true } } };
@@ -342,11 +346,12 @@ export async function setMode(
   mode: "sell" | "stockpile",
 ): Promise<Result<{ mode: "sell" | "stockpile" }, TycoonError>> {
   const def = LINES[lineId];
-  const factory = await ctx.ensure(userId, UserFactory);
+  const u = ctx.of(User, userId);
+  const factory = await u.get(UserFactory);
   const line = factory.lines[lineId];
   if (!line) return ErrResult(new TycoonError("NOT_OWNED", `You don't own ${def.name} yet.`));
 
-  await ctx.patch(userId, UserFactory, (cur) => {
+  await u.update(UserFactory, (cur) => {
     const cl = cur.lines[lineId];
     if (!cl) return {};
     return { lines: { ...cur.lines, [lineId]: { ...cl, mode } } };

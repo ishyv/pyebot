@@ -138,7 +138,7 @@ export const PREVIEW_SCENES: readonly PreviewScene[] = [
       [UserCurrency.collection]: {
         [USER]: { balances: { coins: 500, scrip: 0 }, bankBalances: {} },
       },
-      [UserFactory.collection]: { [USER]: { lines: {}, lifetimeScrip: 0 } },
+      [User.collection]: { [USER]: { [UserFactory.name]: { lines: {}, lifetimeScrip: 0 } } },
     }),
   },
   {
@@ -148,17 +148,22 @@ export const PREVIEW_SCENES: readonly PreviewScene[] = [
       [UserCurrency.collection]: {
         [USER]: { balances: { coins: 8300, scrip: 1240 }, bankBalances: {} },
       },
-      [UserFactory.collection]: {
+      [User.collection]: {
         [USER]: {
-          lines: {
-            iron_works: line({ levels: { extractor: 7, refinery: 4, assembler: 7 }, agoHours: 6 }),
-            lumber_mill: line({
-              levels: { extractor: 5, refinery: 5, assembler: 5 },
-              automated: true,
-              agoHours: 30,
-            }),
+          [UserFactory.name]: {
+            lines: {
+              iron_works: line({
+                levels: { extractor: 7, refinery: 4, assembler: 7 },
+                agoHours: 6,
+              }),
+              lumber_mill: line({
+                levels: { extractor: 5, refinery: 5, assembler: 5 },
+                automated: true,
+                agoHours: 30,
+              }),
+            },
+            lifetimeScrip: 11_260,
           },
-          lifetimeScrip: 11_260,
         },
       },
     }),
@@ -173,13 +178,11 @@ export const PREVIEW_SCENES: readonly PreviewScene[] = [
       [User.collection]: {
         [USER]: {
           [UserInventory.name]: { slots: {} },
+          [UserFactory.name]: {
+            lines: { lumber_mill: line({ agoHours: 100 }) },
+            lifetimeScrip: 600,
+          },
           [RpgProfile.name]: { stashSize: 20 },
-        },
-      },
-      [UserFactory.collection]: {
-        [USER]: {
-          lines: { lumber_mill: line({ agoHours: 100 }) },
-          lifetimeScrip: 600,
         },
       },
     }),

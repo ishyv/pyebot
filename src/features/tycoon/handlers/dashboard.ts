@@ -19,6 +19,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
+import { User } from "@/components/entities";
 import { UserFactory } from "@/components/user-factory";
 import type { Ctx } from "@/framework/types";
 import { coins } from "@/utils/fmt";
@@ -83,8 +84,8 @@ const errOf = (result: { isErr(): boolean; error: { message: string } }): string
   result.isErr() ? result.error.message : null;
 
 async function collectAll(ctx: Ctx, userId: string): Promise<string> {
-  const factory = await ctx.get(userId, UserFactory);
-  const ids = Object.keys(factory?.lines ?? {}) as LineId[];
+  const factory = await ctx.of(User, userId).get(UserFactory);
+  const ids = Object.keys(factory.lines) as LineId[];
   const parts: string[] = [];
   let totalScrip = 0;
   for (const id of ids) {

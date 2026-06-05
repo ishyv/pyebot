@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
 import { RpgProfile } from "@/components/rpg/profile";
+import { UserFactory } from "@/components/user-factory";
 import { locks } from "@/core/state";
 import type { EntityComponent, EntityKind } from "@/framework";
 import type { Component, Ctx } from "@/framework/types";
@@ -35,23 +36,60 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
     return store[coll];
   }
 
+  function readEntity<T>(id: string, component: EntityComponent<T>): T | null {
+    const doc = bucket(component.kind.collection)[id] as Record<string, unknown> | undefined;
+    if (!doc || !(component.name in doc)) return null;
+    return component.schema.parse(doc[component.name]);
+  }
+
+  function writeEntity<T>(
+    id: string,
+    component: EntityComponent<T>,
+    patch: Partial<T> | ((current: T) => Partial<T>),
+  ) {
+    const b = bucket(component.kind.collection);
+    if (!(id in b)) b[id] = { _id: id };
+    const doc = b[id] as Record<string, unknown>;
+    const current = component.schema.parse(doc[component.name] ?? {});
+    const partial = typeof patch === "function" ? patch(current) : patch;
+    doc[component.name] = { ...current, ...partial };
+  }
+
   const ctx = {
-    async get<T>(id: string, component: Component<T>) {
+    async get<T>(id: string, component: Component<T> | EntityComponent<T>) {
+      if ("kind" in component) return readEntity(id, component);
       return (bucket(component.collection)[id] as T) ?? null;
     },
-    async ensure<T>(id: string, component: Component<T>) {
+    async ensure<T>(id: string, component: Component<T> | EntityComponent<T>) {
+      if ("kind" in component) {
+        const existing = readEntity(id, component);
+        if (existing) return existing;
+        writeEntity(id, component, component.schema.parse({}));
+        return readEntity(id, component) as T;
+      }
       const b = bucket(component.collection);
       if (!(id in b)) b[id] = component.schema.parse({});
       return b[id] as T;
     },
-    async set<T>(id: string, component: Component<T>, value: T) {
+    async set<T>(id: string, component: Component<T> | EntityComponent<T>, value: T) {
+      if ("kind" in component) {
+        const b = bucket(component.kind.collection);
+        if (!(id in b)) b[id] = { _id: id };
+        const doc = b[id] as Record<string, unknown>;
+        doc[component.name] = value;
+        return;
+      }
       bucket(component.collection)[id] = value;
     },
     async patch<T>(
       id: string,
-      component: Component<T>,
+      component: Component<T> | EntityComponent<T>,
       patch: Partial<T> | ((current: T) => Partial<T>),
     ) {
+      if ("kind" in component) {
+        writeEntity(id, component, patch);
+        return;
+      }
       const b = bucket(component.collection);
       if (!(id in b)) b[id] = component.schema.parse({});
       const current = b[id] as T;
@@ -79,31 +117,32 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
       return (options?.limit ? entries.slice(0, options.limit) : entries) as never;
     },
     of(kind: EntityKind, id: string) {
-      const entityDoc = () => bucket(kind.collection)[id] as Record<string, unknown> | undefined;
       return {
         async get<T>(component: EntityComponent<T>) {
-          return component.schema.parse(entityDoc()?.[component.name] ?? {});
+          return readEntity(id, component) ?? component.schema.parse({});
         },
         async peek<T>(component: EntityComponent<T>) {
-          const doc = entityDoc();
-          if (!doc || !(component.name in doc)) return null;
-          return component.schema.parse(doc[component.name]);
+          return readEntity(id, component);
         },
         async update<T>(
           component: EntityComponent<T>,
           patch: Partial<T> | ((current: T) => Partial<T>),
         ) {
-          const b = bucket(kind.collection);
-          if (!(id in b)) b[id] = { _id: id };
-          const doc = b[id] as Record<string, unknown>;
-          const current = component.schema.parse(doc[component.name] ?? {});
-          const partial = typeof patch === "function" ? patch(current) : patch;
-          doc[component.name] = { ...current, ...partial };
+          void kind;
+          writeEntity(id, component, patch);
         },
       };
     },
-    select() {
-      throw new Error("select not implemented in tycoon operations test ctx");
+    select<T>(component: EntityComponent<T>) {
+      return {
+        run: async () =>
+          Object.entries(bucket(component.kind.collection))
+            .filter(([, doc]) => component.name in (doc as Record<string, unknown>))
+            .map(([id, doc]) => ({
+              id,
+              value: component.schema.parse((doc as Record<string, unknown>)[component.name]),
+            })),
+      };
     },
     transaction() {
       throw new Error("transaction not implemented in tycoon operations test ctx");
@@ -131,8 +170,8 @@ describe("charter()", () => {
     const res = await charter(ctx, USER, "lumber_mill");
     expect(res.isOk()).toBe(true);
     expect(await getScrip(ctx, USER)).toBe(0);
-    const factory = await ctx.get(USER, (await import("@/components/user-factory")).UserFactory);
-    expect(factory?.lines.lumber_mill?.mode).toBe("sell");
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill?.mode).toBe("sell");
   });
 
   test("fails with INSUFFICIENT_FUNDS when too poor", async () => {
@@ -175,17 +214,23 @@ describe("collect() — sell mode", () => {
   function seededFactory(lastCollectedAt: number) {
     return {
       ...wallet(0, 0),
-      user_factories: {
+      [User.collection]: {
         [USER]: {
-          lines: {
-            lumber_mill: {
-              stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt,
+          [UserFactory.name]: {
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt,
+              },
             },
+            lifetimeScrip: 0,
           },
-          lifetimeScrip: 0,
         },
       },
     };
@@ -232,19 +277,17 @@ function stockpileFactory(stashSize: number) {
       [USER]: {
         [UserInventory.name]: { slots: {} },
         [RpgProfile.name]: { stashSize },
-      },
-    },
-    user_factories: {
-      [USER]: {
-        lines: {
-          lumber_mill: {
-            stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
-            mode: "stockpile",
-            automated: false,
-            lastCollectedAt: 0,
+        [UserFactory.name]: {
+          lines: {
+            lumber_mill: {
+              stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
+              mode: "stockpile",
+              automated: false,
+              lastCollectedAt: 0,
+            },
           },
+          lifetimeScrip: 0,
         },
-        lifetimeScrip: 0,
       },
     },
   };
@@ -272,8 +315,8 @@ describe("collect() — stockpile mode", () => {
     expect(res.isErr()).toBe(true);
     if (res.isErr()) expect(res.error.code).toBe("STASH_FULL");
     // Anchor preserved → a later collect (with room) would still pay out.
-    const factory = await ctx.get(USER, (await import("@/components/user-factory")).UserFactory);
-    expect(factory?.lines.lumber_mill?.lastCollectedAt).toBe(0);
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill?.lastCollectedAt).toBe(0);
   });
 });
 
@@ -296,8 +339,8 @@ describe("setMode()", () => {
     await charter(ctx, USER, "lumber_mill");
     const res = await setMode(ctx, USER, "lumber_mill", "stockpile");
     expect(res.isOk()).toBe(true);
-    const factory = await ctx.get(USER, (await import("@/components/user-factory")).UserFactory);
-    expect(factory?.lines.lumber_mill?.mode).toBe("stockpile");
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill?.mode).toBe("stockpile");
   });
 });
 
@@ -344,17 +387,23 @@ describe("coinsInvested() and netWorth()", () => {
   test("adds lifetime scrip, current scrip, and invested coins", async () => {
     const ctx = makeCtx({
       ...wallet(0, 200),
-      user_factories: {
+      [User.collection]: {
         [USER]: {
-          lines: {
-            lumber_mill: {
-              stages: { extractor: { level: 2 }, refinery: { level: 1 }, assembler: { level: 1 } },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt: 0,
+          [UserFactory.name]: {
+            lines: {
+              lumber_mill: {
+                stages: {
+                  extractor: { level: 2 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
+              },
             },
+            lifetimeScrip: 1000,
           },
-          lifetimeScrip: 1000,
         },
       },
     });
@@ -365,7 +414,7 @@ describe("coinsInvested() and netWorth()", () => {
   test("exchange spending leaves lifetime scrip intact but lowers current-scrip value", async () => {
     const ctx = makeCtx({
       ...wallet(0, 1000),
-      user_factories: { [USER]: { lines: {}, lifetimeScrip: 5000 } },
+      [User.collection]: { [USER]: { [UserFactory.name]: { lines: {}, lifetimeScrip: 5000 } } },
     });
 
     expect(await netWorth(ctx, USER)).toBe(6000);
@@ -383,21 +432,27 @@ describe("topMagnates()", () => {
         mid: { balances: { scrip: 50 }, bankBalances: {} },
         broke: { balances: { scrip: 0 }, bankBalances: {} },
       },
-      user_factories: {
-        rich: { lines: {}, lifetimeScrip: 9000 },
+      [User.collection]: {
+        rich: { [UserFactory.name]: { lines: {}, lifetimeScrip: 9000 } },
         investor: {
-          lines: {
-            silver_forge: {
-              stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
-              mode: "sell",
-              automated: false,
-              lastCollectedAt: 0,
+          [UserFactory.name]: {
+            lines: {
+              silver_forge: {
+                stages: {
+                  extractor: { level: 1 },
+                  refinery: { level: 1 },
+                  assembler: { level: 1 },
+                },
+                mode: "sell",
+                automated: false,
+                lastCollectedAt: 0,
+              },
             },
+            lifetimeScrip: 100,
           },
-          lifetimeScrip: 100,
         },
-        mid: { lines: {}, lifetimeScrip: 500 },
-        broke: { lines: {}, lifetimeScrip: 0 },
+        mid: { [UserFactory.name]: { lines: {}, lifetimeScrip: 500 } },
+        broke: { [UserFactory.name]: { lines: {}, lifetimeScrip: 0 } },
       },
     });
     const top = await topMagnates(ctx, 10);

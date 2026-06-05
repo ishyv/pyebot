@@ -3,9 +3,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { User } from "@/components/entities";
 import { UserCurrency } from "@/components/user-currency";
 import { UserFactory } from "@/components/user-factory";
 import { locks } from "@/core/state";
+import type { EntityComponent, EntityKind } from "@/framework";
 import type { Component, Ctx } from "@/framework/types";
 import {
   handleCollect,
@@ -29,23 +31,60 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
     return store[coll];
   }
 
+  function readEntity<T>(id: string, component: EntityComponent<T>): T | null {
+    const doc = bucket(component.kind.collection)[id] as Record<string, unknown> | undefined;
+    if (!doc || !(component.name in doc)) return null;
+    return component.schema.parse(doc[component.name]);
+  }
+
+  function writeEntity<T>(
+    id: string,
+    component: EntityComponent<T>,
+    patch: Partial<T> | ((current: T) => Partial<T>),
+  ) {
+    const b = bucket(component.kind.collection);
+    if (!(id in b)) b[id] = { _id: id };
+    const doc = b[id] as Record<string, unknown>;
+    const current = component.schema.parse(doc[component.name] ?? {});
+    const partial = typeof patch === "function" ? patch(current) : patch;
+    doc[component.name] = { ...current, ...partial };
+  }
+
   return {
-    async get<T>(id: string, component: Component<T>) {
+    async get<T>(id: string, component: Component<T> | EntityComponent<T>) {
+      if ("kind" in component) return readEntity(id, component);
       return (bucket(component.collection)[id] as T) ?? null;
     },
-    async ensure<T>(id: string, component: Component<T>) {
+    async ensure<T>(id: string, component: Component<T> | EntityComponent<T>) {
+      if ("kind" in component) {
+        const existing = readEntity(id, component);
+        if (existing) return existing;
+        writeEntity(id, component, component.schema.parse({}));
+        return readEntity(id, component) as T;
+      }
       const b = bucket(component.collection);
       if (!(id in b)) b[id] = component.schema.parse({});
       return b[id] as T;
     },
-    async set<T>(id: string, component: Component<T>, value: T) {
+    async set<T>(id: string, component: Component<T> | EntityComponent<T>, value: T) {
+      if ("kind" in component) {
+        const b = bucket(component.kind.collection);
+        if (!(id in b)) b[id] = { _id: id };
+        const doc = b[id] as Record<string, unknown>;
+        doc[component.name] = value;
+        return;
+      }
       bucket(component.collection)[id] = value;
     },
     async patch<T>(
       id: string,
-      component: Component<T>,
+      component: Component<T> | EntityComponent<T>,
       patch: Partial<T> | ((current: T) => Partial<T>),
     ) {
+      if ("kind" in component) {
+        writeEntity(id, component, patch);
+        return;
+      }
       const b = bucket(component.collection);
       if (!(id in b)) b[id] = component.schema.parse({});
       const current = b[id] as T;
@@ -55,6 +94,29 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
     async delete() {},
     async query() {
       return [];
+    },
+    of(kind: EntityKind, id: string) {
+      void kind;
+      return {
+        async get<T>(component: EntityComponent<T>) {
+          return readEntity(id, component) ?? component.schema.parse({});
+        },
+        async peek<T>(component: EntityComponent<T>) {
+          return readEntity(id, component);
+        },
+        async update<T>(
+          component: EntityComponent<T>,
+          patch: Partial<T> | ((current: T) => Partial<T>),
+        ) {
+          writeEntity(id, component, patch);
+        },
+      };
+    },
+    select() {
+      throw new Error("select not implemented in tycoon handler test ctx");
+    },
+    transaction() {
+      throw new Error("transaction not implemented in tycoon handler test ctx");
     },
     async emit() {},
     client: {},
@@ -76,17 +138,19 @@ function factoryWithLumber(
   extra: Partial<{ automated: boolean; mode: "sell" | "stockpile" }> = {},
 ) {
   return {
-    [UserFactory.collection]: {
+    [User.collection]: {
       [USER]: {
-        lines: {
-          lumber_mill: {
-            stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
-            mode: extra.mode ?? "sell",
-            automated: extra.automated ?? false,
-            lastCollectedAt: 0,
+        [UserFactory.name]: {
+          lines: {
+            lumber_mill: {
+              stages: { extractor: { level: 1 }, refinery: { level: 1 }, assembler: { level: 1 } },
+              mode: extra.mode ?? "sell",
+              automated: extra.automated ?? false,
+              lastCollectedAt: 0,
+            },
           },
+          lifetimeScrip: 0,
         },
-        lifetimeScrip: 0,
       },
     },
   };
@@ -139,8 +203,8 @@ describe("tycoon dashboard handlers", () => {
 
     await handleExpandSelect(i as never, {}, ctx);
 
-    const factory = await ctx.get(USER, UserFactory);
-    expect(factory?.lines.lumber_mill).toBeDefined();
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill).toBeDefined();
     expect(i.calls.editReply).toBe(1);
   });
 
@@ -150,8 +214,8 @@ describe("tycoon dashboard handlers", () => {
 
     await handleExpandSelect(i as never, {}, ctx);
 
-    const factory = await ctx.get(USER, UserFactory);
-    expect(factory?.lines.lumber_mill?.automated).toBe(true);
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill?.automated).toBe(true);
     expect(i.calls.editReply).toBe(1);
   });
 
@@ -161,8 +225,8 @@ describe("tycoon dashboard handlers", () => {
 
     await handleModeSelect(i as never, {}, ctx);
 
-    const factory = await ctx.get(USER, UserFactory);
-    expect(factory?.lines.lumber_mill?.mode).toBe("stockpile");
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill?.mode).toBe("stockpile");
     expect(i.calls.editReply).toBe(1);
   });
 
@@ -172,8 +236,8 @@ describe("tycoon dashboard handlers", () => {
 
     await handleDoCharter(i as never, { line: "lumber_mill" }, ctx);
 
-    const factory = await ctx.get(USER, UserFactory);
-    expect(factory?.lines.lumber_mill).toBeDefined();
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill).toBeDefined();
     expect(i.calls.editReply).toBe(1);
   });
 
@@ -183,8 +247,8 @@ describe("tycoon dashboard handlers", () => {
 
     await handleDoUpgrade(i as never, { line: "lumber_mill", stage: "refinery" }, ctx);
 
-    const factory = await ctx.get(USER, UserFactory);
-    expect(factory?.lines.lumber_mill?.stages.refinery.level).toBe(2);
+    const factory = await ctx.of(User, USER).get(UserFactory);
+    expect(factory.lines.lumber_mill?.stages.refinery.level).toBe(2);
     expect(i.calls.editReply).toBe(1);
   });
 

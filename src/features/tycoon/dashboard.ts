@@ -410,7 +410,7 @@ function dashboardRows(
 /** Reads state and renders the full dashboard payload (container + rows). */
 export async function renderDashboard(ctx: Ctx, userId: string) {
   const [factory, scrip, coinBalance, worth, inventory, profile] = await Promise.all([
-    ctx.ensure(userId, UserFactory),
+    ctx.of(User, userId).get(UserFactory),
     getBalance(ctx, userId, "scrip"),
     getBalance(ctx, userId, "coins"),
     netWorth(ctx, userId),

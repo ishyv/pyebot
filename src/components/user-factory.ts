@@ -11,7 +11,8 @@
  */
 
 import { z } from "zod";
-import { component } from "@/framework/component";
+import { User } from "@/components/entities";
+import { defineComponent } from "@/framework";
 
 const StageState = z.object({
   level: z.number().int().min(1).catch(1).default(1),
@@ -33,13 +34,14 @@ const LineState = z.object({
   lastCollectedAt: z.number().int().nonnegative().catch(0).default(0),
 });
 
-export const UserFactory = component({
-  collection: "user_factories",
-  schema: z.object({
+export const UserFactory = defineComponent(
+  User,
+  "factory",
+  z.object({
     lines: z.record(z.string(), LineState).default({}),
     lifetimeScrip: z.number().int().nonnegative().catch(0).default(0),
   }),
-});
+);
 
 export type UserFactoryValue = z.infer<typeof UserFactory.schema>;
 export type LineState = z.infer<typeof LineState>;

@@ -1,4 +1,5 @@
 import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
+import { User } from "@/components/entities";
 import { UserFactory } from "@/components/user-factory";
 import { command } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -97,7 +98,7 @@ async function autocomplete(interaction: AutocompleteInteraction, ctx: Ctx): Pro
   const focused = interaction.options.getFocused().toLowerCase();
   const sub = interaction.options.getSubcommand();
 
-  const owned = (await ctx.get(interaction.user.id, UserFactory))?.lines ?? {};
+  const owned = (await ctx.of(User, interaction.user.id).get(UserFactory)).lines;
   const ids = (Object.keys(LINES) as LineId[]).filter((id) => {
     if (sub === "charter") return !owned[id];
     if (sub === "automate") return Boolean(owned[id]) && !owned[id].automated;
@@ -303,8 +304,8 @@ async function handleCollect(interaction: ChatInputCommandInteraction, ctx: Ctx)
     }
     targets = [lineId];
   } else {
-    const factory = await ctx.get(userId, UserFactory);
-    targets = Object.keys(factory?.lines ?? {}) as LineId[];
+    const factory = await ctx.of(User, userId).get(UserFactory);
+    targets = Object.keys(factory.lines) as LineId[];
   }
 
   if (targets.length === 0) {
