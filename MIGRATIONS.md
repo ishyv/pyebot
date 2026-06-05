@@ -23,7 +23,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 | economy/quests | `QuestProgress` (`quest_progress`) | `User` (id may be `userId:questId` — confirm) | medium | ⬜ todo |
 | economy/achievements | `AchievementProgress` (`achievement_progress`), `UnlockedAchievements` (`unlocked_achievements`) | `User` (confirm id shape) | medium | ⬜ todo |
 | rpg/profile | `RpgProfile` (`rpg_profiles`) | `User` | medium | ⬜ todo |
-| rpg/inventory | `UserInventory` (`user_inventories`) | `User` | easy | ⬜ todo |
+| rpg/inventory | `UserInventory` (`user_inventories`) | `User` | easy | 🚧 Vey 2026-06-05 |
 | tycoon | `UserFactory` (`user_factories`) | `User` | medium | 🚧 Hyv 2026-06-04 |
 | moderation/sanctions | `UserSanctions` (`user_sanctions`) | `User` | medium | ⬜ todo |
 | moderation/banned-images | `BannedImage` (`banned_images`) | `Guild` or synthetic (repo + webapp + CLI surfaces) | hard | ⬜ todo |
