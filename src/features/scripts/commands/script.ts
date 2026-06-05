@@ -11,10 +11,8 @@ import {
 } from "discord.js";
 import {
   SCRIPT_EVENTS,
-  ScriptDefinition,
   type ScriptDefinitionValue,
   type ScriptEvent,
-  scriptId,
 } from "@/components/script-definition";
 import { sessions } from "@/core/state";
 import { command, type RunContext } from "@/framework";
@@ -22,7 +20,7 @@ import { type ContainerChild, container, separator, text, type V2Top, v2Message 
 import { renderCollector, sessionKey } from "../input-collector";
 import { LIBRARY_SCRIPTS } from "../library";
 import { describeTrigger, parseScriptName } from "../model";
-import { saveExistingScript } from "../persistence";
+import { getStoredScript, listGuildScripts, saveExistingScript } from "../persistence";
 import { resolveRunnable } from "../resolve";
 import { scriptRoutes } from "../routes";
 import { executeRunnable, scanInputsFromRunnable } from "../run";
@@ -184,7 +182,7 @@ async function handleCreate(c: Extract<ScriptCtx, { subcommand: "create" }>): Pr
     );
     return;
   }
-  const existing = await c.ctx.get(scriptId(c.guildId, name), ScriptDefinition);
+  const existing = await getStoredScript(c.ctx, c.guildId, name);
   if (existing) {
     await replyEphemeral(
       c.interaction,
@@ -211,7 +209,7 @@ async function handleEdit(c: Extract<ScriptCtx, { subcommand: "edit" }>): Promis
     );
     return;
   }
-  const def = await c.ctx.get(scriptId(c.guildId, name), ScriptDefinition);
+  const def = await getStoredScript(c.ctx, c.guildId, name);
   if (!def) {
     await replyEphemeral(c.interaction, container("mute", text(`No script named \`${name}\`.`)));
     return;
@@ -260,7 +258,7 @@ async function handleRun(c: Extract<ScriptCtx, { subcommand: "run" }>) {
 
 async function handleList(c: Extract<ScriptCtx, { subcommand: "list" }>) {
   await c.ctx.respond.defer({ visibility: "ephemeral" });
-  const defs = await c.ctx.query(ScriptDefinition, { filter: { guildId: c.guildId } });
+  const defs = await listGuildScripts(c.ctx, c.guildId);
   if (defs.length === 0 && LIBRARY_SCRIPTS.size === 0) {
     return c.info("No scripts yet. Use `/script create` to author one.");
   }
@@ -296,7 +294,7 @@ async function handleDelete(c: Extract<ScriptCtx, { subcommand: "delete" }>): Pr
     );
     return;
   }
-  const def = await c.ctx.get(scriptId(c.guildId, name), ScriptDefinition);
+  const def = await getStoredScript(c.ctx, c.guildId, name);
   if (!def) {
     await replyEphemeral(c.interaction, container("mute", text(`No script named \`${name}\`.`)));
     return;
@@ -326,7 +324,7 @@ async function loadStoredForConfig(
     );
     return null;
   }
-  const def = await ctx.get(scriptId(guildId, name), ScriptDefinition);
+  const def = await getStoredScript(ctx, guildId, name);
   if (!def) {
     await replyEphemeral(interaction, container("mute", text(`No script named \`${name}\`.`)));
     return null;
@@ -341,7 +339,7 @@ async function handleSchedule(c: Extract<ScriptCtx, { subcommand: "schedule" }>)
 
   const hours = c.options.hours;
   const channel = c.options.channel;
-  await saveExistingScript(c.ctx, scriptId(c.guildId, def.name), def, {
+  await saveExistingScript(c.ctx, def, {
     trigger: { kind: "schedule", intervalHours: hours },
     reportChannelId: channel?.id ?? def.reportChannelId,
     scheduleNextRunAt: new Date(Date.now() + hours * 3_600_000),
@@ -365,7 +363,7 @@ async function handleOn(c: Extract<ScriptCtx, { subcommand: "on" }>): Promise<vo
     return;
   }
   const channel = c.options.channel;
-  await saveExistingScript(c.ctx, scriptId(c.guildId, def.name), def, {
+  await saveExistingScript(c.ctx, def, {
     trigger: { kind: "event", event: event as ScriptEvent },
     reportChannelId: channel?.id ?? def.reportChannelId,
     scheduleNextRunAt: null,
@@ -383,7 +381,7 @@ async function handleManual(c: Extract<ScriptCtx, { subcommand: "manual" }>): Pr
   const def = await loadStoredForConfig(c.interaction, c.ctx, c.guildId, name);
   if (!def) return;
 
-  await saveExistingScript(c.ctx, scriptId(c.guildId, def.name), def, {
+  await saveExistingScript(c.ctx, def, {
     trigger: { kind: "manual" },
     scheduleNextRunAt: null,
     updatedAt: new Date(),

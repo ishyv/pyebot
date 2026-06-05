@@ -1,12 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Collection, type Guild } from "discord.js";
-import {
-  ScriptDefinition,
-  type ScriptDefinitionValue,
-  scriptId,
-} from "@/components/script-definition";
+import { GuildScripts, type ScriptDefinitionValue } from "@/components/script-definition";
 import { sessions } from "@/core/state";
-import type { Component, Ctx } from "@/framework/types";
+import type { Ctx } from "@/framework/types";
 import type { InputField } from "./engine";
 import { onBackToInputs, onCollectorRun, onConfirmApply, onModalSubmit } from "./handlers";
 import { type ScriptInputSession, sessionKey } from "./input-collector";
@@ -31,26 +27,29 @@ function script(): ScriptDefinitionValue {
   };
 }
 
-function makeCtx(existing: ScriptDefinitionValue): { ctx: Ctx; writes: unknown[] } {
-  const writes: unknown[] = [];
+function makeCtx(existing: ScriptDefinitionValue): {
+  ctx: Ctx;
+  read: () => ScriptDefinitionValue | undefined;
+} {
+  const entries: Record<string, ScriptDefinitionValue> = { [existing.name]: existing };
   const ctx = {
-    async get<T>(id: string, component: Component<T>) {
-      if (
-        component.collection === ScriptDefinition.collection &&
-        id === scriptId("guild-1", "u-role-count")
-      ) {
-        return existing as T;
-      }
-      return null;
-    },
-    async set<T>(id: string, component: Component<T>, value: T) {
-      writes.push({ id, collection: component.collection, value });
-    },
-    async patch() {
-      throw new Error("ctx.patch should not be used for ScriptDefinition updates");
+    of(_kind: unknown, _id: string) {
+      return {
+        async get(component: unknown) {
+          if (component !== GuildScripts) throw new Error("unexpected component in test ctx");
+          return { entries };
+        },
+        async update(component: unknown, patch: unknown) {
+          if (component !== GuildScripts) throw new Error("unexpected component in test ctx");
+          const partial = typeof patch === "function" ? patch({ entries }) : patch;
+          const next = (partial as { entries: Record<string, ScriptDefinitionValue> }).entries;
+          for (const key of Object.keys(entries)) delete entries[key];
+          Object.assign(entries, next);
+        },
+      };
     },
   } as unknown as Ctx;
-  return { ctx, writes };
+  return { ctx, read: () => entries["u-role-count"] };
 }
 
 function modalSubmit() {
@@ -179,16 +178,15 @@ function payloadText(payload: unknown): string {
 }
 
 describe("ScriptHandlers", () => {
-  test("editing an existing script saves through ctx.set", async () => {
+  test("editing an existing script saves the merged definition", async () => {
     const current = script();
-    const { ctx, writes } = makeCtx(current);
+    const { ctx, read } = makeCtx(current);
     const { interaction, replies } = modalSubmit();
 
     await onModalSubmit(interaction as never, "u-role-count", ctx);
 
-    expect(writes).toHaveLength(1);
-    const write = writes[0] as { value: ScriptDefinitionValue };
-    expect(write.value).toMatchObject({
+    const saved = read();
+    expect(saved).toMatchObject({
       guildId: "guild-1",
       name: "u-role-count",
       description: "new description",
@@ -198,7 +196,7 @@ describe("ScriptHandlers", () => {
       createdAt,
       trigger: { kind: "manual" },
     });
-    expect(write.value.updatedAt.getTime()).toBeGreaterThan(createdAt.getTime());
+    expect(saved?.updatedAt.getTime()).toBeGreaterThan(createdAt.getTime());
     expect(replies).toHaveLength(1);
     expect(JSON.stringify(replies[0])).toContain("Saved");
   });

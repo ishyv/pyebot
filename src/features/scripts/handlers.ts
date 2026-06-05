@@ -7,7 +7,7 @@ import {
   type RoleSelectMenuInteraction,
   type UserSelectMenuInteraction,
 } from "discord.js";
-import { SCRIPT_CAPABILITIES, ScriptDefinition, scriptId } from "@/components/script-definition";
+import { SCRIPT_CAPABILITIES } from "@/components/script-definition";
 import { sessions } from "@/core/state";
 import { defineHandlers, listen, routeHandlers } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -22,7 +22,7 @@ import {
   sessionKey,
 } from "./input-collector";
 import { parseCapabilities } from "./model";
-import { saveExistingScript } from "./persistence";
+import { deleteStoredScript, getStoredScript, putScript, saveExistingScript } from "./persistence";
 import { resolveRunnable } from "./resolve";
 import { scriptRoutes } from "./routes";
 import { executeRunnable } from "./run";
@@ -146,18 +146,17 @@ export async function onModalSubmit(
     return;
   }
 
-  const id = scriptId(guildId, name);
-  const existing = await ctx.get(id, ScriptDefinition);
+  const existing = await getStoredScript(ctx, guildId, name);
   const now = new Date();
   if (existing) {
-    await saveExistingScript(ctx, id, existing, {
+    await saveExistingScript(ctx, existing, {
       source,
       description,
       capabilities: caps.value,
       updatedAt: now,
     });
   } else {
-    await ctx.set(id, ScriptDefinition, {
+    await putScript(ctx, {
       guildId,
       name,
       description,
@@ -373,6 +372,6 @@ export async function onConfirmDelete(
   const guildId = interaction.guildId;
   if (!guildId) return;
 
-  await ctx.delete(scriptId(guildId, name), ScriptDefinition);
+  await deleteStoredScript(ctx, guildId, name);
   await interaction.update(v2Message(container("ok", text(`Deleted \`${name}\`.`))));
 }

@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { Client } from "discord.js";
-import { ScriptDefinition, type ScriptDefinitionValue } from "@/components/script-definition";
-import type { Component, ComponentRecord, Ctx } from "@/framework/types";
+import { GuildScripts, type ScriptDefinitionValue } from "@/components/script-definition";
+import type { Ctx } from "@/framework/types";
 import { runScheduleSweep } from "./schedule";
 
 const dueAt = new Date("2026-06-03T12:00:00.000Z");
 
-function scheduledScript(): ComponentRecord<ScriptDefinitionValue> {
+function scheduledScript(): ScriptDefinitionValue {
   return {
-    _id: "guild-1:u-role-count",
     guildId: "guild-1",
     name: "u-role-count",
     description: "",
@@ -24,42 +23,47 @@ function scheduledScript(): ComponentRecord<ScriptDefinitionValue> {
   };
 }
 
-function makeCtx(def: ComponentRecord<ScriptDefinitionValue>): { ctx: Ctx; writes: unknown[] } {
-  const writes: unknown[] = [];
+/** Backs select() (the scheduler's cross-guild scan) and of().update (the write-back). */
+function makeCtx(def: ScriptDefinitionValue): { ctx: Ctx; read: () => ScriptDefinitionValue } {
+  const entries: Record<string, ScriptDefinitionValue> = { [def.name]: def };
   const ctx = {
-    async query<T>(component: Component<T>) {
-      if (component.collection === ScriptDefinition.collection) return [def] as T[];
-      return [];
+    select() {
+      return { run: async () => [{ id: def.guildId, value: { entries } }] };
     },
-    async set<T>(id: string, component: Component<T>, value: T) {
-      writes.push({ id, collection: component.collection, value });
-    },
-    async patch() {
-      throw new Error("ctx.patch should not be used for ScriptDefinition updates");
+    of(_kind: unknown, _id: string) {
+      return {
+        async get() {
+          return { entries };
+        },
+        async update(component: unknown, patch: unknown) {
+          if (component !== GuildScripts) throw new Error("unexpected component in test ctx");
+          const partial = typeof patch === "function" ? patch({ entries }) : patch;
+          Object.assign(
+            entries,
+            (partial as { entries: Record<string, ScriptDefinitionValue> }).entries,
+          );
+        },
+      };
     },
   } as unknown as Ctx;
-  return { ctx, writes };
+  return { ctx, read: () => entries["u-role-count"] };
 }
 
 describe("runScheduleSweep", () => {
-  test("advances scheduled scripts through ctx.set", async () => {
-    const def = scheduledScript();
-    const { ctx, writes } = makeCtx(def);
+  test("advances scheduled scripts past now", async () => {
+    const { ctx, read } = makeCtx(scheduledScript());
     const client = { guilds: { cache: { get: () => undefined } } } as unknown as Client;
 
     await runScheduleSweep(client, ctx);
 
-    expect(writes).toHaveLength(1);
-    const write = writes[0] as { id: string; collection: string; value: ScriptDefinitionValue };
-    expect(write.id).toBe(def._id);
-    expect(write.collection).toBe(ScriptDefinition.collection);
-    expect(write.value).toMatchObject({
+    const saved = read();
+    expect(saved).toMatchObject({
       guildId: "guild-1",
       name: "u-role-count",
       trigger: { kind: "schedule", intervalHours: 2 },
       createdBy: "author-1",
       source: "return 1;",
     });
-    expect(write.value.scheduleNextRunAt?.getTime()).toBeGreaterThan(Date.now());
+    expect(saved.scheduleNextRunAt?.getTime()).toBeGreaterThan(Date.now());
   });
 });
