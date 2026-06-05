@@ -26,7 +26,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 | rpg/inventory | `UserInventory` (`user_inventories`) | `User` | easy | ✅ 2026-06-05 95fae86 |
 | tycoon | `UserFactory` (`user_factories`) | `User` | medium | ✅ 2026-06-05 bd3a6bc |
 | moderation/sanctions | `UserSanctions` (`user_sanctions`) | `User` | medium | ✅ 2026-06-05 59e320c |
-| moderation/banned-images | `BannedImage` (`banned_images`) | `Guild` or synthetic (repo + webapp + CLI surfaces) | hard | ⬜ todo |
+| moderation/banned-images | `BannedImage` (`banned_images`) | `Guild` or synthetic (repo + webapp + CLI surfaces) | hard | 🚧 Hyv 2026-06-05 |
 | tickets | `UserTickets` (`user_tickets`), `Ticket` (`tickets`) | `User` + new `Ticket` kind | hard | ✅ 2026-06-05 970efe1 |
 | autoroles | `AutoroleRule` (`autorole_rules`), `TimedAutoroleGrant` (`timed_autorole_grants`), `TempRoleGrant` (`temp_role_grants`) | `Guild` map + `TimedAutoroleGrant`/`TempRoleGrant` kinds | hard | ✅ 2026-06-05 a7aba8f |
 | scripts | `ScriptDefinition` (`scripts`) | `Guild` (`GuildScripts` map keyed by name) | medium | ✅ 2026-06-05 b7fba53 |
