@@ -104,7 +104,7 @@ export default defineHandlers([
           await recoverPerUserSlowGrant(ctx, message.member, slowDecision.rule);
         }
         if (slowDecision.action !== "allow") {
-          await applyPerUserSlowDecision(message, slowDecision);
+          await applyPerUserSlowDecision(ctx, message, slowDecision);
           return;
         }
       }
@@ -113,10 +113,17 @@ export default defineHandlers([
       const tempSignals = detectTempRolePolicySignals(message, tempPolicy);
       const tempDecision = directTempRoleDecision(tempSignals);
       if (tempDecision) {
-        const result = await applyAutomodDecision(message, config, tempDecision, tempSignals, {
-          reportChannelId: tempPolicy.reportChannelId,
-          timeoutMs: tempRoleTimeoutMs(tempSignals),
-        });
+        const result = await applyAutomodDecision(
+          message,
+          config,
+          tempDecision,
+          tempSignals,
+          {
+            reportChannelId: tempPolicy.reportChannelId,
+            timeoutMs: tempRoleTimeoutMs(tempSignals),
+          },
+          ctx,
+        );
         if (result.action !== "report") {
           await checkSlowmode(message);
           return;
@@ -130,7 +137,7 @@ export default defineHandlers([
         ...(await detectBannedImageSignals(message, config)),
         ...(await detectAiClassificationSignals(message, config)),
       ];
-      await processAutomodSignals(message, config, signals);
+      await processAutomodSignals(message, config, signals, ctx);
       await checkSlowmode(message);
     } catch (error) {
       log.error("AutoMod message handler failed", error);
@@ -235,6 +242,7 @@ async function recoverPerUserSlowGrant(
 }
 
 async function applyPerUserSlowDecision(
+  ctx: Ctx,
   message: Message,
   decision: Exclude<PerUserSlowDecision, { readonly action: "allow" }>,
 ): Promise<void> {
@@ -256,6 +264,7 @@ async function applyPerUserSlowDecision(
       log.error("Failed to apply per-user slow timeout", error);
     });
     await recordAutomodSystemCase(
+      ctx,
       message.guild,
       message.member,
       "TIMEOUT",

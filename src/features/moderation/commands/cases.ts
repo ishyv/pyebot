@@ -11,7 +11,7 @@ export default command("cases")
   .guildOnly()
   .defer("ephemeral")
   .help({ hints: [] })
-  .run(async ({ guild, user, userId, options }) => {
+  .run(async ({ ctx, guild, user, userId, options }) => {
     const targetUser = options.user ?? user;
 
     // Privacy gate: only allow viewing other users' history if caller has ModerateMembers
@@ -27,7 +27,7 @@ export default command("cases")
       }
     }
 
-    const result = await getCases(targetUser.id, guild.id);
+    const result = await getCases(ctx, targetUser.id, guild.id);
 
     if (result.isErr()) {
       return { content: "Failed to fetch case history." };

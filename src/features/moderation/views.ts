@@ -14,7 +14,7 @@ import type { SanctionHistoryEntry, SanctionType } from "@/db/schemas/user";
 import type { AccentKey } from "@/ui/theme";
 import { container, section, separator, text, thumb, v2Message } from "@/ui/v2";
 import type { V2Payload } from "@/ui/views";
-import type { ModerationResult, SanctionEntry } from "./service";
+import type { ModerationResult } from "./service";
 
 /**
  * Icon per sanction type used in list and single-case views.
@@ -112,7 +112,11 @@ export function renderModlogCase(args: ModlogViewArgs): V2Payload {
  * Used by `/case view`. Entry comes from `getCaseById`; it may lack a moderatorId
  * if the record predates the case ID system.
  */
-export function renderCaseView(entry: SanctionEntry, userId: string, caseId: number): V2Payload {
+export function renderCaseView(
+  entry: SanctionHistoryEntry,
+  userId: string,
+  caseId: number,
+): V2Payload {
   const accent = accentForSanction(entry.type as SanctionType);
   const icon = SANCTION_ICON[entry.type as SanctionType] ?? "📝";
   const ts = entry.date ? `<t:${Math.floor(new Date(entry.date).getTime() / 1000)}:F>` : "Unknown";

@@ -33,7 +33,7 @@ export default command("case")
       const found = await getCaseById(c.guildId, caseId);
       const foundEntry = found.isErr() ? null : found.unwrap();
       if (!foundEntry) return { content: `Case #${caseId} not found.` };
-      const result = await editCase(foundEntry.userId, c.guildId, caseId, newReason);
+      const result = await editCase(c.ctx, foundEntry.userId, c.guildId, caseId, newReason);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       return { content: `Case #${caseId} reason updated.` };
     },
@@ -47,7 +47,7 @@ export default command("case")
       const found = await getCaseById(c.guildId, caseId);
       const foundEntry = found.isErr() ? null : found.unwrap();
       if (!foundEntry) return { content: `Case #${caseId} not found.` };
-      const result = await deleteCase(foundEntry.userId, c.guildId, caseId);
+      const result = await deleteCase(c.ctx, foundEntry.userId, c.guildId, caseId);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       return { content: `Case #${caseId} deleted.` };
     },

@@ -24,7 +24,7 @@ export default command("warn")
         c.guild.members.fetch(targetUser.id).catch(() => null),
       ]);
       if (!targetMember) return { content: "That user is not a member of this server." };
-      const result = await warn(c.guild, callerMember, targetMember, reason);
+      const result = await warn(c.ctx, c.guild, callerMember, targetMember, reason);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       const sanctionResult = result.unwrap();
       await dmUser(targetMember.user, "WARN", c.guild.name, reason, sanctionResult.caseId);
@@ -38,7 +38,7 @@ export default command("warn")
     options: (s) => s.user("user", "Member to look up", { required: true }),
     run: async (c) => {
       const { user: targetUser } = c.options;
-      const casesResult = await getCases(targetUser.id, c.guild.id);
+      const casesResult = await getCases(c.ctx, targetUser.id, c.guild.id);
       if (casesResult.isErr())
         return { content: `Failed to fetch cases: ${casesResult.error.message}` };
       const warns = casesResult
@@ -58,7 +58,7 @@ export default command("warn")
         .string("warn_id", "Case number", { required: true }),
     run: async (c) => {
       const { user: targetUser, warn_id: warnId } = c.options;
-      const result = await removeWarn(targetUser.id, c.guild.id, warnId);
+      const result = await removeWarn(c.ctx, targetUser.id, c.guild.id, warnId);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       if (!result.unwrap()) return { content: "No warning found with that ID." };
       return { content: `Warning #${warnId} removed.` };
@@ -70,7 +70,7 @@ export default command("warn")
     options: (s) => s.user("user", "Member to clear warnings for", { required: true }),
     run: async (c) => {
       const { user: targetUser } = c.options;
-      const result = await clearWarns(targetUser.id, c.guild.id);
+      const result = await clearWarns(c.ctx, targetUser.id, c.guild.id);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       const count = result.unwrap();
       return { content: `Cleared ${count} warning(s) for <@${targetUser.id}>.` };

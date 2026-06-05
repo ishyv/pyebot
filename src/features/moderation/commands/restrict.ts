@@ -23,7 +23,7 @@ export default command("restrict")
   .guildOnly()
   .defer("ephemeral")
   .help({ hints: ["/cases"] })
-  .run(async ({ guild, userId, options }) => {
+  .run(async ({ ctx, guild, userId, options }) => {
     const targetUser = options.user;
     const type = options.type as "forums" | "voice" | "jobs" | "all";
     const reason = options.reason ?? "No reason provided";
@@ -72,7 +72,7 @@ export default command("restrict")
       return { content: "That user is not a member of this server." };
     }
 
-    const result = await restrict(guild, moderator, targetMember, roleId, reason);
+    const result = await restrict(ctx, guild, moderator, targetMember, roleId, reason);
 
     if (result.isErr()) {
       return { content: `Failed: ${result.error.message}` };

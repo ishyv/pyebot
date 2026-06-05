@@ -17,7 +17,7 @@ export default command("note")
         .string("note", "Note content", { required: true }),
     run: async (c) => {
       const { user: targetUser, note } = c.options;
-      const result = await addNote(targetUser.id, c.guildId, note, c.userId);
+      const result = await addNote(c.ctx, targetUser.id, c.guildId, note, c.userId);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       return { content: `Note added for ${targetUser.tag}.` };
     },
@@ -28,7 +28,7 @@ export default command("note")
     options: (s) => s.user("user", "Target user", { required: true }),
     run: async (c) => {
       const { user: targetUser } = c.options;
-      const result = await getNotes(targetUser.id, c.guildId);
+      const result = await getNotes(c.ctx, targetUser.id, c.guildId);
       if (result.isErr()) return { content: "Failed to fetch notes." };
       const notes = result.unwrap();
       if (notes.length === 0) return { content: `No notes on **${targetUser.tag}**.` };
@@ -44,7 +44,7 @@ export default command("note")
         .integer("index", "Note index (1-based)", { required: true, min: 1 }),
     run: async (c) => {
       const { user: targetUser, index } = c.options;
-      const result = await deleteNote(targetUser.id, c.guildId, index - 1); // convert to 0-based
+      const result = await deleteNote(c.ctx, targetUser.id, c.guildId, index - 1);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       return { content: `Note ${index} deleted.` };
     },

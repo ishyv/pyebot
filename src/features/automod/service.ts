@@ -21,6 +21,7 @@ import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import type { AutomodConfig } from "@/db/schemas/guild";
 import { recordAutomodSystemCase } from "@/features/moderation/service";
+import type { Ctx } from "@/framework/types";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { type AutomodIncident, recordAutomodIncident } from "./incidents";
 import { extractHostname, extractLinks } from "./links";
@@ -277,6 +278,7 @@ export async function processAutomodSignals(
   message: Message,
   config: AutomodConfig,
   signals: readonly AutomodSignal[],
+  ctx?: Ctx,
 ): Promise<CheckResult> {
   if (!message.guild || !message.member || signals.length === 0) return { action: "none" };
 
@@ -310,7 +312,7 @@ export async function processAutomodSignals(
     channelId: message.channelId,
   });
 
-  return applyAutomodDecision(message, config, decision, signals);
+  return applyAutomodDecision(message, config, decision, signals, {}, ctx);
 }
 
 /**
@@ -324,6 +326,7 @@ export async function applyAutomodDecision(
   decision: AutomodPolicyDecision,
   signals: readonly AutomodSignal[],
   options: { readonly reportChannelId?: string | null; readonly timeoutMs?: number } = {},
+  ctx?: Ctx,
 ): Promise<CheckResult> {
   if (!message.guild || !message.member || signals.length === 0) return { action: "none" };
   const now = new Date();
@@ -384,21 +387,27 @@ export async function applyAutomodDecision(
       options.timeoutMs ?? timeoutMsForSignals(config, signals),
       decision.reason,
     );
-    await recordAutomodSystemCase(
-      message.guild,
-      message.member,
-      "TIMEOUT",
-      decision.reason,
-      evidenceSummary(signals),
-    ).catch((err) => log.error("Failed to record AutoMod timeout case", err));
+    if (ctx) {
+      await recordAutomodSystemCase(
+        ctx,
+        message.guild,
+        message.member,
+        "TIMEOUT",
+        decision.reason,
+        evidenceSummary(signals),
+      ).catch((err) => log.error("Failed to record AutoMod timeout case", err));
+    }
   } else if (decision.action === "warn") {
-    await recordAutomodSystemCase(
-      message.guild,
-      message.member,
-      "WARN",
-      decision.reason,
-      evidenceSummary(signals),
-    ).catch((err) => log.error("Failed to record AutoMod warn case", err));
+    if (ctx) {
+      await recordAutomodSystemCase(
+        ctx,
+        message.guild,
+        message.member,
+        "WARN",
+        decision.reason,
+        evidenceSummary(signals),
+      ).catch((err) => log.error("Failed to record AutoMod warn case", err));
+    }
   }
 
   await reportToChannel(message, formatDecisionReason(decision), reportChannelId);

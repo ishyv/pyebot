@@ -13,7 +13,7 @@ export default command("kick")
   .guildOnly()
   .defer("ephemeral")
   .help({ hints: ["/cases"] })
-  .run(async ({ guild, user, options }) => {
+  .run(async ({ ctx, guild, user, options }) => {
     const targetUser = options.user;
     const reason = options.reason;
 
@@ -26,7 +26,7 @@ export default command("kick")
       return { content: "That user is not a member of this server." };
     }
 
-    const result = await kick(guild, moderator, targetMember, reason);
+    const result = await kick(ctx, guild, moderator, targetMember, reason);
 
     if (result.isErr()) {
       return { content: `Failed: ${result.error.message}` };

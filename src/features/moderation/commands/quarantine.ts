@@ -23,7 +23,7 @@ export default command("quarantine")
         c.guild.members.fetch(targetUser.id).catch(() => null),
       ]);
       if (!targetMember) return { content: "That user is not a member of this server." };
-      const result = await quarantine(c.guild, moderator, targetMember, reason);
+      const result = await quarantine(c.ctx, c.guild, moderator, targetMember, reason);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       return renderModlogCase({ result: result.unwrap() });
     },
@@ -39,7 +39,7 @@ export default command("quarantine")
         c.guild.members.fetch(targetUser.id).catch(() => null),
       ]);
       if (!targetMember) return { content: "That user is not a member of this server." };
-      const result = await release(c.guild, moderator, targetMember);
+      const result = await release(c.ctx, c.guild, moderator, targetMember);
       if (result.isErr()) return { content: `Failed: ${result.error.message}` };
       const { restoredRoles } = result.unwrap();
       return v2Message(

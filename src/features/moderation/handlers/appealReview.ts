@@ -33,6 +33,7 @@ import { syncQueueMessage } from "@/features/moderation/appeals";
 import { appealRoutes } from "@/features/moderation/routes";
 import { getCases, pardon } from "@/features/moderation/service";
 import { renderSanctionHistory } from "@/features/moderation/views";
+import type { Ctx } from "@/framework/types";
 import { container, row, separator, text, v2Message } from "@/ui/v2";
 
 interface AppealArgs {
@@ -57,6 +58,7 @@ function hasModPerms(interaction: ButtonInteraction | ModalSubmitInteraction): b
  * the user's sanction history, and Approve / Deny / Request-info buttons.
  */
 export async function handleAppealReview(
+  ctx: Ctx,
   interaction: ButtonInteraction,
   { guildId, caseId }: AppealArgs,
 ): Promise<void> {
@@ -78,7 +80,7 @@ export async function handleAppealReview(
     return;
   }
 
-  const casesResult = await getCases(appeal.userId, guildId);
+  const casesResult = await getCases(ctx, appeal.userId, guildId);
   const history = casesResult.isOk() ? casesResult.unwrap().slice(0, 10) : [];
 
   const approveBtn = appealRoutes.approve.button(
@@ -163,6 +165,7 @@ export async function handleAppealApproveButton(
 // ---------------------------------------------------------------------------
 
 export async function handleAppealApproveSubmit(
+  ctx: Ctx,
   interaction: ModalSubmitInteraction,
   { guildId, caseId }: AppealArgs,
 ): Promise<void> {
@@ -193,7 +196,7 @@ export async function handleAppealApproveSubmit(
   });
 
   // Record PARDON in sanction history and mod log
-  await pardon(guild, interaction.user.id, appeal.userId, appeal.userTag, reason);
+  await pardon(ctx, guild, interaction.user.id, appeal.userId, appeal.userTag, reason);
 
   // Unban if applicable — best-effort, non-fatal
   await guild.bans.remove(appeal.userId, `Appeal approved: ${reason}`).catch(() => null);

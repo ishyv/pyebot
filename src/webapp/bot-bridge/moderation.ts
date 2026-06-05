@@ -17,6 +17,8 @@ import {
   unban,
   warn,
 } from "@/features/moderation/service";
+import { World } from "@/framework";
+import type { Ctx } from "@/framework/types";
 import type {
   AppealSummary,
   BotBridge,
@@ -122,6 +124,14 @@ export function createModerationBridge(
   | "resolveAppeal"
   | "runModerationAction"
 > {
+  let ctxPromise: Promise<Ctx> | null = null;
+  const ctx = () => {
+    ctxPromise ??= World.create(client).then((world) =>
+      world.forInteraction(null, "webapp:moderation"),
+    );
+    return ctxPromise;
+  };
+
   return {
     async saveModeration(guildId, patch, actorId) {
       const result = await saveModerationSettings(guildId, patch);
@@ -172,7 +182,7 @@ export function createModerationBridge(
         PermissionFlagsBits.ModerateMembers,
       );
       if (permission.isErr()) return ErrResult(permission.error);
-      const result = await editModerationCase(userId, guildId, caseId, description);
+      const result = await editModerationCase(await ctx(), userId, guildId, caseId, description);
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "mod_action",
@@ -192,7 +202,7 @@ export function createModerationBridge(
         PermissionFlagsBits.ModerateMembers,
       );
       if (permission.isErr()) return ErrResult(permission.error);
-      const result = await deleteModerationCase(userId, guildId, caseId);
+      const result = await deleteModerationCase(await ctx(), userId, guildId, caseId);
       if (result.isErr()) return ErrResult(result.error);
       emit({
         type: "mod_action",
@@ -238,7 +248,7 @@ export function createModerationBridge(
 
       const { guild } = permission.unwrap();
       if (status === "approved") {
-        await pardon(guild, reviewerId, appeal.userId, appeal.userTag, note);
+        await pardon(await ctx(), guild, reviewerId, appeal.userId, appeal.userTag, note);
         await guild.bans.remove(appeal.userId, `Appeal approved: ${note}`).catch(() => null);
       }
       emit({
@@ -270,12 +280,13 @@ export function createModerationBridge(
       switch (action.type) {
         case "warn": {
           if (!targetMember) return ErrResult(new Error("Target member not found."));
-          const result = await warn(guild, moderator, targetMember, action.reason);
+          const result = await warn(await ctx(), guild, moderator, targetMember, action.reason);
           return result.isErr() ? ErrResult(result.error) : OkResult(undefined);
         }
         case "timeout": {
           if (!targetMember) return ErrResult(new Error("Target member not found."));
           const result = await mute(
+            await ctx(),
             guild,
             moderator,
             targetMember,
@@ -286,12 +297,13 @@ export function createModerationBridge(
         }
         case "kick": {
           if (!targetMember) return ErrResult(new Error("Target member not found."));
-          const result = await kick(guild, moderator, targetMember, action.reason);
+          const result = await kick(await ctx(), guild, moderator, targetMember, action.reason);
           return result.isErr() ? ErrResult(result.error) : OkResult(undefined);
         }
         case "restrict": {
           if (!targetMember) return ErrResult(new Error("Target member not found."));
           const result = await restrict(
+            await ctx(),
             guild,
             moderator,
             targetMember,
@@ -302,11 +314,17 @@ export function createModerationBridge(
         }
         case "ban": {
           const target = await client.users.fetch(action.targetUserId);
-          const result = await ban(guild, moderator, target, action.reason);
+          const result = await ban(await ctx(), guild, moderator, target, action.reason);
           return result.isErr() ? ErrResult(result.error) : OkResult(undefined);
         }
         case "unban": {
-          const result = await unban(guild, moderator, action.targetUserId, action.reason);
+          const result = await unban(
+            await ctx(),
+            guild,
+            moderator,
+            action.targetUserId,
+            action.reason,
+          );
           return result.isErr() ? ErrResult(result.error) : OkResult(undefined);
         }
       }

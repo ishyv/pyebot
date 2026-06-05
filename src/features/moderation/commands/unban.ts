@@ -13,7 +13,7 @@ export default command("unban")
   .guildOnly()
   .defer("ephemeral")
   .help({ hints: ["/cases"] })
-  .run(async ({ guild, user, options }) => {
+  .run(async ({ ctx, guild, user, options }) => {
     const userId = options.user_id.trim();
     const reason = options.reason ?? "No reason provided";
 
@@ -35,7 +35,7 @@ export default command("unban")
     const moderator = await guild.members.fetch(user.id);
 
     const targetUser = await guild.client.users.fetch(userId).catch(() => null);
-    const result = await unban(guild, moderator, userId, reason, targetUser?.tag);
+    const result = await unban(ctx, guild, moderator, userId, reason, targetUser?.tag);
 
     if (result.isErr()) {
       return v2Message(container("danger", text(`**Failed:** ${result.error.message}`)));

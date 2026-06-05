@@ -1,7 +1,7 @@
 /**
  * Dev script — wipes all per-user gameplay data (economy, RPG, tycoon, market,
- * quests, achievements). Preserves moderation/support data (user_sanctions,
- * user_tickets), guild config (guilds), and feature toggles (guild_features).
+ * quests, achievements). Preserves moderation/support data on user documents,
+ * ticket state, guild config (guilds), and feature toggles (guild_features).
  *
  * Most gameplay state still lives in legacy component collections, while
  * migrated entity components live as fields on entity documents. Clear both
@@ -13,8 +13,8 @@
 import "dotenv/config";
 import { disconnectDb, getDb } from "../src/core/db";
 
-// Per-user gameplay component collections. Moderation/support collections
-// (user_sanctions, user_tickets) and guild documents are intentionally excluded.
+// Per-user gameplay component collections. Moderation/support state and guild
+// documents are intentionally excluded.
 const GAMEPLAY_COLLECTIONS = [
   "economy_accounts",
   "user_currencies",

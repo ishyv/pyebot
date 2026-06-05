@@ -32,11 +32,11 @@ export default defineHandlers([
     "appeal-submit": (interaction, args) => handleAppealSubmit(interaction, args),
   }),
   ...routeHandlers(appealRoutes, {
-    review: (interaction, args) => handleAppealReview(interaction, args),
+    review: (interaction, args, ctx) => handleAppealReview(ctx, interaction, args),
     approve: (interaction, args) => handleAppealApproveButton(interaction, args),
     deny: (interaction, args) => handleAppealDenyButton(interaction, args),
     info: (interaction, args) => handleAppealInfoButton(interaction, args),
-    "approve-modal": (interaction, args) => handleAppealApproveSubmit(interaction, args),
+    "approve-modal": (interaction, args, ctx) => handleAppealApproveSubmit(ctx, interaction, args),
     "deny-modal": (interaction, args) => handleAppealDenySubmit(interaction, args),
     "info-modal": (interaction, args) => handleAppealInfoSubmit(interaction, args),
   }),

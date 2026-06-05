@@ -14,13 +14,13 @@ export default command("ban")
   .guildOnly()
   .defer("ephemeral")
   .help({ hints: ["/cases"] })
-  .run(async ({ guild, user, options }) => {
+  .run(async ({ ctx, guild, user, options }) => {
     const target = options.user;
     const reason = options.reason;
     const duration = options.duration ?? undefined;
     const moderator = await guild.members.fetch(user.id);
 
-    const result = await ban(guild, moderator, target, reason, duration);
+    const result = await ban(ctx, guild, moderator, target, reason, duration);
 
     if (result.isErr()) {
       return { content: `Failed: ${result.error.message}` };

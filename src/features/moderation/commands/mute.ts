@@ -17,7 +17,7 @@ export default command("mute")
   .guildOnly()
   .defer("ephemeral")
   .help({ hints: ["/cases"] })
-  .run(async ({ guild, user, options }) => {
+  .run(async ({ ctx, guild, user, options }) => {
     const targetUser = options.user;
     const reason = options.reason;
 
@@ -42,7 +42,7 @@ export default command("mute")
       return { content: "That user is not a member of this server." };
     }
 
-    const result = await mute(guild, moderator, targetMember, durationMs, reason);
+    const result = await mute(ctx, guild, moderator, targetMember, durationMs, reason);
 
     if (result.isErr()) {
       return { content: `Failed: ${result.error.message}` };
