@@ -1,4 +1,5 @@
-import { UserInventory, type UserInventoryValue } from "@/components/user-inventory";
+import { User } from "@/components/entities";
+import { UserInventory, type UserInventoryValue } from "@/components/rpg/inventory";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { ensureRpgProfile } from "@/features/rpg/profile";
 import type { Ctx } from "@/framework/types";
@@ -35,7 +36,7 @@ export function getStashUsage(slots: InventorySlots): number {
 
 /** Reads one stackable item quantity from the component-backed user inventory. */
 export async function getStackQuantity(ctx: Ctx, userId: string, itemId: string): Promise<number> {
-  const inventory = await ctx.get(userId, UserInventory);
+  const inventory = await ctx.of(User, userId).peek(UserInventory);
   return stackQuantity(inventory?.slots[itemId]);
 }
 
@@ -47,7 +48,8 @@ export async function addItemsToStash(
 ): Promise<Result<{ added: boolean }, InventoryError>> {
   try {
     const profile = await ensureRpgProfile(ctx, userId);
-    const inventory = await ctx.ensure(userId, UserInventory);
+    const user = ctx.of(User, userId);
+    const inventory = await user.get(UserInventory);
     const incomingAmount = Object.values(items).reduce((sum, qty) => sum + qty, 0);
     const currentUsage = getStashUsage(inventory.slots);
 
@@ -76,7 +78,7 @@ export async function addStackItems(
   const positiveItems = Object.entries(items).filter(([, qty]) => qty > 0);
   if (positiveItems.length === 0) return;
 
-  await ctx.patch(userId, UserInventory, (inventory) => {
+  await ctx.of(User, userId).update(UserInventory, (inventory) => {
     const slots = { ...inventory.slots };
     for (const [itemId, qty] of positiveItems) {
       slots[itemId] = { qty: stackQuantity(slots[itemId]) + qty };
@@ -92,7 +94,8 @@ export async function removeStackItems(
   items: Record<string, number>,
 ): Promise<Result<void, InventoryError>> {
   try {
-    const inventory = await ctx.ensure(userId, UserInventory);
+    const user = ctx.of(User, userId);
+    const inventory = await user.get(UserInventory);
     for (const [itemId, qty] of Object.entries(items)) {
       if (qty <= 0) continue;
       const available = stackQuantity(inventory.slots[itemId]);
@@ -106,7 +109,7 @@ export async function removeStackItems(
       }
     }
 
-    await ctx.patch(userId, UserInventory, (current) => {
+    await user.update(UserInventory, (current) => {
       const slots = { ...current.slots };
       for (const [itemId, qty] of Object.entries(items)) {
         if (qty <= 0) continue;

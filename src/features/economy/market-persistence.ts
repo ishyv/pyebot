@@ -14,8 +14,9 @@
 
 import type { ClientSession, Collection, Db, Document, Filter } from "mongodb";
 import { EconomyAccount } from "@/components/economy-account";
+import { User } from "@/components/entities";
+import { UserInventory } from "@/components/rpg/inventory";
 import { UserCurrency } from "@/components/user-currency";
-import { UserInventory } from "@/components/user-inventory";
 import { getDb, getMongoClient } from "@/core/db";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { type MarketListingDoc, MarketListingSchema } from "@/db/schemas/market";
@@ -68,7 +69,7 @@ function collectionSet(db: Db): MarketCollections {
   return {
     listings: db.collection<MarketListingDoc>("marketListings"),
     currencies: db.collection<ComponentDoc>(UserCurrency.collection),
-    inventories: db.collection<ComponentDoc>(UserInventory.collection),
+    inventories: db.collection<ComponentDoc>(User.collection),
     accounts: db.collection<ComponentDoc>(EconomyAccount.collection),
   };
 }
@@ -134,7 +135,7 @@ async function ensureActiveAccount(
 }
 
 function stackPath(itemId: string): string {
-  return `slots.${itemId}.qty`;
+  return `${UserInventory.name}.slots.${itemId}.qty`;
 }
 
 function balancePath(currencyId: string): string {

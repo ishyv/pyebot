@@ -3,9 +3,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { User } from "@/components/entities";
+import { UserInventory } from "@/components/rpg/inventory";
 import { RpgProfile } from "@/components/rpg-profile";
 import { UserFactory } from "@/components/user-factory";
-import { UserInventory } from "@/components/user-inventory";
+import type { EntityComponent, EntityKind } from "@/framework";
 import type { Component, Ctx } from "@/framework/types";
 import { eventSeed, rollEvent } from "./accrual";
 import { renderDashboard } from "./dashboard";
@@ -55,6 +57,25 @@ function makeCtx(seed: Record<string, Record<string, unknown>>): Ctx {
     async query() {
       return [];
     },
+    of(kind: EntityKind, id: string) {
+      const entityDoc = () => bucket(kind.collection)[id] as Record<string, unknown> | undefined;
+      return {
+        async get<T>(component: EntityComponent<T>) {
+          return component.schema.parse(entityDoc()?.[component.name] ?? {});
+        },
+        async peek<T>(component: EntityComponent<T>) {
+          const doc = entityDoc();
+          if (!doc || !(component.name in doc)) return null;
+          return component.schema.parse(doc[component.name]);
+        },
+      };
+    },
+    select() {
+      throw new Error("select not implemented in dashboard test ctx");
+    },
+    transaction() {
+      throw new Error("transaction not implemented in dashboard test ctx");
+    },
     async emit() {},
     client: {},
     logger: { info() {}, warn() {}, error() {}, debug() {} },
@@ -80,7 +101,7 @@ function stockpileDashboardCtx(stashSize: number): Ctx {
         lifetimeScrip: 0,
       },
     },
-    [UserInventory.collection]: { [USER]: { slots: {} } },
+    [User.collection]: { [USER]: { [UserInventory.name]: { slots: {} } } },
     [RpgProfile.collection]: { [USER]: { stashSize } },
     user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
   });

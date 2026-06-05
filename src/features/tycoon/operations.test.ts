@@ -3,7 +3,10 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { User } from "@/components/entities";
+import { UserInventory } from "@/components/rpg/inventory";
 import { locks } from "@/core/state";
+import type { EntityComponent, EntityKind } from "@/framework";
 import type { Component, Ctx } from "@/framework/types";
 import { eventSeed, rollEvent } from "./accrual";
 import { LINES } from "./content/lines";
@@ -73,6 +76,36 @@ function makeCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
         });
       }
       return (options?.limit ? entries.slice(0, options.limit) : entries) as never;
+    },
+    of(kind: EntityKind, id: string) {
+      const entityDoc = () => bucket(kind.collection)[id] as Record<string, unknown> | undefined;
+      return {
+        async get<T>(component: EntityComponent<T>) {
+          return component.schema.parse(entityDoc()?.[component.name] ?? {});
+        },
+        async peek<T>(component: EntityComponent<T>) {
+          const doc = entityDoc();
+          if (!doc || !(component.name in doc)) return null;
+          return component.schema.parse(doc[component.name]);
+        },
+        async update<T>(
+          component: EntityComponent<T>,
+          patch: Partial<T> | ((current: T) => Partial<T>),
+        ) {
+          const b = bucket(kind.collection);
+          if (!(id in b)) b[id] = { _id: id };
+          const doc = b[id] as Record<string, unknown>;
+          const current = component.schema.parse(doc[component.name] ?? {});
+          const partial = typeof patch === "function" ? patch(current) : patch;
+          doc[component.name] = { ...current, ...partial };
+        },
+      };
+    },
+    select() {
+      throw new Error("select not implemented in tycoon operations test ctx");
+    },
+    transaction() {
+      throw new Error("transaction not implemented in tycoon operations test ctx");
     },
     async emit() {},
     client: {},
@@ -195,7 +228,7 @@ function stockpileFactory(stashSize: number) {
   return {
     ...wallet(0, 0),
     rpg_profiles: { [USER]: { stashSize } },
-    user_inventories: { [USER]: { slots: {} } },
+    [User.collection]: { [USER]: { [UserInventory.name]: { slots: {} } } },
     user_factories: {
       [USER]: {
         lines: {
@@ -223,7 +256,7 @@ describe("collect() — stockpile mode", () => {
       expect(s.materialId).toBe(LINES.lumber_mill.refinedMaterialId);
       expect(s.materialsGained).toBeGreaterThan(0);
     }
-    const inv = await ctx.get(USER, (await import("@/components/user-inventory")).UserInventory);
+    const inv = await ctx.of(User, USER).peek(UserInventory);
     const slot = inv?.slots[LINES.lumber_mill.refinedMaterialId];
     expect(slot && "qty" in slot ? slot.qty : 0).toBeGreaterThan(0);
   });

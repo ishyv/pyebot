@@ -12,11 +12,13 @@
  * its render output, then run `bun run scenes:dump`.
  */
 
+import { User } from "@/components/entities";
+import { UserInventory } from "@/components/rpg/inventory";
 import { RpgProfile } from "@/components/rpg-profile";
 import { UserCurrency } from "@/components/user-currency";
 import { UserFactory } from "@/components/user-factory";
-import { UserInventory } from "@/components/user-inventory";
 import { renderDashboard } from "@/features/tycoon/dashboard";
+import type { EntityComponent, EntityKind } from "@/framework";
 import type { Component, Ctx } from "@/framework/types";
 
 export interface SerializedPayload {
@@ -55,6 +57,36 @@ function mockCtx(seed: Record<string, Record<string, unknown>> = {}): Ctx {
         _id: id,
         ...(value as Record<string, unknown>),
       })) as never;
+    },
+    of(kind: EntityKind, id: string) {
+      const entityDoc = () => bucket(kind.collection)[id] as Record<string, unknown> | undefined;
+      return {
+        async get<T>(component: EntityComponent<T>) {
+          return component.schema.parse(entityDoc()?.[component.name] ?? {});
+        },
+        async peek<T>(component: EntityComponent<T>) {
+          const doc = entityDoc();
+          if (!doc || !(component.name in doc)) return null;
+          return component.schema.parse(doc[component.name]);
+        },
+        async update<T>(
+          component: EntityComponent<T>,
+          patch: Partial<T> | ((current: T) => Partial<T>),
+        ) {
+          const b = bucket(kind.collection);
+          if (!(id in b)) b[id] = { _id: id };
+          const doc = b[id] as Record<string, unknown>;
+          const current = component.schema.parse(doc[component.name] ?? {});
+          const partial = typeof patch === "function" ? patch(current) : patch;
+          doc[component.name] = { ...current, ...partial };
+        },
+      };
+    },
+    select() {
+      throw new Error("select not implemented in preview ctx");
+    },
+    transaction() {
+      throw new Error("transaction not implemented in preview ctx");
     },
     async emit() {},
     client: {},
@@ -138,7 +170,7 @@ export const PREVIEW_SCENES: readonly PreviewScene[] = [
       [UserCurrency.collection]: {
         [USER]: { balances: { coins: 400, scrip: 0 }, bankBalances: {} },
       },
-      [UserInventory.collection]: { [USER]: { slots: {} } },
+      [User.collection]: { [USER]: { [UserInventory.name]: { slots: {} } } },
       [RpgProfile.collection]: { [USER]: { stashSize: 20 } },
       [UserFactory.collection]: {
         [USER]: {

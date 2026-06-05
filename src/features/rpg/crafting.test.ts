@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { UserInventoryValue } from "@/components/user-inventory";
+import type { UserInventoryValue } from "@/components/rpg/inventory";
 import type { Err } from "@/core/result";
 import { CRAFTING_RECIPES } from "@/features/rpg/content/recipes";
 import type { Ctx } from "@/framework/types";
@@ -16,6 +16,27 @@ function makeCtx(
 ): { ctx: Ctx; inventory: UserInventoryValue } {
   const inventory: UserInventoryValue = { slots: { ...slots } };
   let patchCalls = 0;
+  const inventoryHandle = {
+    async peek() {
+      return inventory;
+    },
+    async get() {
+      return inventory;
+    },
+    async update(
+      _component: unknown,
+      patch:
+        | Partial<UserInventoryValue>
+        | ((current: UserInventoryValue) => Partial<UserInventoryValue>),
+    ) {
+      patchCalls += 1;
+      if (options.failPatch || options.failPatchOnCall === patchCalls) {
+        throw new Error("db write failed");
+      }
+      const partial = typeof patch === "function" ? patch(inventory) : patch;
+      Object.assign(inventory, partial);
+    },
+  };
   const ctx = {
     async get() {
       return inventory;
@@ -36,6 +57,15 @@ function makeCtx(
       }
       const partial = typeof patch === "function" ? patch(inventory) : patch;
       Object.assign(inventory, partial);
+    },
+    of() {
+      return inventoryHandle;
+    },
+    select() {
+      throw new Error("select not implemented in crafting test ctx");
+    },
+    transaction() {
+      throw new Error("transaction not implemented in crafting test ctx");
     },
     async set() {},
     async delete() {},

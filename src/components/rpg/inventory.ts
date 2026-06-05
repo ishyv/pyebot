@@ -1,19 +1,18 @@
 /**
- * UserInventory — the items a user owns.
+ * User-owned RPG inventory stored on the User entity document.
  *
  * Two storage shapes coexist:
  *   - Stackable items: stored as `{ [itemId]: { qty: number } }`.
  *   - Instance items (unique tools with durability): stored as
  *     `{ [itemId]: { instances: [{ instanceId, durability }] } }`.
  *
- * Why both shapes? Stackables are tens of millions of "iron ingot" and
- * have no per-unit state — a count suffices. Instance items have unique
- * state (durability) and must track each one independently. Smushing
- * them into the same shape costs more space than it saves.
+ * Stackables have no per-unit state, while instance items do. Keeping both
+ * shapes avoids wasting space on millions of identical material entries.
  */
 
 import { z } from "zod";
-import { component } from "@/framework/component";
+import { User } from "@/components/entities";
+import { defineComponent } from "@/framework";
 
 const StackEntry = z.object({ qty: z.number().int().nonnegative().catch(0) });
 const InstanceEntry = z.object({
@@ -30,11 +29,12 @@ const InstanceEntry = z.object({
 export const InventorySlot = z.union([StackEntry, InstanceEntry]);
 export type InventorySlotValue = z.infer<typeof InventorySlot>;
 
-export const UserInventory = component({
-  collection: "user_inventories",
-  schema: z.object({
+export const UserInventory = defineComponent(
+  User,
+  "inventory",
+  z.object({
     slots: z.record(z.string(), InventorySlot).default({}),
   }),
-});
+);
 
 export type UserInventoryValue = z.infer<typeof UserInventory.schema>;

@@ -156,7 +156,7 @@ const fakeDb = {
   collection(name: string) {
     if (name === "marketListings") return new FakeCollection(state.listings as Map<string, Doc>);
     if (name === "user_currencies") return new FakeCollection(state.currencies);
-    if (name === "user_inventories") return new FakeCollection(state.inventories);
+    if (name === "users") return new FakeCollection(state.inventories);
     if (name === "economy_accounts") return new FakeCollection(state.accounts);
     throw new Error(`unexpected collection ${name}`);
   },
@@ -210,12 +210,17 @@ describe("market transaction persistence", () => {
   beforeEach(resetState);
 
   test("createListingTx commits inventory escrow and listing together", async () => {
-    state.inventories.set("seller-1", { _id: "seller-1", slots: { wood: { qty: 10 } } });
+    state.inventories.set("seller-1", {
+      _id: "seller-1",
+      inventory: { slots: { wood: { qty: 10 } } },
+    });
 
     const result = await createListingTx({ listing: makeListing({ quantity: 4 }), config: cfg });
 
     expect(result.isOk()).toBe(true);
-    expect(state.inventories.get("seller-1")?.slots).toEqual({ wood: { qty: 6 } });
+    expect(state.inventories.get("seller-1")?.inventory).toEqual({
+      slots: { wood: { qty: 6 } },
+    });
     expect(state.listings.get("listing:test-1")?.quantity).toBe(4);
     expect(state.accounts.get("seller-1")?.status).toBe("ok");
   });
@@ -271,14 +276,19 @@ describe("market transaction persistence", () => {
 
   test("returns TRANSACTION_UNSUPPORTED without mutating state when Mongo cannot transact", async () => {
     state.supportsTransactions = false;
-    state.inventories.set("seller-1", { _id: "seller-1", slots: { wood: { qty: 10 } } });
+    state.inventories.set("seller-1", {
+      _id: "seller-1",
+      inventory: { slots: { wood: { qty: 10 } } },
+    });
 
     const result = await createListingTx({ listing: makeListing({ quantity: 4 }), config: cfg });
 
     expect(result.isErr()).toBe(true);
     expect(result.error).toBeInstanceOf(MarketPersistenceError);
     expect(result.error.code).toBe("TRANSACTION_UNSUPPORTED");
-    expect(state.inventories.get("seller-1")?.slots).toEqual({ wood: { qty: 10 } });
+    expect(state.inventories.get("seller-1")?.inventory).toEqual({
+      slots: { wood: { qty: 10 } },
+    });
     expect(state.listings.size).toBe(0);
   });
 });

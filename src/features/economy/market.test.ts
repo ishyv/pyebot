@@ -310,14 +310,6 @@ mock.module("./market-persistence", () => ({
 // Ctx stub (wires mock cooldowns + in-memory wallets for mutations)
 // ---------------------------------------------------------------------------
 
-function stackSlots(items: Record<string, number> = {}) {
-  return Object.fromEntries(Object.entries(items).map(([itemId, qty]) => [itemId, { qty }]));
-}
-
-function slotQuantities(slots: Record<string, { qty?: number }>) {
-  return Object.fromEntries(Object.entries(slots).map(([itemId, slot]) => [itemId, slot.qty ?? 0]));
-}
-
 function makeCtx(
   wallets: Record<string, Record<string, number>> = {},
   inventories: Record<string, Record<string, number>> = {},
@@ -358,10 +350,6 @@ function makeCtx(
       if (component.collection === "economy_accounts") {
         return makeAccountValue() as never;
       }
-      if (component.collection === "user_inventories") {
-        const slots = inventoryStore[id];
-        return slots ? ({ slots: stackSlots(slots) } as never) : null;
-      }
 
       const bal = walletStore[id];
       return bal ? ({ balances: bal, bankBalances: {} } as never) : null;
@@ -370,26 +358,11 @@ function makeCtx(
       if (component.collection === "economy_accounts") {
         return makeAccountValue() as never;
       }
-      if (component.collection === "user_inventories") {
-        if (!inventoryStore[id]) inventoryStore[id] = {};
-        return { slots: stackSlots(inventoryStore[id]) } as never;
-      }
 
       if (!walletStore[id]) walletStore[id] = { coins: 0 };
       return { balances: walletStore[id], bankBalances: {} } as never;
     },
-    patch: async (id: string, component: { collection?: string }, fn: unknown) => {
-      if (component.collection === "user_inventories") {
-        if (failInventory.has(id)) throw new Error("inventory patch failed");
-        if (!inventoryStore[id]) inventoryStore[id] = {};
-        const cur = { slots: stackSlots(inventoryStore[id]) };
-        const patch = (typeof fn === "function" ? fn(cur as never) : fn) as {
-          slots?: Record<string, { qty?: number }>;
-        };
-        if (patch.slots) inventoryStore[id] = slotQuantities(patch.slots);
-        return;
-      }
-
+    patch: async (id: string, _component: { collection?: string }, fn: unknown) => {
       if (failCurrency.has(id)) throw new Error("currency patch failed");
       if (!walletStore[id]) walletStore[id] = { coins: 0 };
       const cur = { balances: walletStore[id], bankBalances: {} };
