@@ -6,7 +6,7 @@
  *   and a profession-aware accept wrapper.
  *
  * Design: RPG quests are stored and tracked using the same infrastructure as
- *   economy quests (questProgressStore, progressAllQuests). This file provides:
+ *   economy quests (the User `QuestLog` component, progressAllQuests). This file provides:
  *   1. RPG quest definitions (profession-gated, gathering/fighting focused).
  *   2. acceptRpgQuest — validates profession prerequisite before delegating.
  *   3. Re-exports progressAllQuests / claimRewards from economy quests.
@@ -15,7 +15,6 @@
  */
 
 import { ErrResult, type Result } from "@/core/result";
-import type { QuestProgressDoc } from "@/db/schemas/quest";
 import {
   acceptQuest,
   type ClaimedQuestReward,
@@ -23,11 +22,12 @@ import {
   progressAllQuests,
   type QuestDef,
   type QuestError,
+  type QuestProgress,
 } from "@/features/economy/quests";
 import { getRpgProfile } from "@/features/rpg/profile";
 import type { Ctx } from "@/framework/types";
 
-export type { ClaimedQuestReward, QuestProgressDoc };
+export type { ClaimedQuestReward, QuestProgress };
 // Re-export the shared functions so RPG callers only need one import.
 export { claimRewards, progressAllQuests };
 
@@ -150,11 +150,11 @@ export async function acceptRpgQuest(
   ctx: Ctx,
   userId: string,
   questId: string,
-): Promise<Result<QuestProgressDoc, QuestError>> {
+): Promise<Result<QuestProgress, QuestError>> {
   const def = RPG_QUEST_DEFINITIONS.find((q) => q.id === questId);
   if (!def) {
     // Fall through to economy acceptQuest which will return QUEST_NOT_FOUND
-    return acceptQuest(userId, questId);
+    return acceptQuest(ctx, userId, questId);
   }
 
   // Check profession gate
@@ -181,7 +181,7 @@ export async function acceptRpgQuest(
   }
 
   // Delegate to economy quest storage (also handles repeat/cooldown logic)
-  return acceptQuest(userId, questId);
+  return acceptQuest(ctx, userId, questId);
 }
 
 // ---------------------------------------------------------------------------

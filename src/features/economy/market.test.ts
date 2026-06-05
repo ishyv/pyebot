@@ -144,12 +144,6 @@ mock.module("@/db/repositories/economy", () => ({
   },
   getUnlocksForUser: mock(async () => OkResult([])),
   getProgressForUser: mock(async () => OkResult([])),
-  // quest store stubs (not used in market tests)
-  questProgressStore: {
-    get: mock(async () => OkResult(null)),
-    set: mock(async () => OkResult(null)),
-  },
-  getActiveQuestsForUser: mock(async () => OkResult([])),
 }));
 
 let activeWallets: Record<string, Record<string, number>> = {};

@@ -18,14 +18,13 @@ import { disconnectDb, getDb } from "../src/core/db";
 const GAMEPLAY_COLLECTIONS = [
   "economy_accounts",
   "user_currencies",
-  "quest_progress",
   "achievement_progress",
   "unlocked_achievements",
   "market_listings",
 ] as const;
 
 const ENTITY_FIELD_RESETS = [
-  { collection: "users", fields: ["inventory", "rpgProfile", "factory"] },
+  { collection: "users", fields: ["inventory", "rpgProfile", "factory", "questLog"] },
 ] as const;
 
 async function main() {

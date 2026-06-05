@@ -15,9 +15,9 @@ export default command("quest-accept")
   .guildOnly()
   .defer("ephemeral")
   .help({ hints: ["/quest-claim", "/work", "/balance"] })
-  .run(async ({ userId, options }) => {
+  .run(async ({ ctx, userId, options }) => {
     const questId = options.quest_id;
-    const result = await acceptQuest(userId, questId);
+    const result = await acceptQuest(ctx, userId, questId);
 
     if (result.isErr()) {
       return v2Message(

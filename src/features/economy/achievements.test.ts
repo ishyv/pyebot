@@ -90,12 +90,6 @@ mock.module("@/db/repositories/economy", () => ({
   },
   findActiveListings: mock(async () => OkResult([])),
   countActiveListings: mock(async () => OkResult(0)),
-  // quest store stubs (not used in achievements tests)
-  questProgressStore: {
-    get: mock(async () => OkResult(null)),
-    set: mock(async () => OkResult(null)),
-  },
-  getActiveQuestsForUser: mock(async () => OkResult([])),
 }));
 
 // ---------------------------------------------------------------------------

@@ -150,13 +150,11 @@ describe("repository module exports (smoke)", () => {
     expect(typeof repo.tempBanStore).toBe("object");
   });
 
-  test("economy repo exports achievement and quest stores/helpers", async () => {
+  test("economy repo exports achievement stores/helpers", async () => {
     const repo = await import("./economy");
     expect(typeof repo.achievementProgressStore).toBe("object");
     expect(typeof repo.achievementUnlocksStore).toBe("object");
-    expect(typeof repo.questProgressStore).toBe("object");
     expect(typeof repo.getUnlocksForUser).toBe("function");
     expect(typeof repo.getProgressForUser).toBe("function");
-    expect(typeof repo.getActiveQuestsForUser).toBe("function");
   });
 });

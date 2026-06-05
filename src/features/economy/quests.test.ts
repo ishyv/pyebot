@@ -1,95 +1,31 @@
 /**
  * Tests for economy quests (acceptQuest, progressQuest, claimRewards, getActiveQuests).
- * Mocks economy repo and db/repositories/users — no real DB required.
+ *
+ * Quest progress lives on the User entity (`QuestLog` component); the test ctx
+ * backs `ctx.of(User, id)` with an in-memory map. `adjustBalance` (used by
+ * claimRewards) still reads the wallet through the legacy `get/ensure/patch`
+ * surface, so the ctx mock implements both.
  */
 
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { OkResult } from "@/core/result";
-import type { QuestProgressDoc } from "@/db/schemas/quest";
-import type { User } from "@/db/schemas/user";
-
-// ---------------------------------------------------------------------------
-// Mock @/db/repositories/users BEFORE importing quests
-// (adjustBalance inside claimRewards uses userStore)
-// ---------------------------------------------------------------------------
-
-function makeUser(_currency: Record<string, number> = { coins: 100 }): User {
-  return {
-    _id: "user-1",
-    sanction_history: {},
-    mod_notes: {},
-    quarantine_roles: {},
-  };
-}
-
-const mockUserGet = mock(async (_id: string) => OkResult<User | null>(makeUser()));
-const mockUserEnsure = mock(async (_id: string) => OkResult(makeUser()));
-const mockUserUpdatePaths = mock(async (_id: string, _paths: Record<string, unknown>) =>
-  OkResult(undefined),
-);
-
-mock.module("@/db/repositories/users", () => ({
-  userStore: {
-    get: mockUserGet,
-    ensure: mockUserEnsure,
-    updatePaths: mockUserUpdatePaths,
-  },
-}));
-
-// ---------------------------------------------------------------------------
-// Mock @/db/repositories/economy BEFORE importing quests
-// ---------------------------------------------------------------------------
-
-const questStore = new Map<string, QuestProgressDoc>();
-
-const mockQuestGet = mock(async (id: string) =>
-  OkResult<QuestProgressDoc | null>(questStore.get(id) ?? null),
-);
-const mockQuestSet = mock(async (_id: string, doc: QuestProgressDoc) => {
-  questStore.set(doc._id, doc);
-  return OkResult(doc);
-});
-const mockGetActiveQuests = mock(async (userId: string) =>
-  OkResult(Array.from(questStore.values()).filter((q) => q.userId === userId && !q.rewardsClaimed)),
-);
-
-mock.module("@/db/repositories/economy", () => ({
-  questProgressStore: { get: mockQuestGet, set: mockQuestSet },
-  getActiveQuestsForUser: mockGetActiveQuests,
-  // achievement/market stubs (not used in quest tests)
-  marketStore: { get: mock(async () => OkResult(null)), set: mock(async () => OkResult(null)) },
-  findActiveListings: mock(async () => OkResult([])),
-  countActiveListings: mock(async () => OkResult(0)),
-  achievementProgressStore: {
-    get: mock(async () => OkResult(null)),
-    set: mock(async () => OkResult(null)),
-  },
-  achievementUnlocksStore: {
-    get: mock(async () => OkResult(null)),
-    set: mock(async () => OkResult(null)),
-  },
-  getUnlocksForUser: mock(async () => OkResult([])),
-  getProgressForUser: mock(async () => OkResult([])),
-}));
-
-// ---------------------------------------------------------------------------
-// Import AFTER mocking
-// ---------------------------------------------------------------------------
-
-const {
+import { beforeEach, describe, expect, test } from "bun:test";
+import { QuestLog, type QuestLogValue } from "@/components/economy/quests";
+import type { Ctx } from "@/framework/types";
+import {
   acceptQuest,
-  progressQuest,
-  progressAllQuests,
+  browseQuests,
   claimRewards,
   getActiveQuests,
-  browseQuests,
-  QuestError,
+  progressAllQuests,
+  progressQuest,
   QUEST_DEFINITIONS,
-} = await import("./quests");
+  type QuestError,
+} from "./quests";
 
-// ---------------------------------------------------------------------------
-// Reset helpers
-// ---------------------------------------------------------------------------
+const logs = new Map<string, QuestLogValue>();
+
+function readEntry(userId: string, questId: string) {
+  return logs.get(userId)?.entries[questId];
+}
 
 function makeCtx() {
   const wallets: Record<string, Record<string, number>> = {};
@@ -101,6 +37,20 @@ function makeCtx() {
     logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never,
     interaction: null,
     emit: async () => {},
+    of(_kind: unknown, id: string) {
+      return {
+        async get(component: unknown) {
+          if (component !== QuestLog) throw new Error("unexpected component in test ctx");
+          return logs.get(id) ?? QuestLog.schema.parse({});
+        },
+        async update(component: unknown, patch: unknown) {
+          if (component !== QuestLog) throw new Error("unexpected component in test ctx");
+          const current = logs.get(id) ?? QuestLog.schema.parse({});
+          const partial = typeof patch === "function" ? patch(current) : patch;
+          logs.set(id, { ...current, ...(partial as Partial<QuestLogValue>) });
+        },
+      };
+    },
     get: async (id: string) => {
       const bal = wallets[id];
       return bal ? ({ balances: bal, bankBalances: {} } as never) : null;
@@ -120,81 +70,55 @@ function makeCtx() {
     set: async () => {},
     delete: async () => {},
     query: async () => [],
-  } as unknown as import("@/framework/types").Ctx;
+  } as unknown as Ctx;
 }
 
-function resetAll() {
-  questStore.clear();
-  mockQuestGet.mockReset();
-  mockQuestSet.mockReset();
-  mockGetActiveQuests.mockReset();
-  mockUserGet.mockReset();
-  mockUserEnsure.mockReset();
-  mockUserUpdatePaths.mockReset();
+let ctx: Ctx;
 
-  mockQuestGet.mockImplementation(async (id: string) =>
-    OkResult<QuestProgressDoc | null>(questStore.get(id) ?? null),
-  );
-  mockQuestSet.mockImplementation(async (_id: string, doc: QuestProgressDoc) => {
-    questStore.set(doc._id, doc);
-    return OkResult(doc);
-  });
-  mockGetActiveQuests.mockImplementation(async (userId: string) =>
-    OkResult(
-      Array.from(questStore.values()).filter((q) => q.userId === userId && !q.rewardsClaimed),
-    ),
-  );
-  mockUserGet.mockImplementation(async () => OkResult<User | null>(makeUser()));
-  mockUserEnsure.mockImplementation(async () => OkResult(makeUser()));
-  mockUserUpdatePaths.mockImplementation(async () => OkResult(undefined));
-}
+beforeEach(() => {
+  logs.clear();
+  ctx = makeCtx();
+});
 
 // ---------------------------------------------------------------------------
-// acceptQuest tests
+// acceptQuest
 // ---------------------------------------------------------------------------
 
 describe("acceptQuest", () => {
-  beforeEach(resetAll);
-
-  test("creates a quest progress doc", async () => {
-    const result = await acceptQuest("user-1", "quest_gather_stone");
+  test("creates a quest progress entry", async () => {
+    const result = await acceptQuest(ctx, "user-1", "quest_gather_stone");
 
     expect(result.isOk()).toBe(true);
     const doc = result.unwrap();
     expect(doc.questId).toBe("quest_gather_stone");
-    expect(doc.userId).toBe("user-1");
     expect(doc.stepProgress).toEqual([0]); // 1 step
     expect(doc.completed).toBe(false);
-    expect(questStore.has("user-1:quest_gather_stone")).toBe(true);
+    expect(readEntry("user-1", "quest_gather_stone")).toBeDefined();
   });
 
   test("returns QUEST_NOT_FOUND for unknown quest", async () => {
-    const result = await acceptQuest("user-1", "nonexistent_quest");
+    const result = await acceptQuest(ctx, "user-1", "nonexistent_quest");
     expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof QuestError>;
-    expect(err.code).toBe("QUEST_NOT_FOUND");
+    expect((result.error as InstanceType<typeof QuestError>).code).toBe("QUEST_NOT_FOUND");
   });
 
   test("returns QUEST_ALREADY_ACTIVE if already accepted", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    const result = await acceptQuest("user-1", "quest_gather_stone");
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    const result = await acceptQuest(ctx, "user-1", "quest_gather_stone");
     expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof QuestError>;
-    expect(err.code).toBe("QUEST_ALREADY_ACTIVE");
+    expect((result.error as InstanceType<typeof QuestError>).code).toBe("QUEST_ALREADY_ACTIVE");
   });
 });
 
 // ---------------------------------------------------------------------------
-// progressQuest tests
+// progressQuest
 // ---------------------------------------------------------------------------
 
 describe("progressQuest", () => {
-  beforeEach(resetAll);
-
   test("advances step progress for matching event", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
 
-    const result = await progressQuest("user-1", "quest_gather_stone", {
+    const result = await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "stone",
       qty: 10,
@@ -207,9 +131,9 @@ describe("progressQuest", () => {
   });
 
   test("marks quest complete when step target met", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
 
-    const result = await progressQuest("user-1", "quest_gather_stone", {
+    const result = await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "stone",
       qty: 20,
@@ -218,162 +142,144 @@ describe("progressQuest", () => {
     expect(result.isOk()).toBe(true);
     expect(result.unwrap().completed).toBe(true);
 
-    const doc = questStore.get("user-1:quest_gather_stone");
+    const doc = readEntry("user-1", "quest_gather_stone");
     expect(doc?.completed).toBe(true);
     expect(doc?.completedAt).toBeDefined();
   });
 
   test("does not exceed step target", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", {
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "stone",
       qty: 30,
     });
 
-    const doc = questStore.get("user-1:quest_gather_stone");
-    expect(doc?.stepProgress[0]).toBe(20); // capped at target
+    expect(readEntry("user-1", "quest_gather_stone")?.stepProgress[0]).toBe(20); // capped
   });
 
   test("does not progress wrong event type", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", { kind: "fight_win" });
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await progressQuest(ctx, "user-1", "quest_gather_stone", { kind: "fight_win" });
 
-    const doc = questStore.get("user-1:quest_gather_stone");
-    expect(doc?.stepProgress[0]).toBe(0);
+    expect(readEntry("user-1", "quest_gather_stone")?.stepProgress[0]).toBe(0);
   });
 
   test("does not progress wrong item", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", {
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "wood",
       qty: 10,
     });
 
-    const doc = questStore.get("user-1:quest_gather_stone");
-    expect(doc?.stepProgress[0]).toBe(0);
+    expect(readEntry("user-1", "quest_gather_stone")?.stepProgress[0]).toBe(0);
   });
 
   test("handles multi-step quest independently", async () => {
     // quest_mixed_gather has 2 steps: wood x10, stone x10
-    await acceptQuest("user-1", "quest_mixed_gather");
+    await acceptQuest(ctx, "user-1", "quest_mixed_gather");
 
-    await progressQuest("user-1", "quest_mixed_gather", {
+    await progressQuest(ctx, "user-1", "quest_mixed_gather", {
       kind: "gather_item",
       itemId: "wood",
       qty: 10,
     });
-    let doc = questStore.get("user-1:quest_mixed_gather");
-    expect(doc?.stepProgress).toEqual([10, 0]);
-    expect(doc?.completed).toBe(false);
+    expect(readEntry("user-1", "quest_mixed_gather")?.stepProgress).toEqual([10, 0]);
+    expect(readEntry("user-1", "quest_mixed_gather")?.completed).toBe(false);
 
-    await progressQuest("user-1", "quest_mixed_gather", {
+    await progressQuest(ctx, "user-1", "quest_mixed_gather", {
       kind: "gather_item",
       itemId: "stone",
       qty: 10,
     });
-    doc = questStore.get("user-1:quest_mixed_gather");
-    expect(doc?.stepProgress).toEqual([10, 10]);
-    expect(doc?.completed).toBe(true);
+    expect(readEntry("user-1", "quest_mixed_gather")?.stepProgress).toEqual([10, 10]);
+    expect(readEntry("user-1", "quest_mixed_gather")?.completed).toBe(true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// progressAllQuests tests
+// progressAllQuests
 // ---------------------------------------------------------------------------
 
 describe("progressAllQuests", () => {
-  beforeEach(resetAll);
-
   test("advances all active quests matching the event", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await acceptQuest("user-1", "quest_gather_wood");
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await acceptQuest(ctx, "user-1", "quest_gather_wood");
 
-    await progressAllQuests("user-1", { kind: "gather_item", itemId: "stone", qty: 5 });
+    await progressAllQuests(ctx, "user-1", { kind: "gather_item", itemId: "stone", qty: 5 });
 
-    const stoneDom = questStore.get("user-1:quest_gather_stone");
-    const woodDoc = questStore.get("user-1:quest_gather_wood");
-    expect(stoneDom?.stepProgress[0]).toBe(5);
-    expect(woodDoc?.stepProgress[0]).toBe(0); // no wood gathered
+    expect(readEntry("user-1", "quest_gather_stone")?.stepProgress[0]).toBe(5);
+    expect(readEntry("user-1", "quest_gather_wood")?.stepProgress[0]).toBe(0); // no wood gathered
   });
 });
 
 // ---------------------------------------------------------------------------
-// claimRewards tests
+// claimRewards
 // ---------------------------------------------------------------------------
 
 describe("claimRewards", () => {
-  beforeEach(resetAll);
-
   test("claims currency reward for completed quest", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", {
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "stone",
       qty: 20,
     });
 
-    const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
+    const result = await claimRewards(ctx, "user-1", "quest_gather_stone");
 
     expect(result.isOk()).toBe(true);
     const data = result.unwrap();
     expect(data.rewards.some((r) => r.type === "currency")).toBe(true);
     expect(data.rewards.find((r) => r.type === "currency")?.amount).toBe(150);
-
-    const doc = questStore.get("user-1:quest_gather_stone");
-    expect(doc?.rewardsClaimed).toBe(true);
+    expect(readEntry("user-1", "quest_gather_stone")?.rewardsClaimed).toBe(true);
   });
 
   test("returns QUEST_NOT_COMPLETED when quest not finished", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
 
-    const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
+    const result = await claimRewards(ctx, "user-1", "quest_gather_stone");
     expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof QuestError>;
-    expect(err.code).toBe("QUEST_NOT_COMPLETED");
+    expect((result.error as InstanceType<typeof QuestError>).code).toBe("QUEST_NOT_COMPLETED");
   });
 
   test("returns REWARDS_ALREADY_CLAIMED when claimed again", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", {
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "stone",
       qty: 20,
     });
-    await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
+    await claimRewards(ctx, "user-1", "quest_gather_stone");
 
-    const result = await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
+    const result = await claimRewards(ctx, "user-1", "quest_gather_stone");
     expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof QuestError>;
-    expect(err.code).toBe("REWARDS_ALREADY_CLAIMED");
+    expect((result.error as InstanceType<typeof QuestError>).code).toBe("REWARDS_ALREADY_CLAIMED");
   });
 
   test("returns QUEST_NOT_FOUND for unknown quest", async () => {
-    const result = await claimRewards(makeCtx(), "user-1", "unknown_quest");
+    const result = await claimRewards(ctx, "user-1", "unknown_quest");
     expect(result.isErr()).toBe(true);
-    const err = result.error as InstanceType<typeof QuestError>;
-    expect(err.code).toBe("QUEST_NOT_FOUND");
+    expect((result.error as InstanceType<typeof QuestError>).code).toBe("QUEST_NOT_FOUND");
   });
 });
 
 // ---------------------------------------------------------------------------
-// getActiveQuests tests
+// getActiveQuests
 // ---------------------------------------------------------------------------
 
 describe("getActiveQuests", () => {
-  beforeEach(resetAll);
-
   test("returns views for all active quests", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await acceptQuest("user-1", "quest_fight_5");
-    await progressQuest("user-1", "quest_gather_stone", {
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await acceptQuest(ctx, "user-1", "quest_fight_5");
+    await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "stone",
       qty: 10,
     });
 
-    const result = await getActiveQuests("user-1");
+    const result = await getActiveQuests(ctx, "user-1");
     expect(result.isOk()).toBe(true);
     const quests = result.unwrap();
     expect(quests).toHaveLength(2);
@@ -385,22 +291,22 @@ describe("getActiveQuests", () => {
   });
 
   test("excludes claimed quests", async () => {
-    await acceptQuest("user-1", "quest_gather_stone");
-    await progressQuest("user-1", "quest_gather_stone", {
+    await acceptQuest(ctx, "user-1", "quest_gather_stone");
+    await progressQuest(ctx, "user-1", "quest_gather_stone", {
       kind: "gather_item",
       itemId: "stone",
       qty: 20,
     });
-    await claimRewards(makeCtx(), "user-1", "quest_gather_stone");
+    await claimRewards(ctx, "user-1", "quest_gather_stone");
 
-    const result = await getActiveQuests("user-1");
+    const result = await getActiveQuests(ctx, "user-1");
     expect(result.isOk()).toBe(true);
     expect(result.unwrap()).toHaveLength(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// browseQuests tests
+// browseQuests
 // ---------------------------------------------------------------------------
 
 describe("browseQuests", () => {

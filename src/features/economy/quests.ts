@@ -3,19 +3,21 @@
  *
  * Architecture: Plain exported async functions — no classes (except QuestError).
  * Dependencies: locks from core/state (claim exclusion), adjustBalance from mutations,
- *   questProgressStore / getActiveQuestsForUser from economy repo.
+ *   and the `QuestLog` component on the User entity for storage.
  *
  * NOTE: XP rewards pending progression module. Item rewards pending inventory module.
  *       Progress events are called from event handlers (gather, fight, craft, market commands).
  */
 
+import { type QuestEntryValue, QuestLog } from "@/components/economy/quests";
+import { User } from "@/components/entities";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { locks } from "@/core/state";
-import { getActiveQuestsForUser, questProgressStore } from "@/db/repositories/economy";
-import type { QuestProgressDoc } from "@/db/schemas/quest";
 import { adjustBalance } from "@/features/economy/mutations";
 import type { Ctx } from "@/framework/types";
-import { buildProgressId } from "@/utils/ids";
+
+/** A user's stored progress for one quest, paired with its id for callers. */
+export type QuestProgress = QuestEntryValue & { readonly questId: string };
 
 // ---------------------------------------------------------------------------
 // Error
@@ -158,40 +160,32 @@ function isAllStepsComplete(def: QuestDef, stepProgress: readonly number[]): boo
 // ---------------------------------------------------------------------------
 
 export async function acceptQuest(
+  ctx: Ctx,
   userId: string,
   questId: string,
-): Promise<Result<QuestProgressDoc, QuestError>> {
+): Promise<Result<QuestProgress, QuestError>> {
   const def = getDefinition(questId);
   if (!def) {
     return ErrResult(new QuestError("QUEST_NOT_FOUND", `Quest "${questId}" not found`));
   }
 
-  const docId = buildProgressId(userId, questId);
-  const existing = await questProgressStore.get(docId);
-  if (existing.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", existing.error.message));
-
-  const existingQuest = existing.unwrap();
-  if (existingQuest && !existingQuest.rewardsClaimed) {
+  const u = ctx.of(User, userId);
+  const existing = (await u.get(QuestLog)).entries[questId];
+  if (existing && !existing.rewardsClaimed) {
     return ErrResult(
       new QuestError("QUEST_ALREADY_ACTIVE", "This quest is already active or completed"),
     );
   }
 
-  const now = new Date();
-  const doc: QuestProgressDoc = {
-    _id: docId,
-    userId,
-    questId,
+  const entry: QuestEntryValue = {
     stepProgress: new Array(def.steps.length).fill(0),
     completed: false,
     rewardsClaimed: false,
-    startedAt: now,
+    startedAt: new Date(),
   };
+  await u.update(QuestLog, (log) => ({ entries: { ...log.entries, [questId]: entry } }));
 
-  const saveRes = await questProgressStore.set(docId, doc);
-  if (saveRes.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", saveRes.error.message));
-
-  return OkResult(doc);
+  return OkResult({ ...entry, questId });
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +199,7 @@ export type QuestEvent =
   | { kind: "market_buy_item"; itemId: string; qty?: number };
 
 export async function progressQuest(
+  ctx: Ctx,
   userId: string,
   questId: string,
   event: QuestEvent,
@@ -214,11 +209,8 @@ export async function progressQuest(
     return ErrResult(new QuestError("QUEST_NOT_FOUND", `Quest "${questId}" not found`));
   }
 
-  const docId = buildProgressId(userId, questId);
-  const existing = await questProgressStore.get(docId);
-  if (existing.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", existing.error.message));
-
-  const doc = existing.unwrap();
+  const u = ctx.of(User, userId);
+  const doc = (await u.get(QuestLog)).entries[questId];
   if (!doc) return ErrResult(new QuestError("QUEST_NOT_STARTED", "Quest not accepted"));
   if (doc.completed) return OkResult({ completed: true, stepProgress: doc.stepProgress });
 
@@ -248,14 +240,14 @@ export async function progressQuest(
   }
 
   const completed = isAllStepsComplete(def, newStepProgress);
-  const updated: QuestProgressDoc = {
+  const updated: QuestEntryValue = {
     ...doc,
     stepProgress: newStepProgress,
     completed,
     completedAt: completed && !doc.completed ? new Date() : doc.completedAt,
   };
 
-  await questProgressStore.set(docId, updated);
+  await u.update(QuestLog, (log) => ({ entries: { ...log.entries, [questId]: updated } }));
   return OkResult({ completed, stepProgress: newStepProgress });
 }
 
@@ -264,15 +256,14 @@ export async function progressQuest(
 // ---------------------------------------------------------------------------
 
 export async function progressAllQuests(
+  ctx: Ctx,
   userId: string,
   event: QuestEvent,
 ): Promise<Result<void, QuestError>> {
-  const activeRes = await getActiveQuestsForUser(userId);
-  if (activeRes.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", activeRes.error.message));
-
-  for (const questDoc of activeRes.unwrap()) {
-    if (questDoc.completed) continue;
-    await progressQuest(userId, questDoc.questId, event);
+  const { entries } = await ctx.of(User, userId).get(QuestLog);
+  for (const [questId, entry] of Object.entries(entries)) {
+    if (entry.completed || entry.rewardsClaimed) continue;
+    await progressQuest(ctx, userId, questId, event);
   }
 
   return OkResult(undefined);
@@ -304,11 +295,8 @@ export async function claimRewards(
       return ErrResult(new QuestError("QUEST_NOT_FOUND", `Quest "${questId}" not found`));
     }
 
-    const docId = buildProgressId(userId, questId);
-    const existing = await questProgressStore.get(docId);
-    if (existing.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", existing.error.message));
-
-    const doc = existing.unwrap();
+    const u = ctx.of(User, userId);
+    const doc = (await u.get(QuestLog)).entries[questId];
     if (!doc) return ErrResult(new QuestError("QUEST_NOT_STARTED", "Quest not started"));
     if (!doc.completed)
       return ErrResult(new QuestError("QUEST_NOT_COMPLETED", "Quest not yet completed"));
@@ -340,12 +328,8 @@ export async function claimRewards(
       });
     }
 
-    // Mark claimed
-    await questProgressStore.set(docId, {
-      ...doc,
-      rewardsClaimed: true,
-      rewardsClaimedAt: new Date(),
-    });
+    const claimed: QuestEntryValue = { ...doc, rewardsClaimed: true, rewardsClaimedAt: new Date() };
+    await u.update(QuestLog, (log) => ({ entries: { ...log.entries, [questId]: claimed } }));
 
     return OkResult({ rewards: appliedRewards });
   } finally {
@@ -369,16 +353,19 @@ export interface QuestView {
   readonly startedAt: Date;
 }
 
-export async function getActiveQuests(userId: string): Promise<Result<QuestView[], QuestError>> {
-  const activeRes = await getActiveQuestsForUser(userId);
-  if (activeRes.isErr()) return ErrResult(new QuestError("UPDATE_FAILED", activeRes.error.message));
+export async function getActiveQuests(
+  ctx: Ctx,
+  userId: string,
+): Promise<Result<QuestView[], QuestError>> {
+  const { entries } = await ctx.of(User, userId).get(QuestLog);
 
   const views: QuestView[] = [];
-  for (const doc of activeRes.unwrap()) {
-    const def = getDefinition(doc.questId);
+  for (const [questId, doc] of Object.entries(entries)) {
+    if (doc.rewardsClaimed) continue;
+    const def = getDefinition(questId);
     if (!def) continue;
     views.push({
-      questId: doc.questId,
+      questId,
       title: def.title,
       description: def.description,
       difficulty: def.difficulty,

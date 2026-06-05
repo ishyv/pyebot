@@ -6,7 +6,6 @@ import {
   type UnlockedAchievementDoc,
   UnlockedAchievementSchema,
 } from "@/db/schemas/achievement";
-import { type QuestProgressDoc, QuestProgressSchema } from "@/db/schemas/quest";
 import { MongoStore } from "@/db/store";
 
 // ---------------------------------------------------------------------------
@@ -35,16 +34,4 @@ export async function getProgressForUser(
 ): Promise<Result<AchievementProgressDoc[]>> {
   const filter: Filter<AchievementProgressDoc> = { userId };
   return achievementProgressStore.find(filter);
-}
-
-// ---------------------------------------------------------------------------
-// Quest store
-// ---------------------------------------------------------------------------
-
-export const questProgressStore = new MongoStore("questProgress", QuestProgressSchema);
-
-/** Returns all active (not-yet-claimed) quests for a user. */
-export async function getActiveQuestsForUser(userId: string): Promise<Result<QuestProgressDoc[]>> {
-  const filter: Filter<QuestProgressDoc> = { userId, rewardsClaimed: false };
-  return questProgressStore.find(filter);
 }
