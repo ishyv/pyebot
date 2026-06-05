@@ -1,7 +1,7 @@
-import { RpgProfile } from "@/components/rpg-profile";
 import type { GatherAction } from "@/features/rpg/content/actions";
 import { LOCATIONS } from "@/features/rpg/content/locations";
 import { getEquippedToolTier } from "@/features/rpg/gathering";
+import { getRpgProfile } from "@/features/rpg/profile";
 import { command } from "@/framework";
 import { container, separator, text, v2Message } from "@/ui/v2";
 import { getHints } from "@/utils/command-registry";
@@ -18,7 +18,7 @@ export default command("gather-locations")
   .defer("ephemeral")
   .help({ hints: ["/expedition", "/equip", "/rpg-profile"] })
   .run(async ({ ctx, userId, options }) => {
-    const rpgProfile = await ctx.get(userId, RpgProfile);
+    const rpgProfile = await getRpgProfile(ctx, userId);
 
     if (!rpgProfile?.starterKitType) {
       return { content: "Use `/rpg-profile` to pick your profession first." };

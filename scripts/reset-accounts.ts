@@ -18,7 +18,6 @@ import { disconnectDb, getDb } from "../src/core/db";
 const GAMEPLAY_COLLECTIONS = [
   "economy_accounts",
   "user_currencies",
-  "rpg_profiles",
   "user_factories",
   "quest_progress",
   "achievement_progress",
@@ -26,7 +25,7 @@ const GAMEPLAY_COLLECTIONS = [
   "market_listings",
 ] as const;
 
-const ENTITY_FIELD_RESETS = [{ collection: "users", fields: ["inventory"] }] as const;
+const ENTITY_FIELD_RESETS = [{ collection: "users", fields: ["inventory", "rpgProfile"] }] as const;
 
 async function main() {
   const db = await getDb();

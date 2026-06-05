@@ -14,7 +14,7 @@
  * - Inventory items are stored as stack slots in the `UserInventory` component.
  */
 
-import type { RpgProfileValue } from "@/components/rpg-profile";
+import type { RpgProfileValue } from "@/components/rpg/profile";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import type { GatherAction } from "@/features/rpg/content/actions";
 import { LOCATIONS, type LocationId } from "@/features/rpg/content/locations";

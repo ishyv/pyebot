@@ -1,5 +1,5 @@
 import { type ButtonInteraction, MessageFlags } from "discord.js";
-import type { EquippedItemValue, StarterKitTypeValue } from "@/components/rpg-profile";
+import type { EquippedItemValue, StarterKitTypeValue } from "@/components/rpg/profile";
 import { TOOLS } from "@/features/rpg/content/tools";
 import { patchRpgProfile } from "@/features/rpg/profile";
 import type { Ctx } from "@/framework/types";

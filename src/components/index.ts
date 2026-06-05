@@ -14,7 +14,7 @@ export * from "./guild-features";
 export * from "./market-listing";
 export * from "./quest-progress";
 export * from "./rpg/inventory";
-export * from "./rpg-profile";
+export * from "./rpg/profile";
 export * from "./temp-role-grant";
 export * from "./ticket";
 export * from "./user-currency";

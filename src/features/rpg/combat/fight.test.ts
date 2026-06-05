@@ -3,7 +3,9 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { RpgProfileValue } from "@/components/rpg-profile";
+import { User } from "@/components/entities";
+import { RpgProfile, type RpgProfileValue } from "@/components/rpg/profile";
+import type { EntityComponent, EntityKind } from "@/framework";
 import type { Ctx } from "@/framework/types";
 
 const sessionMap = new Map<string, unknown>();
@@ -89,6 +91,39 @@ function makeCtx(): Ctx {
     async delete() {},
     async query() {
       return [];
+    },
+    of(kind: EntityKind, id: string) {
+      expect(kind).toBe(User);
+      return {
+        async peek<T>(component: EntityComponent<T>) {
+          expect(component.name).toBe(RpgProfile.name);
+          return (profileStore.get(id) ?? null) as T | null;
+        },
+        async get<T>(component: EntityComponent<T>) {
+          expect(component.name).toBe(RpgProfile.name);
+          let profile = profileStore.get(id);
+          if (!profile) {
+            profile = makeProfile();
+            profileStore.set(id, profile);
+          }
+          return profile as T;
+        },
+        async update<T>(
+          component: EntityComponent<T>,
+          patch: Partial<T> | ((current: T) => Partial<T>),
+        ) {
+          expect(component.name).toBe(RpgProfile.name);
+          const existing = profileStore.get(id) ?? makeProfile();
+          const partial = typeof patch === "function" ? patch(existing as T) : patch;
+          profileStore.set(id, { ...existing, ...(partial as Partial<RpgProfileValue>) });
+        },
+      };
+    },
+    select() {
+      throw new Error("select not implemented in fight test ctx");
+    },
+    transaction() {
+      throw new Error("transaction not implemented in fight test ctx");
     },
     async emit() {},
     client: {},

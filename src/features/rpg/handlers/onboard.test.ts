@@ -5,7 +5,7 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { EquippedItemValue, RpgProfileValue } from "@/components/rpg-profile";
+import type { EquippedItemValue, RpgProfileValue } from "@/components/rpg/profile";
 import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------

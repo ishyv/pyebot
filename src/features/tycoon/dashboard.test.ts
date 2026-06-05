@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
-import { RpgProfile } from "@/components/rpg-profile";
+import { RpgProfile } from "@/components/rpg/profile";
 import { UserFactory } from "@/components/user-factory";
 import type { EntityComponent, EntityKind } from "@/framework";
 import type { Component, Ctx } from "@/framework/types";
@@ -101,8 +101,12 @@ function stockpileDashboardCtx(stashSize: number): Ctx {
         lifetimeScrip: 0,
       },
     },
-    [User.collection]: { [USER]: { [UserInventory.name]: { slots: {} } } },
-    [RpgProfile.collection]: { [USER]: { stashSize } },
+    [User.collection]: {
+      [USER]: {
+        [UserInventory.name]: { slots: {} },
+        [RpgProfile.name]: { stashSize },
+      },
+    },
     user_currencies: { [USER]: { balances: { coins: 0, scrip: 0 }, bankBalances: {} } },
   });
 }

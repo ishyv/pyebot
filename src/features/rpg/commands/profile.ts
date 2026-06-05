@@ -1,5 +1,5 @@
 import { ActionRowBuilder, type ButtonBuilder, ButtonStyle } from "discord.js";
-import { RpgProfile } from "@/components/rpg-profile";
+import { getRpgProfile } from "@/features/rpg/profile";
 import { onboardRoutes } from "@/features/rpg/routes";
 import { command } from "@/framework";
 import { container, section, text, thumb, v2Message } from "@/ui/v2";
@@ -12,7 +12,7 @@ export default command("rpg-profile")
   .help({ hints: ["/expedition", "/fight", "/rpg-quest list"] })
   .run(async ({ ctx, user, options }) => {
     const target = options.user ?? user;
-    const profile = await ctx.get(target.id, RpgProfile);
+    const profile = await getRpgProfile(ctx, target.id);
 
     if (!profile) {
       if (target.id !== user.id) {

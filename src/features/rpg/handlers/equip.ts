@@ -6,7 +6,7 @@
  */
 
 import { MessageFlags, type StringSelectMenuInteraction } from "discord.js";
-import type { RpgProfileValue } from "@/components/rpg-profile";
+import type { RpgProfileValue } from "@/components/rpg/profile";
 import { TOOLS } from "@/features/rpg/content/tools";
 import { getStackQuantity } from "@/features/rpg/inventory";
 import { ensureRpgProfile, patchRpgProfile } from "@/features/rpg/profile";

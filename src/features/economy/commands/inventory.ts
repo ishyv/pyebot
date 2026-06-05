@@ -1,6 +1,6 @@
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
-import { RpgProfile } from "@/components/rpg-profile";
+import { getRpgProfile } from "@/features/rpg/profile";
 import { command } from "@/framework";
 import { container, section, separator, text, thumb, v2Message } from "@/ui/v2";
 
@@ -14,7 +14,7 @@ export default command("inventory")
     const target = options.user ?? user;
     const [inv, profile] = await Promise.all([
       ctx.of(User, target.id).peek(UserInventory),
-      ctx.get(target.id, RpgProfile),
+      getRpgProfile(ctx, target.id),
     ]);
 
     const slots = inv?.slots ?? {};

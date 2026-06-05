@@ -14,7 +14,7 @@
 
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
-import { RpgProfile } from "@/components/rpg-profile";
+import { RpgProfile } from "@/components/rpg/profile";
 import { UserCurrency } from "@/components/user-currency";
 import { UserFactory } from "@/components/user-factory";
 import { renderDashboard } from "@/features/tycoon/dashboard";
@@ -170,8 +170,12 @@ export const PREVIEW_SCENES: readonly PreviewScene[] = [
       [UserCurrency.collection]: {
         [USER]: { balances: { coins: 400, scrip: 0 }, bankBalances: {} },
       },
-      [User.collection]: { [USER]: { [UserInventory.name]: { slots: {} } } },
-      [RpgProfile.collection]: { [USER]: { stashSize: 20 } },
+      [User.collection]: {
+        [USER]: {
+          [UserInventory.name]: { slots: {} },
+          [RpgProfile.name]: { stashSize: 20 },
+        },
+      },
       [UserFactory.collection]: {
         [USER]: {
           lines: { lumber_mill: line({ agoHours: 100 }) },

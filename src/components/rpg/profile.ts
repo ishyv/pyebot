@@ -11,7 +11,8 @@
  */
 
 import { z } from "zod";
-import { component } from "@/framework/component";
+import { User } from "@/components/entities";
+import { defineComponent } from "@/framework";
 
 export const EquipmentSlot = z.enum([
   "weapon",
@@ -60,9 +61,10 @@ export function defaultLoadout(): LoadoutValue {
 export const StarterKitType = z.enum(["miner", "lumber"]);
 export type StarterKitTypeValue = z.infer<typeof StarterKitType>;
 
-export const RpgProfile = component({
-  collection: "rpg_profiles",
-  schema: z.object({
+export const RpgProfile = defineComponent(
+  User,
+  "rpgProfile",
+  z.object({
     loadout: Loadout.default(() => defaultLoadout()),
     hpCurrent: z.number().int().min(0).default(100),
     wins: z.number().int().min(0).default(0),
@@ -78,6 +80,6 @@ export const RpgProfile = component({
     /** Optimistic-concurrency version; bumped on every adjustment. */
     version: z.number().int().nonnegative().default(0),
   }),
-});
+);
 
 export type RpgProfileValue = z.infer<typeof RpgProfile.schema>;

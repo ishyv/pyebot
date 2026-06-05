@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
+import { RpgProfile } from "@/components/rpg/profile";
 import { locks } from "@/core/state";
 import type { EntityComponent, EntityKind } from "@/framework";
 import type { Component, Ctx } from "@/framework/types";
@@ -227,8 +228,12 @@ describe("collect() — sell mode", () => {
 function stockpileFactory(stashSize: number) {
   return {
     ...wallet(0, 0),
-    rpg_profiles: { [USER]: { stashSize } },
-    [User.collection]: { [USER]: { [UserInventory.name]: { slots: {} } } },
+    [User.collection]: {
+      [USER]: {
+        [UserInventory.name]: { slots: {} },
+        [RpgProfile.name]: { stashSize },
+      },
+    },
     user_factories: {
       [USER]: {
         lines: {

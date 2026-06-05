@@ -1,10 +1,12 @@
 /**
  * Tests for getEquippedToolTier and TOOL_TIER_FALLBACK in gathering.ts.
- * Uses a tiny Ctx stub so profile reads stay on the component path.
+ * Uses a tiny Ctx stub so profile reads stay on the entity component path.
  */
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { LoadoutValue, RpgProfileValue } from "@/components/rpg-profile";
+import { User } from "@/components/entities";
+import type { LoadoutValue, RpgProfileValue } from "@/components/rpg/profile";
+import type { EntityComponent, EntityKind } from "@/framework";
 import type { Ctx } from "@/framework/types";
 
 // ---------------------------------------------------------------------------
@@ -53,9 +55,24 @@ function makeCtx(): Ctx {
     sessions: {} as Ctx["sessions"],
     interaction: null,
     respond: {} as Ctx["respond"],
-    of: (() => {
-      throw new Error("entity API not used in this mock");
-    }) as Ctx["of"],
+    of: ((kind: EntityKind, id: string) => {
+      expect(kind).toBe(User);
+      return {
+        async peek<T>(component: EntityComponent<T>) {
+          expect(component.name).toBe("rpgProfile");
+          return (await mockGetProfile(id)) as T | null;
+        },
+        async get<T>(component: EntityComponent<T>) {
+          expect(component.name).toBe("rpgProfile");
+          const value = await mockGetProfile(id);
+          if (!value) throw new Error("profile not seeded");
+          return value as T;
+        },
+        async update() {
+          throw new Error("not used");
+        },
+      };
+    }) as unknown as Ctx["of"],
     select: (() => {
       throw new Error("entity API not used in this mock");
     }) as Ctx["select"],

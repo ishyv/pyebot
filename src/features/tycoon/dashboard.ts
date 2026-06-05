@@ -9,7 +9,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from "discord.js";
 import { User } from "@/components/entities";
 import { UserInventory } from "@/components/rpg/inventory";
-import { RpgProfile } from "@/components/rpg-profile";
+import { RpgProfile } from "@/components/rpg/profile";
 import { UserFactory, type UserFactoryValue } from "@/components/user-factory";
 import { getBalance } from "@/features/economy/mutations";
 import { getStashUsage } from "@/features/rpg/inventory";
@@ -415,7 +415,7 @@ export async function renderDashboard(ctx: Ctx, userId: string) {
     getBalance(ctx, userId, "coins"),
     netWorth(ctx, userId),
     ctx.of(User, userId).peek(UserInventory),
-    ctx.get(userId, RpgProfile),
+    ctx.of(User, userId).peek(RpgProfile),
   ]);
 
   const now = Date.now();
