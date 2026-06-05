@@ -5,12 +5,14 @@
  * close (delete channel, remove tracking). One open ticket per user per guild.
  *
  * State: sessions store keys `ticket:{guildId}:{userId}` → channelId string.
- * Durable state: `Ticket` by channel id and `UserTickets` by guild/user id.
+ * Durable state: a `Ticket` entity per channel id, and `UserTickets` on the
+ * owner's User entity (open channel ids grouped by guild).
  */
 
 import { ChannelType, type Guild as DjsGuild } from "discord.js";
-import { Ticket } from "@/components/ticket";
-import { UserTickets, userTicketsId } from "@/components/user-tickets";
+import { Ticket, User } from "@/components/entities";
+import { TicketRecord } from "@/components/ticket";
+import { UserTickets } from "@/components/user-tickets";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import type { Ctx } from "@/framework/types";
 
@@ -90,8 +92,8 @@ export function makeTicketChannelName(username: string): string {
 }
 
 /**
- * Opens a ticket: creates a text channel under `categoryId`, registers it
- * in the sessions store and in the guild's `pendingTickets` array.
+ * Opens a ticket: creates a text channel under `categoryId`, records it as a
+ * `Ticket` entity and on the owner's `UserTickets`, and tracks it in sessions.
  * Returns TicketError with code LIMIT_REACHED if the user already has a ticket.
  */
 export async function openTicket(
@@ -101,12 +103,11 @@ export async function openTicket(
   opts: OpenTicketOptions,
 ): Promise<Result<OpenTicketResult>> {
   const maxPerUser = opts.maxPerUser ?? 1;
-  const ticketStateId = userTicketsId(guild.id, userId);
-  const userTickets = await ctx.ensure(ticketStateId, UserTickets);
+  const openInGuild = (await ctx.of(User, userId).get(UserTickets)).openByGuild[guild.id] ?? [];
 
   if (maxPerUser > 0) {
     const existingSession = ctx.sessions.get(sessionKey(guild.id, userId));
-    if (existingSession || userTickets.openChannelIds.length >= maxPerUser) {
+    if (existingSession || openInGuild.length >= maxPerUser) {
       return ErrResult(new TicketError("You already have an open ticket.", "LIMIT_REACHED"));
     }
   }
@@ -126,19 +127,25 @@ export async function openTicket(
   const channelId = channel.id;
 
   try {
-    await ctx.set(channelId, Ticket, {
+    await ctx.of(Ticket, channelId).set(TicketRecord, {
       guildId: guild.id,
       ownerId: userId,
       category: "general",
       createdAt: new Date(),
     });
-    await ctx.patch(ticketStateId, UserTickets, (current) => ({
-      openChannelIds: [...new Set([...current.openChannelIds, channelId])],
+    await ctx.of(User, userId).update(UserTickets, (current) => ({
+      openByGuild: {
+        ...current.openByGuild,
+        [guild.id]: [...new Set([...(current.openByGuild[guild.id] ?? []), channelId])],
+      },
     }));
     ctx.sessions.set(sessionKey(guild.id, userId), channelId);
   } catch (err) {
     ctx.logger.error("Failed to record ticket in DB", err);
-    await ctx.delete(channelId, Ticket).catch(() => {});
+    await ctx
+      .of(Ticket, channelId)
+      .remove(TicketRecord)
+      .catch(() => {});
     await channel.delete("Ticket persistence failed").catch(() => {});
     return ErrResult(new TicketError("Failed to record ticket in DB.", "DB_ERROR"));
   }
@@ -147,8 +154,9 @@ export async function openTicket(
 }
 
 /**
- * Closes a ticket: deletes the channel, removes from sessions and pendingTickets.
- * `ownerId` is optional — if provided, the session key is cleaned up.
+ * Closes a ticket: deletes the channel, removes the `Ticket` entity and the
+ * owner's `UserTickets` entry, and clears the session.
+ * `ownerId` is optional — when omitted it is inferred from the stored ticket.
  */
 export async function closeTicket(
   ctx: Ctx,
@@ -156,7 +164,7 @@ export async function closeTicket(
   channelId: string,
   ownerId?: string,
 ): Promise<Result<void>> {
-  const ticket = await ctx.get(channelId, Ticket);
+  const ticket = await ctx.of(Ticket, channelId).peek(TicketRecord);
   const resolvedOwnerId = ownerId ?? ticket?.ownerId;
 
   // Delete the Discord channel
@@ -171,11 +179,13 @@ export async function closeTicket(
   }
 
   try {
-    await ctx.delete(channelId, Ticket);
+    await ctx.of(Ticket, channelId).remove(TicketRecord);
     if (resolvedOwnerId) {
-      const ticketStateId = userTicketsId(guild.id, resolvedOwnerId);
-      await ctx.patch(ticketStateId, UserTickets, (current) => ({
-        openChannelIds: current.openChannelIds.filter((id) => id !== channelId),
+      await ctx.of(User, resolvedOwnerId).update(UserTickets, (current) => ({
+        openByGuild: {
+          ...current.openByGuild,
+          [guild.id]: (current.openByGuild[guild.id] ?? []).filter((id) => id !== channelId),
+        },
       }));
       ctx.sessions.delete(sessionKey(guild.id, resolvedOwnerId));
     }

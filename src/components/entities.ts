@@ -31,3 +31,12 @@ export const User = entity("users");
  * moves to entity components; see `docs/entity-vs-config-storage.md`.
  */
 export const Guild = entity("guilds");
+
+/**
+ * An open support ticket, keyed by its Discord channel-id snowflake.
+ *
+ * A ticket is 1:1 with the text channel created for it, so the channel id is
+ * its natural entity id. Closing a ticket removes the entity; long-lived audit
+ * history, if ever needed, belongs in a separate log rather than this kind.
+ */
+export const Ticket = entity("tickets");

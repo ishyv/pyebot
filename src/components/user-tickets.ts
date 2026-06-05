@@ -1,25 +1,23 @@
 /**
- * UserTickets — the set of currently-open ticket channel ids a user has.
+ * UserTickets — the open ticket channel ids a user has, grouped per guild.
  *
- * The framework keeps this tiny on purpose: we enforce "one open ticket
- * per user per guild" by checking this collection before opening a new
- * one. Closed tickets are removed; long-lived audit logs live in their
- * own collection if/when needed.
+ * The framework enforces "one open ticket per user per guild" by checking this
+ * before opening a new one. Stored on the `User` entity; the old record was
+ * keyed `{guildId}:{userId}`, so the guild id moves into the map key here.
+ * Closed tickets are removed; long-lived audit logs live elsewhere.
  */
 
 import { z } from "zod";
-import { component } from "@/framework/component";
+import { User } from "@/components/entities";
+import { defineComponent } from "@/framework";
 
-export const UserTickets = component({
-  collection: "user_tickets",
-  schema: z.object({
-    openChannelIds: z.array(z.string()).default(() => []),
+export const UserTickets = defineComponent(
+  User,
+  "tickets",
+  z.object({
+    /** guildId → open ticket channel ids in that guild. */
+    openByGuild: z.record(z.string(), z.array(z.string())).default(() => ({})),
   }),
-});
+);
 
 export type UserTicketsValue = z.infer<typeof UserTickets.schema>;
-
-/** Stable id for one user's ticket state within one guild. */
-export function userTicketsId(guildId: string, userId: string): string {
-  return `${guildId}:${userId}`;
-}
