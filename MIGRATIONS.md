@@ -27,7 +27,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 | tycoon | `UserFactory` (`user_factories`) | `User` | medium | ✅ 2026-06-05 bd3a6bc |
 | moderation/sanctions | `UserSanctions` (`user_sanctions`) | `User` | medium | ✅ 2026-06-05 59e320c |
 | moderation/banned-images | `BannedImage` (`banned_images`) | `Guild` or synthetic (repo + webapp + CLI surfaces) | hard | ⬜ todo |
-| tickets | `UserTickets` (`user_tickets`), `Ticket` (`tickets`) | `User` + new `Ticket` kind | hard | 🚧 Hyv 2026-06-05 |
+| tickets | `UserTickets` (`user_tickets`), `Ticket` (`tickets`) | `User` + new `Ticket` kind | hard | ✅ 2026-06-05 970efe1 |
 | autoroles | `AutoroleRule` (`autorole_rules`), `TimedAutoroleGrant` (`timed_autorole_grants`), `TempRoleGrant` (`temp_role_grants`) | `Guild` + synthetic grant ids (confirm) | hard | ⬜ todo |
 | scripts | `ScriptDefinition` (`scripts`) | `Guild` (`GuildScripts` map keyed by name) | medium | ✅ 2026-06-05 b7fba53 |
 | offers/market | `MarketListing` (`market_listings`) | new `MarketListing` kind — **uses MongoDB transactions** (`src/db/transition.ts`, `market.ts`); migrate to `ctx.transaction` | hard | ⬜ todo |
