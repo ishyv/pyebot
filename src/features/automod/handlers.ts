@@ -11,10 +11,16 @@
  *   Discord side effects: the role must be removed before the grant row is gone.
  */
 import type { GuildMember, Message } from "discord.js";
-import { TempRoleGrant, tempRoleGrantId } from "@/components/temp-role-grant";
+import { tempRoleGrantId } from "@/components/temp-role-grant";
 import { createLogger } from "@/core/logger";
 import { getGuild } from "@/db/repositories/guilds";
 import { MemberJoined } from "@/events/member-joined";
+import {
+  deleteTempRoleGrant,
+  dueTempRoleGrants,
+  getTempRoleGrant,
+  setTempRoleGrant,
+} from "@/features/automod/tempRoleGrants";
 import { recordAutomodSystemCase } from "@/features/moderation/service";
 import { defineHandlers, listen, on, routeHandlers } from "@/framework";
 import type { Ctx } from "@/framework/types";
@@ -195,9 +201,9 @@ async function grantTempRole(
     });
   }
 
-  await ctx.set(
+  await setTempRoleGrant(
+    ctx,
     tempRoleGrantId(member.guild.id, member.id, RECENTLY_JOINED_POLICY_ID),
-    TempRoleGrant,
     {
       guildId: member.guild.id,
       userId: member.id,
@@ -218,7 +224,7 @@ async function savePerUserSlowGrant(
   if (!roleId || !member.roles.cache.has(roleId)) return;
   const grantId = tempRoleGrantId(member.guild.id, member.id, perUserSlowPolicyId(roleId));
   observedSlowGrantIds.add(grantId);
-  await ctx.set(grantId, TempRoleGrant, {
+  await setTempRoleGrant(ctx, grantId, {
     guildId: member.guild.id,
     userId: member.id,
     policyId: perUserSlowPolicyId(roleId),
@@ -236,7 +242,7 @@ async function recoverPerUserSlowGrant(
   const grantId = tempRoleGrantId(member.guild.id, member.id, perUserSlowPolicyId(rule.roleId));
   if (observedSlowGrantIds.has(grantId)) return;
   observedSlowGrantIds.add(grantId);
-  const existing = await ctx.get(grantId, TempRoleGrant);
+  const existing = await getTempRoleGrant(ctx, grantId);
   if (existing) return;
   await savePerUserSlowGrant(ctx, member, rule.roleId, rule.durationSeconds);
 }
@@ -275,8 +281,8 @@ async function applyPerUserSlowDecision(
 }
 
 async function sweepExpiredTempRoles(ctx: Ctx): Promise<void> {
-  const grants = await ctx.query(TempRoleGrant, { filter: { expiresAt: { $lte: new Date() } } });
-  for (const grant of grants) {
+  const grants = await dueTempRoleGrants(ctx, new Date());
+  for (const { id, value: grant } of grants) {
     const guild = await ctx.client.guilds.fetch(grant.guildId).catch(() => null);
     const member = guild ? await guild.members.fetch(grant.userId).catch(() => null) : null;
     if (member?.roles.cache.has(grant.roleId)) {
@@ -290,7 +296,7 @@ async function sweepExpiredTempRoles(ctx: Ctx): Promise<void> {
         log.error(`Failed to remove expired temp role ${grant.roleId}`, error);
       });
     }
-    observedSlowGrantIds.delete(grant._id);
-    await ctx.delete(grant._id, TempRoleGrant);
+    observedSlowGrantIds.delete(id);
+    await deleteTempRoleGrant(ctx, id);
   }
 }
