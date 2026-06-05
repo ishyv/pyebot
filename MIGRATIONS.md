@@ -19,7 +19,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 
 | Unit | State to migrate (collection) | Likely entity kind | Difficulty | Status |
 |---|---|---|---|---|
-| economy/wallet | `UserCurrency` (`user_currencies`), `EconomyAccount` (`economy_accounts`) | `User` | medium | ⬜ todo |
+| economy/wallet | `UserCurrency` (`user_currencies`), `EconomyAccount` (`economy_accounts`) | `User` | medium | 🚧 Vey 2026-06-05 |
 | economy/quests | `QuestProgress` (`quest_progress`) | `User` (`QuestLog` map keyed by questId) | medium | ✅ 2026-06-05 1d16f8b |
 | economy/achievements | `AchievementProgress` (`achievement_progress`), `UnlockedAchievements` (`unlocked_achievements`) | `User` (confirm id shape) | medium | ⬜ todo |
 | rpg/profile | `RpgProfile` (`rpg_profiles`) | `User` | medium | ✅ 2026-06-05 2014412 |
