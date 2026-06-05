@@ -30,7 +30,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 | tickets | `UserTickets` (`user_tickets`), `Ticket` (`tickets`) | `User` + new `Ticket` kind | hard | ✅ 2026-06-05 970efe1 |
 | autoroles | `AutoroleRule` (`autorole_rules`), `TimedAutoroleGrant` (`timed_autorole_grants`), `TempRoleGrant` (`temp_role_grants`) | `Guild` map + `TimedAutoroleGrant`/`TempRoleGrant` kinds | hard | ✅ 2026-06-05 a7aba8f |
 | scripts | `ScriptDefinition` (`scripts`) | `Guild` (`GuildScripts` map keyed by name) | medium | ✅ 2026-06-05 b7fba53 |
-| offers/market | `MarketListing` (`market_listings`) | new `MarketListing` kind — **uses MongoDB transactions** (`src/db/transition.ts`, `market.ts`); migrate to `ctx.transaction` | hard | ⬜ todo |
+| offers/market | `MarketListing` (`market_listings`) | new `MarketListing` kind — **uses MongoDB transactions** (`src/db/transition.ts`, `market.ts`); migrate to `ctx.transaction` | hard | 🚧 Vey 2026-06-05 |
 
 > The "likely entity kind" column is a hint. Confirming the entity kind from the
 > real id space is **step 1** of every migration (playbook §1).
