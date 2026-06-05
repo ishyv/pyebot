@@ -1,13 +1,9 @@
 import { type GuildMember, MessageFlags } from "discord.js";
-import {
-  AutoroleRule,
-  type AutoroleRuleValue,
-  autoroleRuleId,
-  TimedAutoroleGrant,
-} from "@/components/autorole-rule";
+import { type AutoroleRuleValue, autoroleRuleId } from "@/components/autorole-rule";
 import { MemberJoined } from "@/events/member-joined";
 import { defineHandlers, listen, on, routeHandlers } from "@/framework";
 import type { Ctx } from "@/framework/types";
+import { deleteTimedGrant, dueTimedGrants, listAutoroleRules, setTimedGrant } from "./persistence";
 import { routes } from "./routes";
 import {
   findButtonRules,
@@ -128,7 +124,7 @@ export default defineHandlers([
 ]);
 
 async function guildRules(ctx: Ctx, guildId: string): Promise<readonly AutoroleRuleValue[]> {
-  return ctx.query(AutoroleRule, { filter: { guildId } });
+  return listAutoroleRules(ctx, guildId);
 }
 
 async function applyRules(
@@ -165,14 +161,14 @@ async function revokeRules(
     await member.roles.remove(rule.roleId, `autorole:${rule.name}`).catch((error) => {
       ctx.logger.error(`Failed to remove autorole ${rule.name}`, error);
     });
-    await ctx.delete(
+    await deleteTimedGrant(
+      ctx,
       timedGrantId(
         member.guild.id,
         member.id,
         rule.roleId,
         autoroleRuleId(member.guild.id, rule.name),
       ),
-      TimedAutoroleGrant,
     );
   }
 }
@@ -184,7 +180,7 @@ async function scheduleTimedGrant(
 ): Promise<void> {
   if (!rule.durationMs) return;
   const ruleId = autoroleRuleId(member.guild.id, rule.name);
-  await ctx.set(timedGrantId(member.guild.id, member.id, rule.roleId, ruleId), TimedAutoroleGrant, {
+  await setTimedGrant(ctx, timedGrantId(member.guild.id, member.id, rule.roleId, ruleId), {
     guildId: member.guild.id,
     userId: member.id,
     roleId: rule.roleId,
@@ -194,10 +190,8 @@ async function scheduleTimedGrant(
 }
 
 async function sweepExpiredGrants(ctx: Ctx): Promise<void> {
-  const grants = await ctx.query(TimedAutoroleGrant, {
-    filter: { expiresAt: { $lte: new Date() } },
-  });
-  for (const grant of grants) {
+  const grants = await dueTimedGrants(ctx, new Date());
+  for (const { id, value: grant } of grants) {
     const guild = await ctx.client.guilds.fetch(grant.guildId).catch(() => null);
     const member = guild ? await guild.members.fetch(grant.userId).catch(() => null) : null;
     if (member?.roles.cache.has(grant.roleId)) {
@@ -205,6 +199,6 @@ async function sweepExpiredGrants(ctx: Ctx): Promise<void> {
         ctx.logger.error(`Failed to expire autorole ${grant.roleId}`, error);
       });
     }
-    await ctx.delete(grant._id, TimedAutoroleGrant);
+    await deleteTimedGrant(ctx, id);
   }
 }

@@ -8,11 +8,13 @@ import {
   PermissionFlagsBits,
   type Role,
 } from "discord.js";
+import type { AutoroleTriggerValue } from "@/components/autorole-rule";
 import {
-  AutoroleRule,
-  type AutoroleTriggerValue,
-  autoroleRuleId,
-} from "@/components/autorole-rule";
+  deleteAutoroleRule,
+  getAutoroleRule,
+  listAutoroleRules,
+  putAutoroleRule,
+} from "@/features/autoroles/persistence";
 import { routes } from "@/features/autoroles/routes";
 import { normalizeEmoji, parseDurationMs } from "@/features/autoroles/rules";
 import { command } from "@/framework";
@@ -272,13 +274,12 @@ async function handleDelete(interaction: ChatInputCommandInteraction, ctx: Ctx):
   if (!guildId) return;
 
   const name = interaction.options.getString("name", true);
-  const id = autoroleRuleId(guildId, name);
-  const existing = await ctx.get(id, AutoroleRule);
+  const existing = await getAutoroleRule(ctx, guildId, name);
   if (!existing) {
     await ctx.respond.send({ content: `No rule named **${name}** found.` });
     return;
   }
-  await ctx.delete(id, AutoroleRule);
+  await deleteAutoroleRule(ctx, guildId, name);
   await ctx.respond.send({ content: `Rule **${name}** has been deleted.` });
 }
 
@@ -319,13 +320,12 @@ async function handleToggle(
   if (!guildId) return;
 
   const name = interaction.options.getString("name", true);
-  const id = autoroleRuleId(guildId, name);
-  const existing = await ctx.get(id, AutoroleRule);
+  const existing = await getAutoroleRule(ctx, guildId, name);
   if (!existing) {
     await ctx.respond.send({ content: `No rule named **${name}** found.` });
     return;
   }
-  await ctx.patch(id, AutoroleRule, { enabled });
+  await putAutoroleRule(ctx, { ...existing, enabled });
   await ctx.respond.send({
     content: `Rule **${name}** is now ${enabled ? "enabled" : "disabled"}.`,
   });
@@ -339,7 +339,7 @@ async function saveRule(
   roleId: string,
   durationMs: number | null,
 ): Promise<void> {
-  await ctx.set(autoroleRuleId(guildId, name), AutoroleRule, {
+  await putAutoroleRule(ctx, {
     guildId,
     name,
     enabled: true,
@@ -351,7 +351,7 @@ async function saveRule(
 }
 
 async function listRules(ctx: Ctx, guildId: string) {
-  return ctx.query(AutoroleRule, { filter: { guildId } });
+  return listAutoroleRules(ctx, guildId);
 }
 
 function requireGuild(interaction: ChatInputCommandInteraction, ctx: Ctx): string | null {

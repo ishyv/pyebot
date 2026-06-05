@@ -40,3 +40,17 @@ export const Guild = entity("guilds");
  * history, if ever needed, belongs in a separate log rather than this kind.
  */
 export const Ticket = entity("tickets");
+
+/**
+ * A timed autorole grant awaiting expiry, keyed by
+ * `{guildId}:{userId}:{roleId}:{ruleId}`. One document per active grant; the
+ * expiry sweep selects the earliest-expiring batch rather than scanning all.
+ */
+export const TimedAutoroleGrant = entity("timed_autorole_grants");
+
+/**
+ * An active temporary role grant (automod), keyed by
+ * `{guildId}:{policyId}:{userId}`. Lifecycle state, not guild configuration —
+ * it records which member currently needs expiry.
+ */
+export const TempRoleGrant = entity("temp_role_grants");
