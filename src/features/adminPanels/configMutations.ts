@@ -6,11 +6,10 @@
  * Mongo paths locally.
  */
 
-import { GuildEconomy, type GuildEconomyValue } from "@/components/guild-economy";
 import { setGuildFeatureOverride, setGuildFeatureOverrides } from "@/components/guild-features";
-import { getDb } from "@/core/db";
 import { ErrResult, OkResult, type Result } from "@/core/result";
 import { getGuild, updateGuildPaths } from "@/db/repositories/guilds";
+import { EconomyConfigSchema, type Guild as GuildConfig } from "@/db/schemas/guild";
 import type {
   AutomodSettingsPatch,
   EconomyPatch,
@@ -129,44 +128,22 @@ function automodPolicyPaths(
   return paths;
 }
 
-/** Saves economy command settings on the GuildEconomy component the commands read. */
-export async function saveEconomySettings(
-  guildId: string,
-  patch: EconomyPatch,
-): Promise<Result<void>> {
-  const paths = {
-    ...flattenConfigPatch("daily", patch.daily),
-    ...flattenConfigPatch("work", patch.work),
-    ...flattenConfigPatch("sectors", patch.sectors),
-  };
-  try {
-    const db = await getDb();
-    await db.collection<{ _id: string }>(GuildEconomy.collection).findOneAndUpdate(
-      { _id: guildId },
-      {
-        $setOnInsert: { _id: guildId },
-        $set: { ...paths, updatedAt: new Date() },
-      },
-      { upsert: true, returnDocument: "after" },
-    );
-    return OkResult(undefined);
-  } catch (error) {
-    return ErrResult(error instanceof Error ? error : new Error(String(error)));
-  }
+/** Saves economy daily/work/sectors settings onto the guild document's economy slice. */
+export function saveEconomySettings(guildId: string, patch: EconomyPatch): Promise<Result<void>> {
+  return applyGuildConfigPaths(guildId, {
+    ...flattenConfigPatch("economy.daily", patch.daily),
+    ...flattenConfigPatch("economy.work", patch.work),
+    ...flattenConfigPatch("economy.sectors", patch.sectors),
+  });
 }
 
-/** Loads economy command settings from the GuildEconomy component with schema defaults. */
-export async function loadEconomySettings(guildId: string): Promise<Result<GuildEconomyValue>> {
-  try {
-    const db = await getDb();
-    const raw = await db.collection<{ _id: string }>(GuildEconomy.collection).findOne({
-      _id: guildId,
-    });
-    const parsed = GuildEconomy.schema.safeParse(raw ?? {});
-    return OkResult(parsed.success ? parsed.data : GuildEconomy.schema.parse({}));
-  } catch (error) {
-    return ErrResult(error instanceof Error ? error : new Error(String(error)));
-  }
+/** Loads the guild document's economy config slice, with schema defaults when absent. */
+export async function loadEconomySettings(
+  guildId: string,
+): Promise<Result<GuildConfig["economy"]>> {
+  const res = await getGuild(guildId);
+  if (res.isErr()) return ErrResult(res.error);
+  return OkResult(res.unwrap()?.economy ?? EconomyConfigSchema.parse({}));
 }
 
 /** Saves one managed role policy after the caller has checked Discord permissions. */

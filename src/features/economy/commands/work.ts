@@ -1,4 +1,4 @@
-import { GuildEconomy } from "@/components/guild-economy";
+import { getGuild } from "@/db/repositories/guilds";
 import { WorkError, work, workConfigFromGuildEconomy } from "@/features/economy/work";
 import { command } from "@/framework";
 import { container, text, v2Message } from "@/ui/v2";
@@ -10,11 +10,12 @@ export default command("work")
   .defer("public")
   .help({ hints: ["/coinflip", "/balance"] })
   .run(async ({ ctx, userId, guildId }) => {
-    const guildEconomy = await ctx.get(guildId, GuildEconomy);
+    const guildResult = await getGuild(guildId);
+    const economy = guildResult.isErr() ? null : (guildResult.unwrap()?.economy ?? null);
     const { payout, currencyId, newBalance, cooldownEndsAt, worksToday, dailyCap } = await work(
       ctx,
       userId,
-      workConfigFromGuildEconomy(guildEconomy),
+      workConfigFromGuildEconomy(economy),
     );
 
     return v2Message(

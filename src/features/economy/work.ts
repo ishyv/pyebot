@@ -2,7 +2,7 @@
  * Work service — cooldown-gated payout.
  */
 
-import type { GuildEconomyValue } from "@/components/guild-economy";
+import type { Guild as GuildConfig } from "@/db/schemas/guild";
 import { adjustBalance } from "@/features/economy/mutations";
 import type { Ctx } from "@/framework/types";
 
@@ -36,8 +36,8 @@ export const DEFAULT_WORK_CONFIG: WorkConfig = {
  * Converts live per-guild economy settings into the simple payout contract
  * used by `work()`. The service stays ignorant of where config is stored.
  */
-export function workConfigFromGuildEconomy(guildEconomy: GuildEconomyValue | null): WorkConfig {
-  const workConfig = guildEconomy?.work;
+export function workConfigFromGuildEconomy(economy: GuildConfig["economy"] | null): WorkConfig {
+  const workConfig = economy?.work;
   if (!workConfig) return DEFAULT_WORK_CONFIG;
   const minPayout = Math.max(0, Math.trunc(workConfig.workBaseMintReward));
   const bonus = Math.max(0, Math.trunc(workConfig.workBonusFromWorksMax));

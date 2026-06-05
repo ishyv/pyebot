@@ -70,7 +70,7 @@ beforeEach(() => {
 });
 
 describe("admin panel config mutations", () => {
-  it("writes economy daily and work settings to the GuildEconomy component store", async () => {
+  it("writes economy daily and work settings onto the guild economy slice", async () => {
     const { saveEconomySettings } = await import("./configMutations");
 
     const result = await saveEconomySettings("guild-1", {
@@ -79,19 +79,14 @@ describe("admin panel config mutations", () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(guildWrites).toEqual([]);
-    expect(collectionUpdates).toContainEqual({
-      collection: "guild_economy",
-      filter: { _id: "guild-1" },
-      update: {
-        $setOnInsert: { _id: "guild-1" },
-        $set: {
-          "daily.dailyReward": 777,
-          "work.workDailyCap": 3,
-          updatedAt: expect.any(Date),
-        },
+    expect(collectionUpdates).toEqual([]);
+    expect(guildWrites).toContainEqual({
+      guildId: "guild-1",
+      paths: {
+        "economy.daily.dailyReward": 777,
+        "economy.work.workDailyCap": 3,
       },
-      options: { upsert: true, returnDocument: "after" },
+      options: { upsert: true },
     });
   });
 

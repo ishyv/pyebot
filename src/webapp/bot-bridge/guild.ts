@@ -1,6 +1,5 @@
 import { ChannelType, type Client, type GuildBasedChannel } from "discord.js";
 import { getGuildFeatures, resolveFeatureEnabled } from "@/components/guild-features";
-import { getDb } from "@/core/db";
 import { listFeatureCatalog } from "@/core/featureCatalog";
 import { ErrResult, OkResult } from "@/core/result";
 import { ensureGuild } from "@/db/repositories/guilds";
@@ -95,14 +94,11 @@ export function createGuildBridge(
       ]);
       if (guildResult.isErr()) return ErrResult(guildResult.error);
       if (featureResult.isErr()) return ErrResult(featureResult.error);
-      const db = await getDb();
-      const economy = await db
-        .collection<{ _id: string }>("guild_economy")
-        .findOne({ _id: guildId });
+      const guild = guildResult.unwrap();
       return OkResult({
-        guild: guildResult.unwrap(),
+        guild,
         features: featureResult.unwrap(),
-        economy,
+        economy: guild.economy,
       });
     },
 

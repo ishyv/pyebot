@@ -10,7 +10,6 @@ export * from "./achievement";
 export * from "./autorole-rule";
 export * from "./banned-image";
 export * from "./economy-account";
-export * from "./guild-economy";
 export * from "./guild-features";
 export * from "./market-listing";
 export * from "./quest-progress";

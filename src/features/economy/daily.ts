@@ -3,7 +3,7 @@
  */
 
 import { EconomyAccount } from "@/components/economy-account";
-import { GuildEconomy } from "@/components/guild-economy";
+import { getGuild } from "@/db/repositories/guilds";
 import { ensureAccount } from "@/features/economy/account";
 import { adjustBalance } from "@/features/economy/mutations";
 import type { Ctx } from "@/framework/types";
@@ -32,8 +32,8 @@ export interface DailyResult {
 export async function claimDaily(ctx: Ctx, userId: string, guildId: string): Promise<DailyResult> {
   await ensureAccount(ctx, userId);
 
-  const guildEconomy = await ctx.get(guildId, GuildEconomy);
-  const config = guildEconomy?.daily;
+  const guildResult = await getGuild(guildId);
+  const config = guildResult.isErr() ? undefined : guildResult.unwrap()?.economy.daily;
 
   const cooldownMs = (config?.dailyCooldownHours ?? 24) * 60 * 60 * 1000;
   const baseReward = config?.dailyReward ?? 250;

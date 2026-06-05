@@ -352,7 +352,7 @@ describe("webapp bot bridge", () => {
     }
   }, 10_000);
 
-  it("writes economy settings to the guild_economy component collection", async () => {
+  it("writes economy settings onto the guild economy slice", async () => {
     collectionUpdates.length = 0;
     guildWrites.length = 0;
     const { createBridgeFromClient } = await import("./bot-bridge");
@@ -369,19 +369,14 @@ describe("webapp bot bridge", () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(guildWrites).toEqual([]);
-    expect(collectionUpdates).toContainEqual({
-      collection: "guild_economy",
-      filter: { _id: "guild-1" },
-      update: {
-        $setOnInsert: { _id: "guild-1" },
-        $set: {
-          "daily.dailyReward": 777,
-          "work.workDailyCap": 3,
-          updatedAt: expect.any(Date),
-        },
+    expect(collectionUpdates).toEqual([]);
+    expect(guildWrites).toContainEqual({
+      guildId: "guild-1",
+      paths: {
+        "economy.daily.dailyReward": 777,
+        "economy.work.workDailyCap": 3,
       },
-      options: { upsert: true, returnDocument: "after" },
+      options: { upsert: true },
     });
   });
 
