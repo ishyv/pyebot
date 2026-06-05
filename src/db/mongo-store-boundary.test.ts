@@ -7,7 +7,6 @@ const root = process.cwd().replaceAll("\\", "/");
 const allowedMongoStoreFiles = new Set([
   "src/db/repositories/appeals.ts",
   "src/db/repositories/counting.ts",
-  "src/db/repositories/economy.ts",
   "src/db/repositories/embeds.ts",
   "src/db/repositories/guilds.ts",
   "src/db/repositories/offers.ts",
