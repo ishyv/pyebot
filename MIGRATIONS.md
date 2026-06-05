@@ -29,7 +29,7 @@ Difficulty: `easy` (one user component) · `medium` (a few, or a small repo) ·
 | moderation/banned-images | `BannedImage` (`banned_images`) | `Guild` or synthetic (repo + webapp + CLI surfaces) | hard | ⬜ todo |
 | tickets | `UserTickets` (`user_tickets`), `Ticket` (`tickets`) | `User` + new `Ticket` kind | hard | ⬜ todo |
 | autoroles | `AutoroleRule` (`autorole_rules`), `TimedAutoroleGrant` (`timed_autorole_grants`), `TempRoleGrant` (`temp_role_grants`) | `Guild` + synthetic grant ids (confirm) | hard | ⬜ todo |
-| scripts | `ScriptDefinition` (`scripts`) | `Guild` or synthetic script id (confirm) | medium | ⬜ todo |
+| scripts | `ScriptDefinition` (`scripts`) | `Guild` (`GuildScripts` map keyed by name) | medium | 🚧 Hyv 2026-06-05 |
 | offers/market | `MarketListing` (`market_listings`) | new `MarketListing` kind — **uses MongoDB transactions** (`src/db/transition.ts`, `market.ts`); migrate to `ctx.transaction` | hard | ⬜ todo |
 
 > The "likely entity kind" column is a hint. Confirming the entity kind from the
