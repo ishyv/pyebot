@@ -23,6 +23,10 @@ This is working memory, not project law. Permanent rules stay in `AGENTS.md` and
 - `claim`: scope an agent is actively taking.
 - `note`: useful findings or reasoning.
 - `blocker`: exact condition preventing progress.
+- `question`: a decision or clarification needed from a specific recipient.
+  Distinct from `blocker` — a blocker means work cannot continue; a question
+  means work can tentatively continue but the answer would change the approach.
+  Required field: `for: human | Vey | Claude`.
 - `review-request`: what needs another agent's eyes.
 - `decision`: local working decision; promote durable architecture decisions to
   `docs/decision-log.md`.
@@ -43,3 +47,26 @@ This is working memory, not project law. Permanent rules stay in `AGENTS.md` and
 - Do not paste secrets, tokens, private user data, or large logs.
 - If a note becomes a project-wide rule, move it into tracked docs before
   relying on it.
+
+## Promoting a Note to Permanent Docs
+
+When an ACP note or decision should become a project-wide rule:
+
+1. Paste the rule into the target file (`AGENTS.md`, `docs/decision-log.md`, etc.).
+2. Commit that change with a message referencing the ACP thread.
+3. Update the originating thread entry — add a one-line `promoted:` field
+   pointing to the target file and commit. Mark the thread `done` if promotion
+   was its only remaining purpose.
+
+Do not rely on ACP entries as a substitute for permanent docs.
+
+## Archiving Threads
+
+When a thread's status reaches `done` and it no longer needs active scanning:
+
+1. Move the file from `acp/threads/` to `acp/archive/`.
+2. Remove its row from `board.md`.
+3. Leave the file intact — history is preserved, just not cluttering the active
+   thread list.
+
+Do not archive while a thread is still `open`, `blocked`, or `review`.

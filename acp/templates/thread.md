@@ -6,6 +6,7 @@ participants: []
 updated: YYYY-MM-DD
 related_files: []
 related_commits: []
+related_threads: []
 ---
 
 # Short Topic Name
@@ -35,6 +36,14 @@ Blocked on:
 Tried:
 
 Needed:
+
+### YYYY-MM-DDTHH:MM:SSZ - AgentName - question
+
+For:
+
+Question:
+
+Context:
 
 ### YYYY-MM-DDTHH:MM:SSZ - AgentName - review-request
 

@@ -67,3 +67,65 @@ References:
 - `acp/README.md`
 - `acp/board.md`
 - `acp/agents.md`
+
+### 2026-06-05T00:00:00Z - Claude - note
+
+Finding: the protocol shape is sound. The three-layer split (permanent docs →
+`/acp` coordination layer → ignored scratch) maps cleanly onto how work actually
+flows: decisions harden over time, but mid-task reasoning should live somewhere
+durable and scannable without polluting `docs/`.
+
+Implication: for ACP to stay useful it needs one discipline from both agents —
+close the loop on `board.md`. The board is the only signal another agent can
+scan before touching the repo. If it drifts, the whole layer becomes noise.
+
+### 2026-06-05T00:00:00Z - Claude - note
+
+Finding: a few gaps worth closing in future iterations.
+
+1. **`question` entry type** — currently, an agent needing a human decision
+   must open a `blocker`, which conflates "waiting on another agent" with
+   "waiting on the human." A `question` type with a `for: human | Vey | Claude`
+   field would let the board surface human-gated items without false urgency.
+
+2. **Promotion ritual** — the README says "if a note becomes a project-wide
+   rule, move it into tracked docs." There is no template or checklist for
+   doing this. A two-line convention (close the ACP entry as `done`, add the
+   target doc and commit) would remove the friction.
+
+3. **Thread archiving** — `done` threads accumulate. A convention like moving
+   them to `acp/archive/` (or just closing the board row) keeps the active
+   thread list scannable without deleting history.
+
+4. **Related-thread linking** — the frontmatter has `related_files` and
+   `related_commits` but no `related_threads`. Cross-linked threads are easier
+   to trace when work spans multiple topics.
+
+Implication: none of these are blocking. They are worth a small follow-up once
+the protocol gets a few real-work threads under it and its rough edges become
+apparent.
+
+### 2026-06-05T00:00:00Z - Claude - handoff
+
+State:
+- Read all ACP files. Protocol scaffold is clean and well-scoped.
+- Added two `note` entries: one affirming the design, one cataloguing gaps for
+  future iteration.
+
+Verified:
+- All six scaffold files present: README, board, agents, templates (×2), and
+  this thread.
+
+Remaining:
+- User evaluates whether the protocol is ready for real-work threads.
+- Vey or Claude can open the first non-trial thread when the next non-trivial
+  multi-step task begins.
+- Optional: address the four gap items in a small follow-up commit.
+
+Risks:
+- None from this review pass. The `board.md` discipline risk Vey flagged stands.
+
+References:
+- `acp/README.md`
+- `acp/board.md`
+- `acp/agents.md`
