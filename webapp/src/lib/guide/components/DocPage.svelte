@@ -6,16 +6,17 @@ import type { GuideTopicMeta } from "$lib/guide/types";
 
 interface Props {
   topic: GuideTopicMeta;
-  guildId: string;
+  guildId?: string;
   /** true/false when the topic has a featureId; null when it has none */
-  enabled: boolean | null;
+  enabled?: boolean | null;
   /** previous/next topics in reading order, for footer nav */
   prev: GuideTopicMeta | null;
   next: GuideTopicMeta | null;
   children: Snippet;
 }
-const { topic, guildId, enabled, prev, next, children }: Props = $props();
-const topicHref = (id: string) => `/guilds/${guildId}/guide/${id}`;
+const { topic, guildId, enabled = null, prev, next, children }: Props = $props();
+const basePath = $derived(guildId ? `/guilds/${guildId}/guide` : "/guide");
+const topicHref = (id: string) => `${basePath}/${id}`;
 </script>
 
 <article class="doc">
@@ -40,7 +41,7 @@ const topicHref = (id: string) => `/guilds/${guildId}/guide/${id}`;
   <div class="body">{@render children()}</div>
 
   <footer>
-    {#if topic.dashboardPath}
+    {#if guildId && topic.dashboardPath}
       <a class="configure" href={`/guilds/${guildId}${topic.dashboardPath}`}>
         configure {topic.title} on this server →
       </a>

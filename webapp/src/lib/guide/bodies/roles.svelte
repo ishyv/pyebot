@@ -13,6 +13,13 @@ import Callout from "$lib/guide/components/Callout.svelte";
   ticket helpers know who has elevated access.
 </p>
 
+<h2>what to configure</h2>
+<p>
+  set staff/helper roles, choose which roles autoroles may grant, and keep
+  protected roles outside the bot's managed set. this is the boring part that
+  prevents dramatic cleanup later. annoying, useful, very on-brand.
+</p>
+
 <Callout variant="warning">
   the bot's own role must sit above any role it is configured to manage in your
   server's role list. discord will reject assignments where the bot's role is

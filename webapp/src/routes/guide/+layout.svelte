@@ -4,23 +4,18 @@ import type { Snippet } from "svelte";
 import { page } from "$app/state";
 import TopicNav from "$lib/guide/components/TopicNav.svelte";
 import { GUIDE_TOPICS } from "$lib/guide/topics";
-import type { LayoutData } from "./$types";
 
 interface Props {
-  data: LayoutData;
   children: Snippet;
 }
-const { data, children }: Props = $props();
+const { children }: Props = $props();
 
-const guildId = $derived(data.guild.id);
-const basePath = $derived(`/guilds/${guildId}/guide`);
-// active topic id from the url, or null on the guide landing page
 const activeId = $derived(page.url.pathname.match(/\/guide\/([^/]+)/)?.[1] ?? null);
 </script>
 
-<div class="guide-shell">
+<div class="public-guide">
   <aside class="toc" use:surface={{ delay: 0 }}>
-    <TopicNav topics={GUIDE_TOPICS} {basePath} {activeId} />
+    <TopicNav topics={GUIDE_TOPICS} basePath="/guide" {activeId} />
   </aside>
   <section class="reading" use:surface={{ delay: 70 }}>
     {@render children()}
@@ -28,12 +23,21 @@ const activeId = $derived(page.url.pathname.match(/\/guide\/([^/]+)/)?.[1] ?? nu
 </div>
 
 <style>
-  .guide-shell { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: var(--space-xl); align-items: start; }
+  .public-guide {
+    width: min(72rem, calc(100% - 2rem));
+    margin: 0 auto;
+    padding: var(--space-xl) 0;
+    display: grid;
+    grid-template-columns: 12rem minmax(0, 1fr);
+    gap: var(--space-xl);
+    align-items: start;
+    position: relative;
+    z-index: 1;
+  }
   .toc { position: sticky; top: var(--space-md); }
   .reading { min-width: 0; max-width: 48rem; }
-  /* below tablet: TOC stacks above content (ui-design-notes 48rem breakpoint) */
   @media (max-width: 48rem) {
-    .guide-shell { grid-template-columns: 1fr; gap: var(--space-lg); }
+    .public-guide { grid-template-columns: 1fr; gap: var(--space-lg); }
     .toc { position: static; }
   }
 </style>

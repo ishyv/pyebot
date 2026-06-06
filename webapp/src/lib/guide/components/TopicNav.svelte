@@ -4,13 +4,13 @@ import type { GuideTopicMeta } from "$lib/guide/types";
 
 interface Props {
   topics: readonly GuideTopicMeta[];
-  guildId: string;
+  basePath: string;
   /** current topic id, or null on the landing page */
   activeId: string | null;
 }
-const { topics, guildId, activeId }: Props = $props();
+const { topics, basePath, activeId }: Props = $props();
 const groups = $derived(groupTopicsByCapability(topics));
-const href = (id: string) => `/guilds/${guildId}/guide/${id}`;
+const href = (id: string) => `${basePath}/${id}`;
 </script>
 
 <nav class="topic-nav" aria-label="guide topics">
@@ -18,7 +18,7 @@ const href = (id: string) => `/guilds/${guildId}/guide/${id}`;
     class="home"
     class:active={activeId === null}
     aria-current={activeId === null ? "page" : undefined}
-    href={`/guilds/${guildId}/guide`}
+    href={basePath}
   >overview</a>
   {#each groups as group (group.id)}
     <div class="group">

@@ -15,13 +15,22 @@ import Steps from "$lib/guide/components/Steps.svelte";
 
 <h2>what you can do</h2>
 <p>
-  run moderation actions from discord or from this dashboard. each action opens a
-  case with the reason, the moderator, and the member, so nothing gets lost.
+  warn, mute, kick, ban, restrict, quarantine, purge messages, add private notes,
+  and review case history. each action records the reason, moderator, target
+  member, and case state so your staff are not arguing from memory.
 </p>
 
 <h2>set it up</h2>
 <Steps steps={[
   "pick a moderation log channel on the channels page.",
+  "confirm staff roles and role hierarchy before using role-changing actions.",
   "open the moderation page to see cases as they arrive.",
   "review appeals and resolve or uphold each case.",
 ]} />
+
+<h2>common commands</h2>
+<p>
+  use /warn for light intervention, /mute or /restrict when someone needs a
+  cooldown, /ban or /kick for removal, and /case when staff need to inspect one
+  record.
+</p>

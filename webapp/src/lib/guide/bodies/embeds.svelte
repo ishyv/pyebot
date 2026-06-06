@@ -14,6 +14,19 @@ import Callout from "$lib/guide/components/Callout.svelte";
   push them off the screen.
 </p>
 
+<h2>what admins do</h2>
+<p>
+  draft the message, preview it, save named embeds, send announcements, schedule
+  future posts, and keep important messages sticky in busy channels.
+</p>
+
+<h2>good uses</h2>
+<p>
+  use embeds for rules, welcome panels, event posts, marketplace notices, role
+  instructions, and any message that should look deliberate instead of pasted in
+  a panic at midnight.
+</p>
+
 <Callout variant="tip">
   the embeds page shows a live preview of your embed as you edit it, so you can
   see exactly how it will look before sending.

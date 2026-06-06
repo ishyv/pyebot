@@ -16,6 +16,8 @@ export const handle: Handle = async ({ event, resolve }) => {
     PUBLIC_PATHS.includes(path) ||
     path.startsWith("/_app") ||
     path.startsWith("/api/session") ||
+    path === "/guide" ||
+    path.startsWith("/guide/") ||
     // /playground is a public, no-login Discord-UI preview tool (dev aid).
     path === "/playground" ||
     path.startsWith("/playground/");

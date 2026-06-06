@@ -17,6 +17,10 @@ runtime uses.
 > New here? Read the Quick Start, skim the Framework API table, then open
 > [`src/features/example/`](./src/features/example/). That example is the boring
 > path on purpose.
+>
+> Looking for what the bundled bot can do as a user or server admin? Open the
+> dashboard guide at `/guide`; it showcases features without turning this README
+> into a product brochure.
 
 ## Quick Start
 
