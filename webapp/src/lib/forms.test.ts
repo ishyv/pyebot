@@ -1,8 +1,8 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test, vi } from "vitest";
 
 // enhanceSave imports toastStore from the library; stub it so the wiring test
 // runs without a DOM or a root-level webapp dependency install.
-mock.module("@hyvnt/hyvui", () => ({ toastStore: { push: () => {} } }));
+vi.mock("@hyvnt/hyvui", () => ({ toastStore: { push: () => {} } }));
 
 const { enhanceSave, interpretSaveResult, isDirty } = await import("./forms");
 type FieldError = import("./forms").FieldError;
